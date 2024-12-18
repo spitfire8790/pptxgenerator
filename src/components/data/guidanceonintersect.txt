@@ -1,0 +1,81 @@
+The primary issue with your code lies in the calculation of areas using the areasAndLengths endpoint of the ArcGIS Geometry Service. You're performing area calculations on geometries defined in a geographic coordinate system (GCS), which uses degrees as units. Calculating areas in degrees doesn't make sense because degrees are angular measurements, not linear ones. This can result in incorrect or zero area values.
+
+Here's what's wrong and how to fix it:
+
+Spatial Reference Issue:
+
+You're using sr: '4283', which corresponds to GDA94, a geographic coordinate system.
+Area calculations require a projected coordinate system (PCS) that uses linear units like meters.
+Missing Parameters in areasAndLengths Request:
+
+You're not specifying areaUnit and calculationType parameters.
+Without these, the Geometry Service defaults to calculating areas in the units of the spatial reference, which in your case are degrees.
+Steps to Fix the Issue:
+
+Specify a Projected Coordinate System:
+
+Use a PCS like GDA94 MGA Zone 56 (WKID: 28356) that uses meters as units.
+Update the sr, inSR, and outSR parameters to '28356'.
+Add areaUnit and calculationType Parameters:
+
+In your areasAndLengths request, include 'areaUnit': 'esriSquareMeters' and 'calculationType': 'preserveShape'.
+This tells the Geometry Service to calculate the area in square meters and to account for the Earth's curvature.
+Updated Code Snippet:
+
+javascript
+Copy code
+// Update the spatial reference IDs to a projected coordinate system
+const sr = '28356'; // GDA94 MGA Zone 56
+
+// ... inside fetchAreaData function ...
+
+// Update the initial queryParams
+const queryParams = new URLSearchParams({
+  'f': 'json',
+  'outFields': 'SYM_CODE,LAY_CLASS',
+  'returnGeometry': 'true',
+  'spatialRel': 'esriSpatialRelIntersects',
+  'geometry': JSON.stringify({
+    rings: selectedFeature.geometry.coordinates,
+    spatialReference: { wkid: parseInt(sr) }
+  }),
+  'geometryType': 'esriGeometryPolygon',
+  'inSR': sr,
+  'outSR': sr
+});
+
+// Update the areaParams with areaUnit and calculationType
+const areaParams = new URLSearchParams({
+  'f': 'json',
+  'sr': sr,
+  'polygons': JSON.stringify(intersectData.geometries),
+  'areaUnit': 'esriSquareMeters',
+  'calculationType': 'preserveShape'
+});
+Explanation:
+
+Spatial Reference (sr): By setting sr, inSR, and outSR to a PCS like '28356', you're ensuring all geometries are in meters.
+Area Calculation Parameters:
+areaUnit: Specifies the unit for area calculation (esriSquareMeters).
+calculationType: Using 'preserveShape' ensures accurate area calculations over the Earth's curved surface.
+Additional Recommendations:
+
+Geometry Conversion: Ensure that your GeoJSON geometries are correctly converted to ArcGIS geometry format. If necessary, use a library like terraformer-wkt-parser or write a conversion function.
+Error Handling: Add more detailed error logging to capture any issues with API responses.
+Console Logs: Check the console logs for any errors returned by the Geometry Service, which can provide clues to other potential issues.
+Example of Updated areasAndLengths Request:
+
+javascript
+Copy code
+// Calculate area of intersection with updated parameters
+const areaParams = new URLSearchParams({
+  'f': 'json',
+  'sr': sr,
+  'polygons': JSON.stringify(intersectData.geometries),
+  'areaUnit': 'esriSquareMeters',
+  'calculationType': 'preserveShape'
+});
+
+const areaUrl = `${geometryServiceUrl}/areasAndLengths?${areaParams.toString()}`;
+const areaData = await fetch(areaUrl).then(r => r.json());
+By making these changes, your area calculations should now return correct values in square meters, and your component should work as expected.

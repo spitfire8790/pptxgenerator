@@ -1,0 +1,15 @@
+.ResizableColumns-handle {
+  display: inline-block;
+  width: 10px;
+  height: 100%;
+  position: absolute;
+  right: -5px;
+  top: 0;
+  cursor: col-resize;
+  background-color: transparent;
+}
+
+.ResizableColumns-handle:hover,
+.ResizableColumns-handle.is-resizing {
+  background-color: #e5e7eb;
+} 

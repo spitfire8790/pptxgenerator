@@ -1,0 +1,24 @@
+run = "npm run dev"
+entrypoint = "src/main.jsx"
+[nix]
+channel = "stable-23_05"
+[deployment]
+deploymentTarget = "cloudrun"
+build = ["npm", "run", "build"]
+run = ["sh", "-c", "npm run start"]
+[[deployment.rules]]
+path = "/*"
+directive = "public-read"
+[[deployment.rewrites]]
+from = "/*"
+to = "/index.html"
+[languages]
+[languages.javascript]
+pattern = "**/{*.js,*.jsx,*.ts,*.tsx}"
+[languages.javascript.languageServer]
+start = "typescript-language-server --stdio"
+
+[[ports]]
+localPort = 5173
+externalPort = 3000
+exposeLocalhost = true
