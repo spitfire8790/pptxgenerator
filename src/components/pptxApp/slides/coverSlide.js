@@ -14,10 +14,10 @@ const styles = {
     y: 0,
     w: '33%',
     h: '100%',
-    sizing: { type: 'contain', w: '33%', h: '100%' }
+    sizing: { type: 'contain' }
   },
   dividerLine: {
-    x: '34%',
+    x: '35%',
     y: '5%',
     w: 0.005,
     h: '90%',
@@ -25,7 +25,7 @@ const styles = {
     fill: { color: '002664' }
   },
   sensitiveText: {
-    x: '70%',
+    x: '72%',
     y: '2%',
     w: '25%',
     h: '3%',
@@ -36,7 +36,7 @@ const styles = {
     fontFace: 'Public Sans'
   },
   header: {
-    x: '38%',
+    x: '36%',
     y: '10%',
     w: '57%',
     h: '5%',
@@ -46,18 +46,18 @@ const styles = {
     fontFace: 'Public Sans'
   },
   title: {
-    x: '38%',
+    x: '36%',
     y: '20%',
     w: '57%',
     h: '15%',
     fontSize: 30,
     color: '002664',
     bold: false,
-    lineSpacing: 30,
+    lineSpacing: 36,
     fontFace: 'Public Sans Light'
   },
   subtitle: {
-    x: '38%',
+    x: '36%',
     y: '60%',
     w: '57%',
     h: '5%',
@@ -67,7 +67,7 @@ const styles = {
     fontFace: 'Public Sans Light'
   },
   address: {
-    x: '38%',
+    x: '36%',
     y: '68%',
     w: '57%',
     h: '5%',
@@ -77,7 +77,7 @@ const styles = {
     fontFace: 'Public Sans Light'
   },
   date: {
-    x: '38%',
+    x: '36%',
     y: '90%',
     w: '57%',
     h: '5%',
@@ -86,9 +86,9 @@ const styles = {
     fontFace: 'Public Sans Light'
   },
   nswLogo: {
-    x: '85%',
+    x: '90%',
     y: '5%',
-    w: '12%',
+    w: '8%',
     h: '8%',
     sizing: { type: 'contain' }
   }

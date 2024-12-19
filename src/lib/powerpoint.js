@@ -1,7 +1,9 @@
 import pptxgen from "pptxgenjs";
+import { saveAs } from 'file-saver';
 import { addCoverSlide } from '../components/pptxApp/slides/coverSlide';
 import { registerFonts } from '../components/pptxApp/fonts/registerFonts';
 import { convertCmValues } from '../components/pptxApp/utils/units';
+import { addPropertySnapshotSlide } from '../components/pptxApp/slides/propertySnapshotSlide';
 
 export async function generateReport(properties) {
   try {
@@ -23,11 +25,15 @@ export async function generateReport(properties) {
     if (properties.selectedSlides.cover !== false) {
       addCoverSlide(pptx, properties);
     }
+    if (properties.selectedSlides.snapshot !== false) {
+      addPropertySnapshotSlide(pptx, properties);
+    }
 
-    // Save the presentation
-    const filename = `${properties.site__address.replace(/[^a-zA-Z0-9]/g, '_')}_report.pptx`;
-    await pptx.writeFile({ fileName: filename });
-    return filename;
+    // Generate and save PowerPoint directly
+    const filename = properties.site__address.replace(/[^a-zA-Z0-9]/g, '_');
+    await pptx.writeFile({ fileName: `${filename}_report.pptx` });
+    
+    return `${filename}_report.pptx`;
   } catch (error) {
     console.error('Error generating PowerPoint:', error);
     throw error;

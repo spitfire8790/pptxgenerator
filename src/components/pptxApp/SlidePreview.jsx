@@ -8,48 +8,53 @@ const SlidePreview = ({ selectedFeature, screenshot }) => {
       {/* Slide preview container with 16:9 aspect ratio */}
       <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
         <div className="absolute inset-0 bg-white rounded-lg shadow-lg overflow-hidden">
-          {/* Left side image */}
-          <div className="absolute left-0 top-0 w-1/3 h-full bg-[#002664] flex items-center justify-center">
+          {/* Left side blue container */}
+          <div className="absolute left-0 top-0 w-1/3 h-full" style={{ backgroundColor: '#002664' }}>
             {screenshot && (
-              <div className="w-full aspect-square relative">
-                <img 
-                  src={screenshot} 
-                  alt="Property"
-                  className="w-full h-full object-contain opacity-70"
-                />
-                <div className="absolute inset-0 bg-white/30" />
-              </div>
+              <img 
+                src={screenshot} 
+                alt="Property"
+                className="w-full h-full object-contain opacity-70"
+              />
             )}
           </div>
+          
+          {/* Vertical divider line */}
+          <div className="absolute left-[35%] top-[5%] bottom-[5%] w-[1px]" style={{ backgroundColor: '#002664' }} />
           
           {/* Right side content */}
-          <div className="absolute left-[38%] top-[20%] w-[57%]">
-            <div className="text-[#002664] text-2xl font-light mb-4">
-              Audit of Government<br />Land For Housing
+          <div className="absolute right-0 top-0 w-[65%] h-full p-8">
+            {/* Sensitive text */}
+            <div className="absolute right-8 top-2 text-[#FF3B3B] text-[9px] font-bold">
+              SENSITIVE: NSW GOVERNMENT
             </div>
-            <div className="text-[#363636] text-lg mb-2">
-              Desktop Due Diligence Report
-            </div>
-            {selectedFeature?.properties?.copiedFrom?.site__address && (
-              <div className="text-[#FFB800] text-lg">
-                {selectedFeature.properties.copiedFrom.site__address}
+            
+            {/* NSW Logo */}
+            <img 
+              src="/images/NSW-Government-official-logo.jpg"
+              alt="NSW Government"
+              className="absolute right-8 top-4 w-[8%]"
+            />
+            
+            {/* Main content */}
+            <div className="mt-16">
+              <div className="text-[#002664] text-xs mb-8">Property and Development NSW</div>
+              <div className="text-[#002664] text-2xl font-light mb-16">
+                Audit of Government<br />Land For Housing
               </div>
-            )}
-            <div className="text-[#363636] text-sm mt-4">
-              {new Date().toLocaleDateString('en-US', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-              })}
+              <div className="text-[#002664] text-base mb-4">Desktop Due Diligence Report</div>
+              <div className="text-[#FFCC31] text-base">
+                {selectedFeature?.properties?.copiedFrom?.site__address}
+              </div>
+              <div className="absolute bottom-8 text-[#363636] text-sm">
+                {new Date().toLocaleDateString('en-GB', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })}
+              </div>
             </div>
           </div>
-          
-          {/* NSW Government logo */}
-          <img 
-            src="/images/NSW-Government-official-logo.jpg"
-            alt="NSW Government"
-            className="absolute top-4 right-4 w-24"
-          />
         </div>
       </div>
     </div>

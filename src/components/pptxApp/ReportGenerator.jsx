@@ -1,18 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { generateReport } from '../../lib/powerpoint';
 import { addCoverSlide } from './slides/coverSlide';
+import { addPropertySnapshotSlide } from './slides/propertySnapshotSlide';
 import { captureMapScreenshot } from './utils/mapScreenshot';
 import SlidePreview from './SlidePreview';
 
 const slideOptions = [
-  { id: 'cover', label: 'Cover Page', addSlide: addCoverSlide }
+  { id: 'cover', label: 'Cover Page', addSlide: addCoverSlide },
+  { id: 'snapshot', label: 'Property Snapshot', addSlide: addPropertySnapshotSlide }
 ];
 
 const ReportGenerator = ({ selectedFeature }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [status, setStatus] = useState('idle');
   const [selectedSlides, setSelectedSlides] = useState({
-    cover: true
+    cover: true,
+    snapshot: true
   });
   const [previewScreenshot, setPreviewScreenshot] = useState(null);
 
@@ -36,7 +39,7 @@ const ReportGenerator = ({ selectedFeature }) => {
     try {
       const screenshot = await captureMapScreenshot(selectedFeature);
       
-      const reportDate = new Date().toLocaleDateString('en-US', {
+      const reportDate = new Date().toLocaleDateString('en-GB', {
         year: 'numeric',
         month: 'long',
         day: 'numeric'
@@ -44,6 +47,7 @@ const ReportGenerator = ({ selectedFeature }) => {
 
       const propertyData = {
         ...selectedFeature.properties.copiedFrom,
+        geometry: selectedFeature.geometry,
         reportDate,
         selectedSlides,
         screenshot

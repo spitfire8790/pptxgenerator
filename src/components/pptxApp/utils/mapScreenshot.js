@@ -14,7 +14,7 @@ const LAYER_CONFIGS = {
     url: 'https://api.metromap.com.au/ogc/gda2020/key/cstti1v27eq9nu61qu4g5hmzziouk84x211rfim0mb35cujvqpt1tufytqk575pe/service',
     layers: 'Australia_latest',
     opacity: 1,
-    width: 2048,
+    width: 3072,
     height: 2048,
     padding: 0.5
   }
@@ -35,29 +35,35 @@ export async function captureMapScreenshot(feature, type = SCREENSHOT_TYPES.AERI
   try {
     const config = LAYER_CONFIGS[type];
     
-    // Calculate bounds from feature
+    // Calculate bounds of the property
     const coordinates = feature.geometry.coordinates[0];
-    const bounds = coordinates.reduce((bounds, coord) => {
-      bounds.minLng = Math.min(bounds.minLng, coord[0]);
-      bounds.maxLng = Math.max(bounds.maxLng, coord[0]);
-      bounds.minLat = Math.min(bounds.minLat, coord[1]);
-      bounds.maxLat = Math.max(bounds.maxLat, coord[1]);
-      return bounds;
-    }, { minLng: Infinity, maxLng: -Infinity, minLat: Infinity, maxLat: -Infinity });
+    const bounds = coordinates.reduce((acc, coord) => {
+      return {
+        minX: Math.min(acc.minX, coord[0]),
+        minY: Math.min(acc.minY, coord[1]),
+        maxX: Math.max(acc.maxX, coord[0]),
+        maxY: Math.max(acc.maxY, coord[1])
+      };
+    }, {
+      minX: Infinity,
+      minY: Infinity,
+      maxX: -Infinity,
+      maxY: -Infinity
+    });
 
-    // Convert bounds to Web Mercator
-    const [minX, minY] = convertToWebMercator(bounds.minLng, bounds.minLat);
-    const [maxX, maxY] = convertToWebMercator(bounds.maxLng, bounds.maxLat);
+    // Calculate center point
+    const centerX = (bounds.minX + bounds.maxX) / 2;
+    const centerY = (bounds.minY + bounds.maxY) / 2;
 
-    // Calculate center and size
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
-    const width = maxX - minX;
-    const height = maxY - minY;
-    const size = Math.max(width, height) * 1.5; // 150% padding
+    // Calculate required size with padding
+    const width = Math.abs(bounds.maxX - bounds.minX);
+    const height = Math.abs(bounds.maxY - bounds.minY);
+    const size = Math.max(width, height) * (1 + config.padding * 2);
 
     // Calculate bbox as square in Web Mercator
-    const bbox = `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`;
+    const [minX, minY] = convertToWebMercator(centerX - size/2, centerY - size/2);
+    const [maxX, maxY] = convertToWebMercator(centerX + size/2, centerY + size/2);
+    const bbox = `${minX},${minY},${maxX},${maxY}`;
 
     // Get aerial imagery
     const mapUrl = `${config.url}?` + new URLSearchParams({
@@ -104,19 +110,17 @@ export async function captureMapScreenshot(feature, type = SCREENSHOT_TYPES.AERI
 
     // Draw property boundary
     ctx.strokeStyle = '#FF0000';
-    ctx.lineWidth = 5;
-    ctx.shadowColor = '#000000';
-    ctx.shadowBlur = 2;
+    ctx.lineWidth = 8;  // Make it thicker
     ctx.beginPath();
 
     // Convert coordinates to canvas space
     coordinates.forEach((coord, i) => {
-      // Convert the coordinate to Web Mercator first
+      // Convert the coordinate to Web Mercator
       const [mercX, mercY] = convertToWebMercator(coord[0], coord[1]);
       
-      // Then convert to canvas space
-      const x = ((mercX - (centerX - size/2)) / size) * config.width;
-      const y = ((centerY + size/2 - mercY) / size) * config.height;
+      // Convert to canvas space using the same bbox we used for the WMS request
+      const x = ((mercX - minX) / (maxX - minX)) * config.width;
+      const y = ((maxY - mercY) / (maxY - minY)) * config.height;
       
       if (i === 0) {
         ctx.moveTo(x, y);
