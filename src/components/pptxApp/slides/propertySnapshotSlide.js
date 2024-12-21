@@ -54,7 +54,7 @@ const styles = {
     y: '20%',
     w: '40%',
     h: '70%',
-    sizing: { type: 'contain' }
+    sizing: { type: 'cover' }
   },
   icons: {
     property: { path: "/images/property.png", w: 0.3, h: 0.3 },
@@ -80,7 +80,7 @@ const styles = {
     align: 'left'
   },
   pageNumber: {
-    x: '906%',
+    x: '96%',
     y: '95%',
     w: '4%',
     h: '4%',
@@ -136,7 +136,14 @@ export function addPropertySnapshotSlide(pptx, properties) {
       options: { 
         rowspan: 7,
         valign: 'top',
-        image: styles.icons.property
+        w: 1,
+        h: 1,
+        image: {
+          path: "/images/property.png",
+          w: 0.3,
+          h: 0.3,
+          sizing: { type: 'contain', w: 0.3, h: 0.3 }
+        }
       }
     }, 'Address', properties.site__address],
     ['LGA', properties.site_suitability__LGA || 'Not specified'],
@@ -153,7 +160,14 @@ export function addPropertySnapshotSlide(pptx, properties) {
       options: { 
         rowspan: 3,
         valign: 'top',
-        image: styles.icons.building
+        w: 1,
+        h: 1,
+        image: {
+          path: "/images/building.png",
+          w: 0.3,
+          h: 0.3,
+          sizing: { type: 'contain', w: 0.3, h: 0.3 }
+        }
       }
     }, 'Site Description', { 
       text: properties.site__description || 'Please insert site description',
@@ -193,16 +207,14 @@ export function addPropertySnapshotSlide(pptx, properties) {
   });
 
   // Add image if it exists
-  if (properties.screenshot) {
+  if (properties.snapshotScreenshot) {
     const imagePosition = convertCmValues(styles.image);
     
     // Add the aerial image
     slide.addImage({
-      data: properties.screenshot,
+      data: properties.snapshotScreenshot,
       ...imagePosition
     });
-
-  
   }
 
   // Add footer line and text

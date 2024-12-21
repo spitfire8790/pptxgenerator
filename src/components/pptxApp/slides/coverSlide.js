@@ -14,7 +14,7 @@ const styles = {
     y: 0,
     w: '33%',
     h: '100%',
-    sizing: { type: 'contain' }
+    sizing: { type: 'cover' }
   },
   dividerLine: {
     x: '35%',
@@ -100,9 +100,13 @@ export function addCoverSlide(pptx, properties) {
   if (properties.screenshot) {
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.imageContainer));
     
+    const imageStyle = convertCmValues({ ...styles.image });
+    delete imageStyle.sizing;  // Remove sizing from conversion
+    
     slide.addImage({
       data: properties.screenshot,
-      ...convertCmValues(styles.image)
+      ...imageStyle,
+      sizing: styles.image.sizing  // Add sizing back directly
     });
   }
 

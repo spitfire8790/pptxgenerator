@@ -3,9 +3,7 @@ import { rpc } from '@gi-nx/iframe-sdk';
 // Types of screenshots we support
 const SCREENSHOT_TYPES = {
   AERIAL: 'aerial',
-  PLANNING: 'planning',
-  CONSTRAINTS: 'constraints',
-  TOPOGRAPHY: 'topography'
+  SNAPSHOT: 'snapshot'
 };
 
 // Layer configurations for different screenshot types
@@ -16,9 +14,16 @@ const LAYER_CONFIGS = {
     opacity: 1,
     width: 3072,
     height: 2048,
-    padding: 0.5
+    padding: 1.0
+  },
+  [SCREENSHOT_TYPES.SNAPSHOT]: {
+    url: 'https://api.metromap.com.au/ogc/gda2020/key/cstti1v27eq9nu61qu4g5hmzziouk84x211rfim0mb35cujvqpt1tufytqk575pe/service',
+    layers: 'Australia_latest',
+    opacity: 1,
+    width: 3072,
+    height: 2048,
+    padding: 0.1  // Minimal padding for a close-up view
   }
-  // Other layer configs will be added as we get their URLs
 };
 
 // Convert GeoJSON coordinates from EPSG:4326 to EPSG:3857
@@ -141,4 +146,4 @@ export async function captureMapScreenshot(feature, type = SCREENSHOT_TYPES.AERI
   }
 }
 
-export { SCREENSHOT_TYPES }; 
+export { SCREENSHOT_TYPES };

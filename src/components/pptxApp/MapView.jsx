@@ -1,10 +1,28 @@
 import React, { useEffect } from 'react';
 import { giraffeState, rpc } from '@gi-nx/iframe-sdk';
 
-const MapView = ({ onFeatureSelect }) => {
+const MapView = ({ onFeatureSelect, planningLayer }) => {
   useEffect(() => {
     // Set the iframe width through Giraffe SDK
     giraffeState.set('iframeWidth', 1024);
+
+    // If planning layer is specified, add base imagery and planning layer
+    if (planningLayer) {
+      // Add base imagery with 50% opacity
+      rpc.addLayer({
+        type: 'wms',
+        url: 'https://api.metromap.com.au/ogc/gda2020/key/cstti1v27eq9nu61qu4g5hmzziouk84x211rfim0mb35cujvqpt1tufytqk575pe/service',
+        layers: 'Australia_latest',
+        opacity: 0.5
+      });
+
+      // Add planning layer with 70% opacity
+      rpc.addLayer({
+        type: 'arcgis',
+        url: planningLayer,
+        opacity: 0.7
+      });
+    }
 
     // Listen for selected feature
     const unsubscribe = giraffeState.addListener(['selected'], (key, event) => {
@@ -46,22 +64,32 @@ const MapView = ({ onFeatureSelect }) => {
         unsubscribe();
       }
     };
-  }, [onFeatureSelect]);
+  }, [onFeatureSelect, planningLayer]);
 
   // Helper function to format zoning string
   const formatZoning = (zoning) => {
-    if (!zoning) return '';
-    const match = zoning.match(/\[(.*?):(.*?):(.*?):(.*?):%\]/);
-    if (match) {
-      const [_, zone, area, unit, percentage] = match;
-      return `${zone} - ${percentage}% (${area} ${unit})`;
-    }
-    return zoning;
+    if (!zoning) return 'Not specified';
+    
+    // Remove square brackets
+    const cleanZoning = zoning.replace(/[\[\]]/g, '');
+    
+    // Split by colon to separate zone and details
+    const [zone, details] = cleanZoning.split(':');
+    
+    // Format details with proper spacing and parentheses
+    const formattedDetails = details ? `: ${details.split(';').join(' (')}%)` : '';
+    
+    return `${zone}${formattedDetails}`;
   };
 
   return (
-    <div className="w-full h-full">
-      {/* The Giraffe iframe will be rendered here */}
+    <div style={{ width: '100%', height: '100%' }}>
+      <iframe
+        id="giraffe-iframe"
+        title="Map"
+        style={{ width: '100%', height: '100%', border: 'none' }}
+        src="https://giraffe.nsw.gov.au/iframe"
+      />
     </div>
   );
 };

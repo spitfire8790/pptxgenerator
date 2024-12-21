@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { generateReport } from '../../lib/powerpoint';
 import { addCoverSlide } from './slides/coverSlide';
 import { addPropertySnapshotSlide } from './slides/propertySnapshotSlide';
-import { captureMapScreenshot } from './utils/mapScreenshot';
+import { captureMapScreenshot, SCREENSHOT_TYPES } from './utils/mapScreenshot';
 import SlidePreview from './SlidePreview';
 
 const slideOptions = [
@@ -19,7 +19,6 @@ const ReportGenerator = ({ selectedFeature }) => {
   });
   const [previewScreenshot, setPreviewScreenshot] = useState(null);
 
-  // Get screenshot for preview when feature is selected
   useEffect(() => {
     async function getPreviewScreenshot() {
       if (selectedFeature) {
@@ -37,8 +36,12 @@ const ReportGenerator = ({ selectedFeature }) => {
     setStatus('generating');
     
     try {
-      const screenshot = await captureMapScreenshot(selectedFeature);
+      const aerialScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.AERIAL);
+      const snapshotScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.SNAPSHOT);
       
+      console.log('Aerial Screenshot:', aerialScreenshot ? 'Present' : 'Missing');
+      console.log('Snapshot Screenshot:', snapshotScreenshot ? 'Present' : 'Missing');
+
       const reportDate = new Date().toLocaleDateString('en-GB', {
         year: 'numeric',
         month: 'long',
@@ -47,10 +50,22 @@ const ReportGenerator = ({ selectedFeature }) => {
 
       const propertyData = {
         ...selectedFeature.properties.copiedFrom,
-        geometry: selectedFeature.geometry,
+        site__address: selectedFeature.properties.copiedFrom.site__address,
+        site__area: selectedFeature.properties.copiedFrom.site__area,
+        site__area_sqm: selectedFeature.properties.copiedFrom.site__area_sqm,
+        site__council: selectedFeature.properties.copiedFrom.site__council,
+        site__description: selectedFeature.properties.copiedFrom.site__description,
+        site__lot_dp: selectedFeature.properties.copiedFrom.site__lot_dp,
+        site__ownership: selectedFeature.properties.copiedFrom.site__ownership,
+        site__portfolio: selectedFeature.properties.copiedFrom.site__portfolio,
+        site__region: selectedFeature.properties.copiedFrom.site__region,
+        site_suitability__principal_zone_identifier: selectedFeature.properties.copiedFrom.site_suitability__principal_zone_identifier,
+        site_suitability__floorspace_ratio: selectedFeature.properties.copiedFrom.site_suitability__floorspace_ratio,
+        site_suitability__height_of_building: selectedFeature.properties.copiedFrom.site_suitability__height_of_building,
         reportDate,
         selectedSlides,
-        screenshot
+        screenshot: aerialScreenshot,
+        snapshotScreenshot
       };
 
       await generateReport(propertyData);
@@ -117,4 +132,4 @@ const ReportGenerator = ({ selectedFeature }) => {
   );
 };
 
-export default ReportGenerator; 
+export default ReportGenerator;

@@ -14,7 +14,8 @@ const SlidePreview = ({ selectedFeature, screenshot }) => {
               <img 
                 src={screenshot} 
                 alt="Property"
-                className="w-full h-full object-contain opacity-70"
+                className="w-full h-full object-cover"
+                style={{ opacity: 0.7 }}
               />
             )}
           </div>
@@ -61,4 +62,4 @@ const SlidePreview = ({ selectedFeature, screenshot }) => {
   );
 };
 
-export default SlidePreview; 
+export default SlidePreview;
