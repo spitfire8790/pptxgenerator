@@ -11,7 +11,7 @@ const MapView = ({ onFeatureSelect, planningLayer }) => {
       // Add base imagery with 50% opacity
       rpc.addLayer({
         type: 'wms',
-        url: 'https://api.metromap.com.au/ogc/gda2020/key/cstti1v27eq9nu61qu4g5hmzziouk84x211rfim0mb35cujvqpt1tufytqk575pe/service',
+        url: '/metromap/ogc/gda2020/key/cstti1v27eq9nu61qu4g5hmzziouk84x211rfim0mb35cujvqpt1tufytqk575pe/service',
         layers: 'Australia_latest',
         opacity: 0.5
       });

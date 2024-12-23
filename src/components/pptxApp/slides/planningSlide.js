@@ -7,10 +7,14 @@ const styles = {
     w: '80%',
     h: '8%',
     fontSize: 22,
-    color: '002664',
     fontFace: 'Public Sans Light',
     autoFit: true,
-    breakLine: false
+    breakLine: false,
+    color: '002664',
+    lineSpacing: 22
+  },
+  subtitle: {
+    color: '363636',
   },
   titleLine: {
     x: '5%',
@@ -39,10 +43,10 @@ const styles = {
     sizing: { type: 'contain' }
   },
   mapContainer: {
-    x: (index) => `${5 + (index * 31.5)}%`,
-    y: '25%',
-    w: '29%',
-    h: '60%'
+    x: (index) => `${5 + (index * 30.6)}%`,
+    y: '20%',
+    w: '27%',
+    h: '35%'
   },
   mapTitle: {
     h: '10%',
@@ -54,39 +58,46 @@ const styles = {
     valign: 'middle'
   },
   mapImage: {
+    x: 0,
     y: '10%',
-    w: '100%',
-    h: '55%',
-    sizing: { type: 'fill' }
+    w: '10.85cm',
+    h: '7.16cm',
+    sizing: {
+      type: 'contain',
+      align: 'center',
+      valign: 'middle'
+    }
   },
   textBox: {
-    y: '65%',
+    y: '60%',
     w: '100%',
-    h: '35%',
+    h: '25%',
     fill: 'FFFBF2',
     line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
   },
   descriptionText: {
     x: '5%',
-    y: '5%',
+    y: '10%',
     w: '90%',
-    h: '60%',
+    h: '40%',
     fontSize: 10,
     color: '363636',
     fontFace: 'Public Sans',
     align: 'left',
-    valign: 'top'
+    valign: 'top',
+    wrap: true
   },
   sourceText: {
     x: '5%',
-    y: '70%',
+    y: '55%',
     w: '90%',
-    h: '20%',
+    h: '30%',
     fontSize: 8,
     color: '363636',
     fontFace: 'Public Sans Light',
     italic: true,
-    align: 'left'
+    align: 'left',
+    wrap: true
   },
   footerLine: {
     x: '5%',
@@ -142,8 +153,8 @@ const createMapSection = (pptx, slide, title, index, imageData, text, source) =>
       ...convertCmValues({
         x: containerX,
         y: `${parseInt(containerY) + parseInt(styles.mapImage.y)}%`,
-        w: containerW,
-        h: styles.mapImage.h
+        w: '10.85cm',
+        h: '7.16cm',
       })
     });
   } else {
@@ -189,7 +200,14 @@ export function addPlanningSlide(pptx, data) {
   const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
 
   // Add title with line break
-  slide.addText(`${data.site__address}\nPlanning`, convertCmValues(styles.title));
+  slide.addText([
+    { text: data.site__address, options: { color: styles.title.color } },
+    { text: ' ', options: { breakLine: true } },
+    { text: 'Planning', options: { color: styles.subtitle.color } }
+  ], convertCmValues({
+    ...styles.title,
+    color: undefined
+  }));
 
   // Add horizontal line under title
   slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.titleLine));
@@ -203,14 +221,14 @@ export function addPlanningSlide(pptx, data) {
     ...convertCmValues(styles.nswLogo)
   });
 
-  // Add the three map sections
+  // Add the three map sections with base64 image data
   createMapSection(
     pptx,
     slide,
     'Zoning',
     0,
     data.zoningScreenshot,
-    'The site is predominantly zoned R3 – Medium Density Residential, and part of the site is zoned SP2 - Infrastructure.',
+    'The site is predominantly zoned R3 – Medium Density Residential...',
     'Source: Land Zoning NSW, DPE, 2023'
   );
 

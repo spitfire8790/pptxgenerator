@@ -2,22 +2,28 @@ import React, { useState, useEffect } from 'react';
 import { generateReport } from '../../lib/powerpoint';
 import { addCoverSlide } from './slides/coverSlide';
 import { addPropertySnapshotSlide } from './slides/propertySnapshotSlide';
+import { addPlanningSlide } from './slides/planningSlide';
 import { captureMapScreenshot, SCREENSHOT_TYPES } from './utils/mapScreenshot';
 import SlidePreview from './SlidePreview';
+import PlanningMapView from './PlanningMapView';
+import PptxGenJS from 'pptxgenjs';
 
 const slideOptions = [
   { id: 'cover', label: 'Cover Page', addSlide: addCoverSlide },
-  { id: 'snapshot', label: 'Property Snapshot', addSlide: addPropertySnapshotSlide }
+  { id: 'snapshot', label: 'Property Snapshot', addSlide: addPropertySnapshotSlide },
+  { id: 'planning', label: 'Planning', addSlide: addPlanningSlide }
 ];
 
 const ReportGenerator = ({ selectedFeature }) => {
+  const [screenshots, setScreenshots] = useState({});
+  const [previewScreenshot, setPreviewScreenshot] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [status, setStatus] = useState('idle');
+  const [status, setStatus] = useState(null);
   const [selectedSlides, setSelectedSlides] = useState({
     cover: true,
-    snapshot: true
+    snapshot: true,
+    planning: true
   });
-  const [previewScreenshot, setPreviewScreenshot] = useState(null);
 
   useEffect(() => {
     async function getPreviewScreenshot() {
@@ -38,9 +44,15 @@ const ReportGenerator = ({ selectedFeature }) => {
     try {
       const aerialScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.AERIAL);
       const snapshotScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.SNAPSHOT);
+      const zoningScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.ZONING);
+      const fsrScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.FSR);
+      const hobScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.HOB);
       
       console.log('Aerial Screenshot:', aerialScreenshot ? 'Present' : 'Missing');
       console.log('Snapshot Screenshot:', snapshotScreenshot ? 'Present' : 'Missing');
+      console.log('Zoning Screenshot:', zoningScreenshot ? 'Present' : 'Missing');
+      console.log('FSR Screenshot:', fsrScreenshot ? 'Present' : 'Missing');
+      console.log('HOB Screenshot:', hobScreenshot ? 'Present' : 'Missing');
 
       const reportDate = new Date().toLocaleDateString('en-GB', {
         year: 'numeric',
@@ -65,7 +77,10 @@ const ReportGenerator = ({ selectedFeature }) => {
         reportDate,
         selectedSlides,
         screenshot: aerialScreenshot,
-        snapshotScreenshot
+        snapshotScreenshot,
+        zoningScreenshot: screenshots.zoningScreenshot || zoningScreenshot,
+        fsrScreenshot: screenshots.fsrScreenshot || fsrScreenshot,
+        hobScreenshot: screenshots.hobScreenshot || hobScreenshot
       };
 
       await generateReport(propertyData);
@@ -78,11 +93,38 @@ const ReportGenerator = ({ selectedFeature }) => {
     }
   };
 
+  const handleScreenshotCapture = async () => {
+    if (selectedFeature) {
+      // For cover slide, don't draw boundary
+      const coverScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.AERIAL, false);
+      // For other slides, keep boundary
+      const snapshotScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.AERIAL, true);
+      
+      setPreviewScreenshot(coverScreenshot);
+      setScreenshots({
+        coverScreenshot,
+        snapshotScreenshot
+      });
+    }
+  };
+
+  const handlePlanningScreenshotsCapture = (planningScreenshots) => {
+    setScreenshots(prev => ({
+      ...prev,
+      ...planningScreenshots
+    }));
+  };
+
   return (
     <div className="h-full overflow-auto">
       <div className="p-4">
         <h2 className="text-xl font-semibold mb-4">Property Report Generator</h2>
         
+        <PlanningMapView 
+          feature={selectedFeature} 
+          onScreenshotCapture={handlePlanningScreenshotsCapture}
+        />
+
         <div className="bg-white p-6 rounded-lg shadow mb-4">
           <SlidePreview 
             selectedFeature={selectedFeature}

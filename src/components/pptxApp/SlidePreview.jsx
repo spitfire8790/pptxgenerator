@@ -14,8 +14,11 @@ const SlidePreview = ({ selectedFeature, screenshot }) => {
               <img 
                 src={screenshot} 
                 alt="Property"
-                className="w-full h-full object-cover"
-                style={{ opacity: 0.7 }}
+                className="w-full h-full"
+                style={{ 
+                  objectFit: 'cover',
+                  objectPosition: 'center'
+                }}
               />
             )}
           </div>
@@ -34,7 +37,7 @@ const SlidePreview = ({ selectedFeature, screenshot }) => {
             <img 
               src="/images/NSW-Government-official-logo.jpg"
               alt="NSW Government"
-              className="absolute right-8 top-4 w-[8%]"
+              className="absolute right-8 top-8 w-[8%]"
             />
             
             {/* Main content */}

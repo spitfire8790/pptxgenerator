@@ -4,6 +4,7 @@ import { addCoverSlide } from '../components/pptxApp/slides/coverSlide';
 import { registerFonts } from '../components/pptxApp/fonts/registerFonts';
 import { convertCmValues } from '../components/pptxApp/utils/units';
 import { addPropertySnapshotSlide } from '../components/pptxApp/slides/propertySnapshotSlide';
+import { addPlanningSlide } from '../components/pptxApp/slides/planningSlide';
 
 export async function generateReport(properties) {
   try {
@@ -27,6 +28,9 @@ export async function generateReport(properties) {
     }
     if (properties.selectedSlides.snapshot !== false) {
       addPropertySnapshotSlide(pptx, properties);
+    }
+    if (properties.selectedSlides.planning !== false) {
+      addPlanningSlide(pptx, properties);
     }
 
     // Generate and save PowerPoint directly

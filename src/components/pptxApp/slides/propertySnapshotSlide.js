@@ -54,7 +54,11 @@ const styles = {
     y: '20%',
     w: '40%',
     h: '70%',
-    sizing: { type: 'cover' }
+    sizing: { 
+      type: 'cover',
+      w: '40%',
+      h: '70%'
+    }
   },
   icons: {
     property: { path: "/images/property.png", w: 0.3, h: 0.3 },
@@ -70,8 +74,8 @@ const styles = {
     fill: { color: '002664' }
   },
   footer: {
-    x: '5%',
-    y: '95%',
+    x: '4%',
+    y: '94%',
     w: '90%',
     h: '4%',
     fontSize: 10,
@@ -80,14 +84,14 @@ const styles = {
     align: 'left'
   },
   pageNumber: {
-    x: '96%',
-    y: '95%',
+    x: '93%',
+    y: '94%',
     w: '4%',
     h: '4%',
     fontSize: 8,
     color: '002664',
     fontFace: 'Public Sans',
-    align: 'right'
+    align: 'left'
   }
 };
 

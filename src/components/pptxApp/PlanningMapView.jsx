@@ -1,159 +1,81 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { giraffeState, rpc } from '@gi-nx/iframe-sdk';
-
-const PLANNING_LAYERS = {
-  ZONING: {
-    url: 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/ePlanning/Planning_Portal_Principal_Planning/MapServer/17',
-    type: 'arcgis'
-  },
-  FSR: {
-    url: 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/ePlanning/Planning_Portal_Principal_Planning/MapServer/9',
-    type: 'arcgis'
-  },
-  HOB: {
-    url: 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/ePlanning/Planning_Portal_Principal_Planning/MapServer/12',
-    type: 'arcgis'
-  }
-};
+import React, { useEffect, useRef } from 'react';
+import { LAYER_CONFIGS, SCREENSHOT_TYPES } from './utils/mapScreenshot';
 
 const PlanningMapView = ({ feature, onScreenshotCapture }) => {
-  const [isReady, setIsReady] = useState(false);
-  const iframeRef = useRef(null);
+  const hasRunRef = useRef(false);
 
   useEffect(() => {
-    const initializeMap = async () => {
-      try {
-        await giraffeState.set('iframeWidth', 1024);
-        await giraffeState.set('iframeHeight', 768);
-        setIsReady(true);
-      } catch (error) {
-        console.error('Error initializing map:', error);
-      }
-    };
-
-    const iframe = iframeRef.current;
-    if (iframe) {
-      iframe.addEventListener('load', () => {
-        console.log('Planning iframe loaded');
-        setTimeout(initializeMap, 2000);
-      });
-      return () => iframe.removeEventListener('load', initializeMap);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!feature || !isReady) return;
+    if (!feature || hasRunRef.current) return;
+    hasRunRef.current = true;
 
     const captureScreenshots = async () => {
+      const screenshots = {};
+      
       try {
-        console.log('Starting planning screenshots capture');
-        const screenshots = {};
+        // Calculate bounds
+        const coordinates = feature.geometry.coordinates[0];
+        const bounds = coordinates.reduce((acc, coord) => ({
+          minX: Math.min(acc.minX, coord[0]),
+          minY: Math.min(acc.minY, coord[1]),
+          maxX: Math.max(acc.maxX, coord[0]),
+          maxY: Math.max(acc.maxY, coord[1])
+        }), {
+          minX: Infinity,
+          minY: Infinity,
+          maxX: -Infinity,
+          maxY: -Infinity
+        });
 
-        for (const [layerName, layerConfig] of Object.entries(PLANNING_LAYERS)) {
-          try {
-            console.log(`Capturing ${layerName} screenshot...`);
-            
-            // Clear existing layers
-            await rpc.removeAllLayers();
-            console.log('Cleared existing layers');
+        // Add padding
+        const width = Math.abs(bounds.maxX - bounds.minX);
+        const height = Math.abs(bounds.maxY - bounds.minY);
+        const padding = Math.max(width, height) * 0.25;
 
-            // Add base imagery with 50% opacity
-            await rpc.addLayer({
-              type: 'wms',
-              url: 'https://api.metromap.com.au/ogc/gda2020/key/cstti1v27eq9nu61qu4g5hmzziouk84x211rfim0mb35cujvqpt1tufytqk575pe/service',
-              layers: 'Australia_latest',
-              opacity: 0.5
-            });
-            console.log('Added base imagery');
+        // Use the planning layer configs from mapScreenshot.js
+        const planningTypes = [SCREENSHOT_TYPES.ZONING, SCREENSHOT_TYPES.FSR, SCREENSHOT_TYPES.HOB];
 
-            // Add planning layer with 70% opacity
-            await rpc.addLayer({
-              type: layerConfig.type,
-              url: layerConfig.url,
-              opacity: 0.7
-            });
-            console.log(`Added ${layerName} layer`);
+        for (const type of planningTypes) {
+          const config = LAYER_CONFIGS[type];
+          const params = new URLSearchParams({
+            f: 'image',
+            format: 'png32',
+            transparent: 'true',
+            size: `${config.width},${config.height}`,
+            bboxSR: 4326,
+            imageSR: 4326,
+            bbox: `${bounds.minX - padding},${bounds.minY - padding},${bounds.maxX + padding},${bounds.maxY + padding}`,
+            layers: `show:${config.layerId}`,
+            dpi: 100
+          });
 
-            // Add property boundary
-            await rpc.addLayer({
-              type: 'geojson',
-              data: feature,
-              style: {
-                color: '#FF0000',
-                weight: 2,
-                fillOpacity: 0
-              }
-            });
-            console.log('Added property boundary');
+          const exportUrl = `${config.url}/export?${params.toString()}`;
+          console.log(`Requesting ${type} map:`, exportUrl);
 
-            // Set view to feature bounds with padding
-            const bounds = getBounds(feature.geometry.coordinates[0]);
-            const padding = 0.0002;
-            await rpc.setView({
-              bounds: [
-                [bounds.minY - padding, bounds.minX - padding],
-                [bounds.maxY + padding, bounds.maxX + padding]
-              ]
-            });
-            console.log('Set map view');
-
-            // Wait for layers to load and render
-            console.log('Waiting for layers to render...');
-            await new Promise(resolve => setTimeout(resolve, 3000));
-
-            // Capture screenshot
-            console.log('Capturing screenshot...');
-            const screenshot = await rpc.screenshot({
-              width: 800,
-              height: 600,
-              format: 'png'
-            });
-            console.log(`${layerName} screenshot captured`);
-
-            screenshots[layerName.toLowerCase()] = screenshot;
-
-            // Wait before next screenshot
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          } catch (error) {
-            console.error(`Error capturing ${layerName} screenshot:`, error);
+          const response = await fetch(exportUrl);
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
           }
+          const blob = await response.blob();
+          const base64 = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.readAsDataURL(blob);
+          });
+
+          screenshots[`${type}Screenshot`] = base64;
         }
 
-        console.log('All planning screenshots captured:', Object.keys(screenshots));
         onScreenshotCapture(screenshots);
       } catch (error) {
-        console.error('Error capturing planning screenshots:', error);
+        console.error('Error capturing screenshots:', error);
       }
     };
 
     captureScreenshots();
-  }, [feature, isReady, onScreenshotCapture]);
+  }, [feature]);
 
-  const getBounds = (coordinates) => {
-    return coordinates.reduce((acc, coord) => ({
-      minX: Math.min(acc.minX, coord[0]),
-      minY: Math.min(acc.minY, coord[1]),
-      maxX: Math.max(acc.maxX, coord[0]),
-      maxY: Math.max(acc.maxY, coord[1])
-    }), {
-      minX: coordinates[0][0],
-      minY: coordinates[0][1],
-      maxX: coordinates[0][0],
-      maxY: coordinates[0][1]
-    });
-  };
-
-  return (
-    <div style={{ width: '1024px', height: '768px', position: 'absolute', left: '-9999px' }}>
-      <iframe
-        ref={iframeRef}
-        id="planning-iframe"
-        title="Planning Map"
-        style={{ width: '100%', height: '100%', border: 'none' }}
-        src="https://giraffe.nsw.gov.au/iframe"
-      />
-    </div>
-  );
+  return null;
 };
 
 export default PlanningMapView;
+

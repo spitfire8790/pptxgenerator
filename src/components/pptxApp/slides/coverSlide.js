@@ -5,19 +5,12 @@ const styles = {
   imageContainer: {
     x: 0,
     y: 0,
-    w: '33%',
+    w: '50%',
     h: '100%',
     fill: { type: 'solid', color: '002664' }
   },
-  image: {
-    x: 0,
-    y: 0,
-    w: '33%',
-    h: '100%',
-    sizing: { type: 'cover' }
-  },
   dividerLine: {
-    x: '35%',
+    x: '52%',
     y: '5%',
     w: 0.005,
     h: '90%',
@@ -25,20 +18,20 @@ const styles = {
     fill: { color: '002664' }
   },
   sensitiveText: {
-    x: '72%',
+    x: '53%',
     y: '2%',
     w: '25%',
     h: '3%',
     fontSize: 9,
     color: 'FF3B3B',
     bold: true,
-    align: 'right',
+    align: 'left',
     fontFace: 'Public Sans'
   },
   header: {
-    x: '36%',
+    x: '53%',
     y: '10%',
-    w: '57%',
+    w: '43%',
     h: '5%',
     fontSize: 12,
     color: '002664',
@@ -46,20 +39,20 @@ const styles = {
     fontFace: 'Public Sans'
   },
   title: {
-    x: '36%',
-    y: '20%',
-    w: '57%',
+    x: '53%',
+    y: '24%',
+    w: '43%',
     h: '15%',
-    fontSize: 30,
+    fontSize: 28,
     color: '002664',
     bold: false,
     lineSpacing: 36,
     fontFace: 'Public Sans Light'
   },
   subtitle: {
-    x: '36%',
+    x: '53%',
     y: '60%',
-    w: '57%',
+    w: '43%',
     h: '5%',
     fontSize: 16,
     color: '002664',
@@ -67,9 +60,9 @@ const styles = {
     fontFace: 'Public Sans Light'
   },
   address: {
-    x: '36%',
+    x: '53%',
     y: '68%',
-    w: '57%',
+    w: '43%',
     h: '5%',
     fontSize: 16,
     color: 'FFCC31',
@@ -77,9 +70,9 @@ const styles = {
     fontFace: 'Public Sans Light'
   },
   date: {
-    x: '36%',
+    x: '53%',
     y: '90%',
-    w: '57%',
+    w: '43%',
     h: '5%',
     fontSize: 14,
     color: '363636',
@@ -100,13 +93,16 @@ export function addCoverSlide(pptx, properties) {
   if (properties.screenshot) {
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.imageContainer));
     
-    const imageStyle = convertCmValues({ ...styles.image });
-    delete imageStyle.sizing;  // Remove sizing from conversion
-    
     slide.addImage({
       data: properties.screenshot,
-      ...imageStyle,
-      sizing: styles.image.sizing  // Add sizing back directly
+      x: 0,
+      y: 0,
+      w: '50%',
+      h: '100%',
+      sizing: {
+        type: 'cover',
+        position: 'center'
+      }
     });
   }
 

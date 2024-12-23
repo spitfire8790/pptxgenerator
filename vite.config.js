@@ -70,6 +70,11 @@ export default defineConfig({
             });
           });
         }
+      },
+      '/metromap': {
+        target: 'https://api.metromap.com.au',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/metromap/, '')
       }
     }
   },
