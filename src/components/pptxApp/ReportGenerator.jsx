@@ -42,7 +42,13 @@ const ReportGenerator = ({ selectedFeature }) => {
     setStatus('generating');
     
     try {
+      // Create pptx with WIDE layout
+      const pptx = new PptxGenJS();
+      pptx.layout = 'LAYOUT_WIDE';
+      
+      // Get screenshots
       const aerialScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.AERIAL);
+      const coverScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.COVER);
       const snapshotScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.SNAPSHOT);
       const zoningScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.ZONING);
       const fsrScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.FSR);
@@ -76,8 +82,8 @@ const ReportGenerator = ({ selectedFeature }) => {
         site_suitability__height_of_building: selectedFeature.properties.copiedFrom.site_suitability__height_of_building,
         reportDate,
         selectedSlides,
-        screenshot: aerialScreenshot,
-        snapshotScreenshot,
+        screenshot: coverScreenshot,
+        snapshotScreenshot: aerialScreenshot,
         zoningScreenshot: screenshots.zoningScreenshot || zoningScreenshot,
         fsrScreenshot: screenshots.fsrScreenshot || fsrScreenshot,
         hobScreenshot: screenshots.hobScreenshot || hobScreenshot
@@ -95,9 +101,9 @@ const ReportGenerator = ({ selectedFeature }) => {
 
   const handleScreenshotCapture = async () => {
     if (selectedFeature) {
-      // For cover slide, don't draw boundary
-      const coverScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.AERIAL, false);
-      // For other slides, keep boundary
+      // For cover slide, use COVER type without boundary
+      const coverScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.COVER, false);
+      // For other slides, keep boundary and use AERIAL type
       const snapshotScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.AERIAL, true);
       
       setPreviewScreenshot(coverScreenshot);
@@ -118,7 +124,7 @@ const ReportGenerator = ({ selectedFeature }) => {
   return (
     <div className="h-full overflow-auto">
       <div className="p-4">
-        <h2 className="text-xl font-semibold mb-4">Property Report Generator</h2>
+        <h2 className="text-xl font-semibold mb-4">Desktop Due Diligence PowerPoint Report Generator</h2>
         
         <PlanningMapView 
           feature={selectedFeature} 

@@ -1,5 +1,6 @@
 import { convertCmValues } from '../utils/units';
 
+
 const styles = {
   title: {
     x: '4%',
@@ -58,12 +59,13 @@ const styles = {
       type: 'cover',
       w: '40%',
       h: '70%'
-    }
+    },
+    line: { color: '002664', width: 1 }
   },
   icons: {
-    property: { path: "/images/property.png", w: 0.3, h: 0.3 },
-    building: { path: "/images/building.png", w: 0.3, h: 0.3 },
-    planning: { path: "/images/planning.png", w: 0.3, h: 0.3 }
+    property: { path: "/public/images/property.svg", w: 0.3, h: 0.3 },
+    building: { path: "/public/images/building.svg", w: 0.3, h: 0.3 },
+    planning: { path: "/public/images/planning.svg", w: 0.3, h: 0.3 }
   },
   footerLine: {
     x: '5%',
@@ -92,6 +94,29 @@ const styles = {
     color: '002664',
     fontFace: 'Public Sans',
     align: 'left'
+  },
+  categoryIcons: {
+    property: {
+      x: '5.3%',
+      y: '37%',
+      w: 0.4,
+      h: 0.4,
+      sizing: { type: 'contain' }
+    },
+    building: {
+      x: '5.3%',
+      y: '64%',
+      w: 0.4,
+      h: 0.4,
+      sizing: { type: 'contain' }
+    },
+    planning: {
+      x: '5.3%',
+      y: '85%',
+      w: 0.4,
+      h: 0.4,
+      sizing: { type: 'contain' }
+    }
   }
 };
 
@@ -136,18 +161,10 @@ export function addPropertySnapshotSlide(pptx, properties) {
      { text: 'Details', options: { fill: '002664', color: 'FFFFFF' } }],
     // Property Particulars
     [{ 
-      text: 'Property Particulars',
+      text: 'Property Particulars\n\n',
       options: { 
         rowspan: 7,
-        valign: 'top',
-        w: 1,
-        h: 1,
-        image: {
-          path: "/images/property.png",
-          w: 0.3,
-          h: 0.3,
-          sizing: { type: 'contain', w: 0.3, h: 0.3 }
-        }
+        valign: 'middle'
       }
     }, 'Address', properties.site__address],
     ['LGA', properties.site_suitability__LGA || 'Not specified'],
@@ -160,37 +177,31 @@ export function addPropertySnapshotSlide(pptx, properties) {
       properties.site_suitability__public_transport_access_level_AM.split(':')[0].replace(/[\[\]]/g, '') : 'Not specified'],
     // Current Use
     [{ 
-      text: 'Current Use',
+      text: 'Current Use\n\n',
       options: { 
         rowspan: 3,
-        valign: 'top',
-        w: 1,
-        h: 1,
-        image: {
-          path: "/images/building.png",
-          w: 0.3,
-          h: 0.3,
-          sizing: { type: 'contain', w: 0.3, h: 0.3 }
-        }
+        valign: 'middle'
       }
     }, 'Site Description', { 
       text: properties.site__description || 'Please insert site description',
       options: { italic: true, color: '808080' }
     }],
-    ['Current Use', properties.site_suitability__current_government_land_use ? 
-      properties.site_suitability__current_government_land_use.split(':')[0].replace(/[\[\]]/g, '') : 
-      { text: 'Please insert current use', options: { italic: true, color: '808080' } }],
+    ['Current Use', { 
+      text: properties.site_suitability__current_government_land_use ? 
+        properties.site_suitability__current_government_land_use.split(':')[0].replace(/[\[\]]/g, '') : 
+        'Please insert current use',
+      options: { italic: true, color: '808080' }
+    }],
     ['Restrictions', { 
       text: properties.site__restrictions || 'Please insert restrictions',
       options: { italic: true, color: '808080' }
     }],
     // Planning Controls
     [{ 
-      text: 'Planning Controls',
+      text: 'Planning Controls\n\n',
       options: { 
         rowspan: 3,
-        valign: 'top',
-        image: styles.icons.planning
+        valign: 'middle'
       }
     }, 'Primary Zoning', formatZoning(properties.site_suitability__principal_zone_identifier)],
     ['FSR', properties.site_suitability__floorspace_ratio ? `${properties.site_suitability__floorspace_ratio}:1` : 'Not specified'],
@@ -199,25 +210,43 @@ export function addPropertySnapshotSlide(pptx, properties) {
 
   slide.addTable(tableData, {
     ...convertCmValues(styles.table),
-    colW: [1, 1.2, 2.5],
+    colW: [0.95, 1.3, 3.9],
     border: { type: 'solid', color: '363636', pt: 0.5 },
-    rowH: 0.27,
+    rowH: [
+      0.27, // Header row
+      0.27, 0.27, 0.27, 0.27, 0.27, 0.27, 0.27, // Property Particulars (7 rows)
+      0.8, 0.8, 0.6,  // Current Use (3 rows with increased height)
+      0.27, 0.27, 0.27 // Planning Controls (3 rows)
+    ],
     align: 'left',
     valign: 'middle',
-    fontSize: 7,
+    fontSize: 8,
     color: '363636',
     bold: false,
     autoPage: false
   });
 
-  // Add image if it exists
+  // Add category icons
+  slide.addImage({
+    path: styles.icons.property.path,
+    ...convertCmValues(styles.categoryIcons.property)
+  });
+
+  slide.addImage({
+    path: styles.icons.building.path,
+    ...convertCmValues(styles.categoryIcons.building)
+  });
+
+  slide.addImage({
+    path: styles.icons.planning.path,
+    ...convertCmValues(styles.categoryIcons.planning)
+  });
+
+  // Add aerial image if it exists
   if (properties.snapshotScreenshot) {
-    const imagePosition = convertCmValues(styles.image);
-    
-    // Add the aerial image
     slide.addImage({
       data: properties.snapshotScreenshot,
-      ...imagePosition
+      ...convertCmValues(styles.image)
     });
   }
 

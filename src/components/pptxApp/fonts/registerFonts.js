@@ -20,7 +20,7 @@ export function registerFonts(pptx) {
   // Set default font properties
   pptx.defaultTextOpts = {
     fontFace: 'Public Sans',
-    fontSize: 12,
+    fontSize: 10,
     color: '363636'
   };
 } 

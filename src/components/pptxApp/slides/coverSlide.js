@@ -1,4 +1,3 @@
-import pptxgen from 'pptxgenjs';
 import { convertCmValues } from '../utils/units';
 
 const styles = {
@@ -11,9 +10,9 @@ const styles = {
   },
   dividerLine: {
     x: '52%',
-    y: '5%',
-    w: 0.005,
-    h: '90%',
+    y: '2%',
+    w: 0.01,
+    h: '94%',
     line: { color: '002664', width: 0.005 },
     fill: { color: '002664' }
   },
@@ -22,7 +21,7 @@ const styles = {
     y: '2%',
     w: '25%',
     h: '3%',
-    fontSize: 9,
+    fontSize: 10,
     color: 'FF3B3B',
     bold: true,
     align: 'left',
@@ -33,9 +32,9 @@ const styles = {
     y: '10%',
     w: '43%',
     h: '5%',
-    fontSize: 12,
+    fontSize: 16,
     color: '002664',
-    bold: false,
+    bold: true,
     fontFace: 'Public Sans'
   },
   title: {
@@ -43,7 +42,7 @@ const styles = {
     y: '24%',
     w: '43%',
     h: '15%',
-    fontSize: 28,
+    fontSize: 36,
     color: '002664',
     bold: false,
     lineSpacing: 36,
@@ -54,7 +53,7 @@ const styles = {
     y: '60%',
     w: '43%',
     h: '5%',
-    fontSize: 16,
+    fontSize: 18,
     color: '002664',
     bold: true,
     fontFace: 'Public Sans Light'
@@ -64,14 +63,14 @@ const styles = {
     y: '68%',
     w: '43%',
     h: '5%',
-    fontSize: 16,
+    fontSize: 18,
     color: 'FFCC31',
     bold: true,
     fontFace: 'Public Sans Light'
   },
   date: {
     x: '53%',
-    y: '90%',
+    y: '92%',
     w: '43%',
     h: '5%',
     fontSize: 14,
@@ -91,8 +90,6 @@ export function addCoverSlide(pptx, properties) {
   const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
   
   if (properties.screenshot) {
-    slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.imageContainer));
-    
     slide.addImage({
       data: properties.screenshot,
       x: 0,

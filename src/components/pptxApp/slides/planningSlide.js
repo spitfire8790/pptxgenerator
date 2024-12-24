@@ -58,10 +58,9 @@ const styles = {
     valign: 'middle'
   },
   mapImage: {
-    x: 0,
     y: '10%',
-    w: '10.85cm',
-    h: '7.16cm',
+    w: '100%',
+    h: '90%',
     sizing: {
       type: 'contain',
       align: 'center',
@@ -147,18 +146,20 @@ const createMapSection = (pptx, slide, title, index, imageData, text, source) =>
 
   // Add map image
   if (imageData) {
-    console.log(`Adding map image for ${title}`);
     slide.addImage({
       data: imageData,
       ...convertCmValues({
         x: containerX,
         y: `${parseInt(containerY) + parseInt(styles.mapImage.y)}%`,
-        w: '10.85cm',
-        h: '7.16cm',
+        w: containerW,
+        h: containerW,
+        sizing: {
+          type: 'contain',
+          align: 'center',
+          valign: 'middle'
+        }
       })
     });
-  } else {
-    console.warn(`No image data for ${title}`);
   }
 
   // Add text box
@@ -191,12 +192,6 @@ const createMapSection = (pptx, slide, title, index, imageData, text, source) =>
 };
 
 export function addPlanningSlide(pptx, data) {
-  console.log('Adding planning slide with data:', {
-    zoningScreenshot: data.zoningScreenshot ? 'Present' : 'Missing',
-    fsrScreenshot: data.fsrScreenshot ? 'Present' : 'Missing',
-    hobScreenshot: data.hobScreenshot ? 'Present' : 'Missing'
-  });
-
   const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
 
   // Add title with line break
@@ -221,14 +216,14 @@ export function addPlanningSlide(pptx, data) {
     ...convertCmValues(styles.nswLogo)
   });
 
-  // Add the three map sections with base64 image data
+  // Add the three map sections
   createMapSection(
     pptx,
     slide,
     'Zoning',
     0,
     data.zoningScreenshot,
-    'The site is predominantly zoned R3 – Medium Density Residential...',
+    data.site_suitability__principal_zone_identifier || 'The site is predominantly zoned R3 – Medium Density Residential...',
     'Source: Land Zoning NSW, DPE, 2023'
   );
 
@@ -238,7 +233,7 @@ export function addPlanningSlide(pptx, data) {
     'Floorspace Ratio (FSR)',
     1,
     data.fsrScreenshot,
-    'The site has no FSR specified.',
+    data.site_suitability__floorspace_ratio || 'The site has no FSR specified.',
     'Source: EPI Floor Space Ratio (n:1) NSW, DPE, 2023'
   );
 
@@ -248,7 +243,7 @@ export function addPlanningSlide(pptx, data) {
     'Height of Building (HoB)',
     2,
     data.hobScreenshot,
-    'The site HoB is 14 metres.',
+    data.site_suitability__height_of_building || 'The site HoB is 14 metres.',
     'Source: EPI Height of Building NSW, DPE, 2023'
   );
 
@@ -260,4 +255,6 @@ export function addPlanningSlide(pptx, data) {
 
   // Add page number
   slide.addText('5', convertCmValues(styles.pageNumber));
+
+  return slide;
 }

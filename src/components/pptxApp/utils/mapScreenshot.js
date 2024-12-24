@@ -16,43 +16,42 @@ export const LAYER_CONFIGS = {
     url: 'https://api.metromap.com.au/ogc/gda2020/key/cstti1v27eq9nu61qu4g5hmzziouk84x211rfim0mb35cujvqpt1tufytqk575pe/service',
     layers: 'Australia_latest',
     opacity: 1,
-    size: 2048,     // Single size value for square output
-    padding: 1.0
+    width: 2048,
+    height: 2048,
+    padding: 0.3
   },
   [SCREENSHOT_TYPES.COVER]: {
     url: 'https://api.metromap.com.au/ogc/gda2020/key/cstti1v27eq9nu61qu4g5hmzziouk84x211rfim0mb35cujvqpt1tufytqk575pe/service',
     layers: 'Australia_latest',
     opacity: 1,
-    width: 683,    // 33% of 2048 (rounded up)
-    height: 1152,  // 16:9 ratio of full width (2048)
-    padding: 0.3
+    width: 2048,
+    height: 2048,  // Make it square, let PowerPoint handle the scaling
+    padding: 0.5
   },
   [SCREENSHOT_TYPES.SNAPSHOT]: {
     url: 'https://api.metromap.com.au/ogc/gda2020/key/cstti1v27eq9nu61qu4g5hmzziouk84x211rfim0mb35cujvqpt1tufytqk575pe/service',
     layers: 'Australia_latest',
     opacity: 1,
-    size: 2048,     // Single size value for square output
-    padding: 0.3
+    width: 2048,          // Base width at 300dpi
+    height: 3584,         // 70/40 ratio * 2048
+    padding: 0.1
   },
   [SCREENSHOT_TYPES.ZONING]: {
     url: 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/EPI_Primary_Planning_Layers/MapServer',
     layerId: 2,
-    width: 1085,    // 10.85cm in pixels at 100dpi
-    height: 716,    // 7.16cm in pixels at 100dpi
+    size: 2048,     // Square size at 300dpi
     padding: 0.2
   },
   [SCREENSHOT_TYPES.FSR]: {
     url: 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/Principal_Planning_Layers/MapServer',
     layerId: 4,
-    width: 1085,
-    height: 716,
+    size: 2048,
     padding: 0.2
   },
   [SCREENSHOT_TYPES.HOB]: {
     url: 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/Principal_Planning_Layers/MapServer',
     layerId: 7,
-    width: 1085,
-    height: 716,
+    size: 2048,
     padding: 0.2
   }
 };
@@ -65,7 +64,16 @@ function convertToWebMercator(lng, lat) {
   return [x, y];
 }
 
-export async function captureMapScreenshot(feature, type = SCREENSHOT_TYPES.AERIAL, drawBoundary = true) {
+function calculateMercatorParams(centerX, centerY, size) {
+  const [centerMercX, centerMercY] = convertToWebMercator(centerX, centerY);
+  const metersPerDegree = 111319.9;
+  const latFactor = Math.cos(centerY * Math.PI / 180);
+  const sizeInMeters = size * metersPerDegree * latFactor;
+  const bbox = `${centerMercX - sizeInMeters/2},${centerMercY - sizeInMeters/2},${centerMercX + sizeInMeters/2},${centerMercY + sizeInMeters/2}`;
+  return { centerMercX, centerMercY, sizeInMeters, bbox };
+}
+
+export async function captureMapScreenshot(feature, type = SCREENSHOT_TYPES.SNAPSHOT, drawBoundary = true) {
   if (!feature || !LAYER_CONFIGS[type]) return null;
   
   try {
@@ -97,12 +105,8 @@ export async function captureMapScreenshot(feature, type = SCREENSHOT_TYPES.AERI
     // First get the aerial basemap if this is a planning layer
     let baseMapImage = null;
     if (config.layerId !== undefined) {
-      const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];
-      const [centerMercX, centerMercY] = convertToWebMercator(centerX, centerY);
-      const metersPerDegree = 111319.9;
-      const latFactor = Math.cos(centerY * Math.PI / 180);
-      const sizeInMeters = size * metersPerDegree * latFactor;
-      const bbox = `${centerMercX - sizeInMeters/2},${centerMercY - sizeInMeters/2},${centerMercX + sizeInMeters/2},${centerMercY + sizeInMeters/2}`;
+      const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.SNAPSHOT];
+      const { bbox } = calculateMercatorParams(centerX, centerY, size);
 
       const baseParams = new URLSearchParams({
         SERVICE: 'WMS',
@@ -134,25 +138,23 @@ export async function captureMapScreenshot(feature, type = SCREENSHOT_TYPES.AERI
     let mapUrl;
     if (config.layerId !== undefined) {
       // ESRI REST service
+      const { centerMercX, centerMercY, sizeInMeters } = calculateMercatorParams(centerX, centerY, size);
+      
       const params = new URLSearchParams({
         f: 'image',
         format: 'png32',
         transparent: 'true',
-        size: `${config.width},${config.height}`,
-        bboxSR: 4326,
-        imageSR: 4326,
-        bbox: `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`,
+        size: `${config.size},${config.size}`,
+        bboxSR: 3857,
+        imageSR: 3857,
+        bbox: `${centerMercX - sizeInMeters/2},${centerMercY - sizeInMeters/2},${centerMercX + sizeInMeters/2},${centerMercY + sizeInMeters/2}`,
         layers: `show:${config.layerId}`,
-        dpi: 100
+        dpi: 300
       });
       mapUrl = `${config.url}/export?${params.toString()}`;
     } else {
       // WMS service
-      const [centerMercX, centerMercY] = convertToWebMercator(centerX, centerY);
-      const metersPerDegree = 111319.9;
-      const latFactor = Math.cos(centerY * Math.PI / 180);
-      const sizeInMeters = size * metersPerDegree * latFactor;
-      const bbox = `${centerMercX - sizeInMeters/2},${centerMercY - sizeInMeters/2},${centerMercX + sizeInMeters/2},${centerMercY + sizeInMeters/2}`;
+      const { bbox } = calculateMercatorParams(centerX, centerY, size);
 
       const params = new URLSearchParams({
         SERVICE: 'WMS',
@@ -201,26 +203,19 @@ export async function captureMapScreenshot(feature, type = SCREENSHOT_TYPES.AERI
 
     // Draw property boundary only if drawBoundary is true
     if (drawBoundary) {
+      console.log('Drawing boundary with coordinates:', coordinates);
+      const canvasSize = config.size || config.width; // Use size if available, otherwise width
       ctx.strokeStyle = '#FF0000';
-      ctx.lineWidth = Math.max(config.size / 256, 5);
+      ctx.lineWidth = Math.max(canvasSize / 256, 5);
       ctx.beginPath();
 
       coordinates.forEach((coord, i) => {
         let x, y;
-        if (config.layerId !== undefined) {
-          // For ESRI layers, use geographic coordinates with center-based bbox
-          x = ((coord[0] - (centerX - size/2)) / size) * config.size;
-          y = ((centerY + size/2 - coord[1]) / size) * config.size;
-        } else {
-          // For WMS layers, use Web Mercator conversion
-          const [mercX, mercY] = convertToWebMercator(coord[0], coord[1]);
-          const [centerMercX, centerMercY] = convertToWebMercator(centerX, centerY);
-          const metersPerDegree = 111319.9;
-          const latFactor = Math.cos(centerY * Math.PI / 180);
-          const sizeInMeters = size * metersPerDegree * latFactor;
-          x = ((mercX - (centerMercX - sizeInMeters/2)) / sizeInMeters) * config.size;
-          y = ((centerMercY + sizeInMeters/2 - mercY) / sizeInMeters) * config.size;
-        }
+        const [mercX, mercY] = convertToWebMercator(coord[0], coord[1]);
+        const { centerMercX, centerMercY, sizeInMeters } = calculateMercatorParams(centerX, centerY, size);
+        
+        x = ((mercX - (centerMercX - sizeInMeters/2)) / sizeInMeters) * canvasSize;
+        y = ((centerMercY + sizeInMeters/2 - mercY) / sizeInMeters) * canvasSize;
         
         if (i === 0) {
           ctx.moveTo(x, y);

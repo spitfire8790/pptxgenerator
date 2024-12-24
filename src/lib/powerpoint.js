@@ -13,8 +13,8 @@ export async function generateReport(properties) {
     // Register fonts
     registerFonts(pptx);
     
-    // Set default layout to 16:9
-    pptx.layout = 'LAYOUT_16x9';
+    // Set default layout to WIDE
+    pptx.layout = 'LAYOUT_WIDE';
 
     // Add NSW Government logo
     pptx.defineSlideMaster({
@@ -35,9 +35,9 @@ export async function generateReport(properties) {
 
     // Generate and save PowerPoint directly
     const filename = properties.site__address.replace(/[^a-zA-Z0-9]/g, '_');
-    await pptx.writeFile({ fileName: `${filename}_report.pptx` });
+    await pptx.writeFile({ fileName: `${filename}_desktop_dd_report.pptx` });
     
-    return `${filename}_report.pptx`;
+    return `${filename}_desktop_dd_report.pptx`;
   } catch (error) {
     console.error('Error generating PowerPoint:', error);
     throw error;
