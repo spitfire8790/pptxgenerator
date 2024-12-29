@@ -7,10 +7,11 @@
     "node": "20.x"
   },
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently \"vite\" \"node proxy-server/server.js\"",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "vite --host"
+    "start": "vite --host",
+    "proxy": "node proxy-server/server.js"
   },
   "dependencies": {
     "@babel/runtime": "^7.26.0",
@@ -71,7 +72,11 @@
     "@types/react-dom": "^18.2.7",
     "@vitejs/plugin-react": "^4.3.3",
     "autoprefixer": "^10.4.16",
+    "concurrently": "^8.2.2",
+    "cors": "^2.8.5",
     "esbuild": "^0.24.0",
+    "express": "^4.21.2",
+    "node-fetch": "^3.3.2",
     "postcss": "^8.4.31",
     "tailwindcss": "^3.3.5",
     "vite": "^5.4.10"

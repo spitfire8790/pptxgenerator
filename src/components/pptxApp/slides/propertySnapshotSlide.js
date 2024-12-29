@@ -4,14 +4,18 @@ import { convertCmValues } from '../utils/units';
 const styles = {
   title: {
     x: '4%',
-    y: '6%',
+    y: '7%',
     w: '80%',
     h: '8%',
-    fontSize: 22,
-    color: '002664',
+    fontSize: 26,
     fontFace: 'Public Sans Light',
     autoFit: true,
-    breakLine: false
+    breakLine: false,
+    color: '002664',
+    lineSpacing: 26
+  },
+  subtitle: {
+    color: '363636',
   },
   titleLine: {
     x: '5%',
@@ -50,22 +54,10 @@ const styles = {
     border: { type: 'solid', color: '363636', pt: 0.5 },
     align: 'left'
   },
-  image: {
-    x: '55%',
-    y: '20%',
-    w: '40%',
-    h: '70%',
-    sizing: { 
-      type: 'cover',
-      w: '40%',
-      h: '70%'
-    },
-    line: { color: '002664', width: 1 }
-  },
   icons: {
-    property: { path: "/public/images/property.svg", w: 0.3, h: 0.3 },
-    building: { path: "/public/images/building.svg", w: 0.3, h: 0.3 },
-    planning: { path: "/public/images/planning.svg", w: 0.3, h: 0.3 }
+    property: { path: "/images/property.svg", w: 0.3, h: 0.3 },
+    building: { path: "/images/building.svg", w: 0.3, h: 0.3 },
+    planning: { path: "/images/planning.svg", w: 0.3, h: 0.3 }
   },
   footerLine: {
     x: '5%',
@@ -86,7 +78,7 @@ const styles = {
     align: 'left'
   },
   pageNumber: {
-    x: '93%',
+    x: '94%',
     y: '94%',
     w: '4%',
     h: '4%',
@@ -140,7 +132,14 @@ export function addPropertySnapshotSlide(pptx, properties) {
   const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
   
   // Add title with line break
-  slide.addText(`${properties.site__address}\nProperty Snapshot`, convertCmValues(styles.title));
+  slide.addText([
+    { text: properties.site__address, options: { color: styles.title.color } },
+    { text: ' ', options: { breakLine: true } },
+    { text: 'Property Snapshot', options: { color: styles.subtitle.color } }
+  ], convertCmValues({
+    ...styles.title,
+    color: undefined
+  }));
   
   // Add horizontal line under title
   slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.titleLine));
@@ -244,9 +243,30 @@ export function addPropertySnapshotSlide(pptx, properties) {
 
   // Add aerial image if it exists
   if (properties.snapshotScreenshot) {
+    // First add white background rectangle
+    slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
+      x: '55%',
+      y: '20%',
+      w: '39%',
+      h: '70%',
+      fill: 'FFFFFF',
+      line: { color: '002664', width: 1.5 }
+    }));
+
+    // Then add the image with 'contain' sizing
     slide.addImage({
       data: properties.snapshotScreenshot,
-      ...convertCmValues(styles.image)
+      ...convertCmValues({
+        x: '55%',
+        y: '20%',
+        w: '39%',
+        h: '70%',
+        sizing: {
+          type: 'contain',
+          align: 'center',
+          valign: 'middle'
+        }
+      })
     });
   }
 

@@ -71,6 +71,39 @@ export default defineConfig({
           });
         }
       },
+      '/api/proxy': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        secure: false,
+        configure: (proxy, _options) => {
+          proxy.on('error', (err, _req, _res) => {
+            console.log('Spatial proxy error:', err);
+          });
+          proxy.on('proxyReq', (proxyReq, req, _res) => {
+            // Set required headers
+            proxyReq.setHeader('User-Agent', 'Mozilla/5.0');
+            proxyReq.setHeader('Accept', '*/*');
+
+            console.log('Proxying spatial request:', {
+              method: req.method,
+              url: req.url,
+              headers: proxyReq.getHeaders()
+            });
+          });
+          proxy.on('proxyRes', (proxyRes, req, _res) => {
+            // Set CORS headers
+            proxyRes.headers['Access-Control-Allow-Origin'] = '*';
+            proxyRes.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS';
+            proxyRes.headers['Access-Control-Allow-Headers'] = 'Content-Type, Accept';
+
+            console.log('Received spatial response:', {
+              method: req.method,
+              url: req.url,
+              status: proxyRes.statusCode
+            });
+          });
+        }
+      },
       '/metromap': {
         target: 'https://api.metromap.com.au',
         changeOrigin: true,

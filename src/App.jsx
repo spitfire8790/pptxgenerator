@@ -37,7 +37,7 @@ function App() {
         - w-[400px] sets a fixed width
         - bg-white, rounded-lg, and shadow-lg give it a card-like appearance
       */}
-      <div className="absolute top-4 left-4 z-10 w-[800px] bg-white rounded-4g shadow-lg">
+      <div className="absolute top-4 left-4 z-10 w-[950px] bg-white rounded-4g shadow-lg">
         <ReportGenerator selectedFeature={selectedFeature} />
       </div>
 
