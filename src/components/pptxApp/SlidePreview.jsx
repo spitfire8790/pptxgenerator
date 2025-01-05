@@ -5,13 +5,13 @@ const SlidePreview = ({ selectedFeature, screenshot }) => {
     <div className="slide-preview-container mb-4">
       <h3 className="text-lg font-semibold mb-2">Preview</h3>
       
-      {/* Slide preview container with 16:9 aspect ratio */}
-      <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+      {/* Slide preview container with proper aspect ratio */}
+      <div className="relative w-full" style={{ paddingBottom: '60%' }}>
         <div className="absolute inset-0 bg-white rounded-lg shadow-lg overflow-hidden">
           {/* Left side container */}
           <div className="absolute left-0 top-0 w-1/2 h-full" style={{ backgroundColor: '#002664' }}>
             {screenshot && (
-              <div className="w-full h-full flex items-center justify-center">
+              <div className="w-full h-full">
                 <img 
                   src={screenshot} 
                   alt="Property"

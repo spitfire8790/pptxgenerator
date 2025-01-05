@@ -7,6 +7,7 @@ import { addPropertySnapshotSlide } from '../components/pptxApp/slides/propertyS
 import { addPlanningSlide } from '../components/pptxApp/slides/planningSlide';
 import { addPrimarySiteAttributesSlide } from '../components/pptxApp/slides/primarySiteAttributesSlide';
 import { addSecondaryAttributesSlide } from '../components/pptxApp/slides/secondaryAttributesSlide';
+import { addPlanningSlide2 } from '../components/pptxApp/slides/planningSlide2';
 
 export async function generateReport(properties, onProgress) {
   try {
@@ -57,14 +58,21 @@ export async function generateReport(properties, onProgress) {
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 
+    if (properties.selectedSlides.planning2 !== false) {
+      await addPlanningSlide2(pptx, properties);
+      progress = 95;
+      onProgress?.(progress);
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
     // Generate and save
     const filename = properties.site__address.replace(/[^a-zA-Z0-9]/g, '_');
-    await pptx.writeFile({ fileName: `${filename}_desktop_dd_report.pptx` });
+    await pptx.writeFile({ fileName: `${filename}_Desktop_DD_Report.pptx` });
     
     progress = 100;
     onProgress?.(progress);
     
-    return `${filename}_desktop_dd_report.pptx`;
+    return `${filename}_Desktop_DD_Report.pptx`;
   } catch (error) {
     console.error('Error generating PowerPoint:', error);
     throw error;

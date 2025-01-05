@@ -1,8 +1,16 @@
 import React, { useEffect } from 'react';
 import { giraffeState, rpc } from '@gi-nx/iframe-sdk';
+import { logAvailableLayers } from './utils/map/utils/layerDetails';
 
 const MapView = ({ onFeatureSelect, planningLayer }) => {
   useEffect(() => {
+    // Log all available layers when component mounts
+    logAvailableLayers().then(layers => {
+      console.log('All available layers:', layers);
+    }).catch(error => {
+      console.error('Error logging layers:', error);
+    });
+
     // Set the iframe width through Giraffe SDK
     giraffeState.set('iframeWidth', 1024);
 

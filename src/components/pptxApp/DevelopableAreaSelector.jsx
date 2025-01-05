@@ -1,86 +1,77 @@
 import React, { useState, useEffect } from 'react';
 import { giraffeState } from '@gi-nx/iframe-sdk';
+import { logAvailableLayers } from './utils/map/utils/layerDetails';
 
 const DevelopableAreaSelector = ({ onLayerSelect, selectedFeature }) => {
   const [drawingLayers, setDrawingLayers] = useState([]);
   const [selectedLayer, setSelectedLayer] = useState(null);
+  const [isInitialized, setIsInitialized] = useState(false);
 
+  const fetchLayers = async () => {
+    try {
+      await logAvailableLayers();
+      
+      const rawSections = giraffeState.get('rawSections');
+      
+      if (!rawSections?.features) {
+        console.log('No valid rawSections data available');
+        return;
+      }
+      
+      const availableLayers = rawSections.features
+        .filter(feature => {
+          if (!feature.properties?.layerId) {
+            console.log('Filtered out feature:', feature);
+            return false;
+          }
+          return true;
+        })
+        .map(feature => ({
+          id: feature.properties.id,
+          layerId: feature.properties.layerId,
+          geometry: feature.geometry,
+          properties: feature.properties
+        }));
+      
+      console.log('Available Layers:', availableLayers);
+      setDrawingLayers(availableLayers);
+      
+    } catch (error) {
+      console.error('Error in fetchLayers:', error);
+    }
+  };
+
+  // Initial setup and listener registration
   useEffect(() => {
-    console.log('DevelopableAreaSelector mounted');
+    if (!isInitialized) {
+      console.log('Initializing DevelopableAreaSelector');
+      
+      // Initial fetch
+      fetchLayers();
 
-    const fetchLayers = () => {
-      try {
-        console.log('Fetching layers...');
-        const rawSections = giraffeState.get('rawSections');
-        
-        console.log('Raw Sections Data:', rawSections);
-        
-        if (!rawSections) {
-          console.log('No rawSections data available');
-          return;
+      // Set up listener for rawSections changes
+      const unsubscribe = giraffeState.addListener(['rawSections'], (key, value) => {
+        console.log('rawSections changed:', { key, value });
+        if (value?.features?.length > 0) {
+          fetchLayers();
         }
-        
-        if (!rawSections.features) {
-          console.log('No features array in rawSections');
-          return;
-        }
-        
-        console.log('All Features:', rawSections.features);
-        
-        const availableLayers = rawSections.features
-          .filter(feature => {
-            if (!feature.properties?.layerId) {
-              console.log('Filtered out feature:', feature);
-              return false;
-            }
-            return true;
-          })
-          .map(feature => ({
-            id: feature.properties.id,
-            layerId: feature.properties.layerId,
-            geometry: feature.geometry,
-            properties: feature.properties
-          }));
-        
-        console.log('Filtered Layers:', availableLayers);
-        
-        setDrawingLayers(availableLayers);
-        
-      } catch (error) {
-        console.error('Error in fetchLayers:', error);
-      }
-    };
+      });
 
-    fetchLayers();
-    
-    console.log('Setting up giraffeState listener');
-    const unsubscribe = giraffeState.addListener(['rawSections'], (key, value) => {
-      console.log('rawSections changed:', { key, value });
-      if (value?.features?.length > 0) {
-        console.log('Calling fetchLayers due to rawSections update');
-        fetchLayers();
-      } else {
-        console.log('Skipping fetchLayers - no features in update');
-      }
-    });
-    
-    return () => {
-      console.log('DevelopableAreaSelector unmounting');
-      if (typeof unsubscribe === 'function') {
-        unsubscribe();
-      }
-    };
-  }, [selectedFeature]);
+      setIsInitialized(true);
+
+      return () => {
+        console.log('Cleaning up DevelopableAreaSelector');
+        if (typeof unsubscribe === 'function') {
+          unsubscribe();
+        }
+      };
+    }
+  }, [isInitialized]);
 
   // Reset selected layer when feature changes
   useEffect(() => {
     setSelectedLayer(null);
   }, [selectedFeature]);
-
-  // Log when drawingLayers state changes
-  useEffect(() => {
-    console.log('drawingLayers updated:', drawingLayers);
-  }, [drawingLayers]);
 
   const handleLayerSelect = async (layerId) => {
     try {
@@ -104,7 +95,6 @@ const DevelopableAreaSelector = ({ onLayerSelect, selectedFeature }) => {
     }
   };
 
-  // Don't render anything if we don't have layers
   if (drawingLayers.length === 0) {
     return (
       <div className="p-4 bg-white rounded-lg shadow mb-4">

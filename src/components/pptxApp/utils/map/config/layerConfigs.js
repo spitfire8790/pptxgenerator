@@ -44,12 +44,24 @@ export const LAYER_CONFIGS = {
     padding: 0.2
   },
   [SCREENSHOT_TYPES.CONTOUR]: {
-    url: 'https://portal.spatial.nsw.gov.au/server/rest/services/NSW_Elevation_and_Depth_Theme/MapServer',
-    layerId: 2,
+    url: 'https://spatial.industry.nsw.gov.au/arcgis/rest/services/PUBLIC/Contours/MapServer',
+    layerId: 0,
     size: 2048,
-    padding: 0.2,
-    dpi: 96,
+    width: 2048,
+    height: 2048,
+    padding: 0.1,
+    dpi: 300,
     format: 'png32',
-    transparent: true
+    transparent: true,
+    spatialReference: 4283
+  },
+  [SCREENSHOT_TYPES.WIDE]: {
+    width: 2886,
+    height: 2172,
+    padding: 0.1,
+    dpi: 300,
+    format: 'png32',
+    transparent: true,
+    spatialReference: 4283
   }
 }; 

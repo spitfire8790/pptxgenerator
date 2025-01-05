@@ -4,6 +4,9 @@ import { calculateMercatorParams } from '../utils/coordinates';
 import { getWMSImage } from './wmsService';
 import { getArcGISImage } from './arcgisService';
 import { createCanvas, drawImage, drawBoundary } from '../utils/canvas';
+import { proxyRequest } from '../../services/proxyService';
+import { loadImage } from '../utils/image';
+import { giraffeState } from '@gi-nx/iframe-sdk';
 
 export async function captureMapScreenshot(feature, type = SCREENSHOT_TYPES.SNAPSHOT, drawBoundaryLine = true, developableArea = null) {
   if (!feature || !LAYER_CONFIGS[type]) return null;
@@ -111,27 +114,169 @@ export async function capturePrimarySiteAttributesMap(feature, developableArea =
     try {
       // 2. Zoning
       const zoningLayer = await getArcGISImage(LAYER_CONFIGS[SCREENSHOT_TYPES.ZONING], centerX, centerY, size);
-      drawImage(ctx, zoningLayer, canvas.width, canvas.height, 0.5);
+      drawImage(ctx, zoningLayer, canvas.width, canvas.height, 0.4);
     } catch (error) {
       console.warn('Failed to load zoning layer:', error);
     }
 
-    // Continue with other layers, each in their own try-catch
     try {
-      // 3. Easements
+      // 3. Easements with proxy
       const easementsConfig = {
         url: 'https://portal.spatial.nsw.gov.au/server/rest/services/NSW_Land_Parcel_Property_Theme/MapServer',
         layerId: 9,
         size: 2048,
         padding: 0.2
       };
-      const easementsLayer = await getArcGISImage(easementsConfig, centerX, centerY, size);
-      drawImage(ctx, easementsLayer, canvas.width, canvas.height, 0.5);
+      const easementsUrl = await proxyRequest(`${easementsConfig.url}/export?${new URLSearchParams({
+        f: 'image',
+        format: 'png32',
+        transparent: 'true',
+        size: `${easementsConfig.size},${easementsConfig.size}`,
+        bbox: `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`,
+        bboxSR: 4283,
+        imageSR: 4283,
+        layers: `show:${easementsConfig.layerId}`,
+        dpi: 96
+      })}`);
+      const easementsLayer = await loadImage(easementsUrl);
+      drawImage(ctx, easementsLayer, canvas.width, canvas.height, 1);
     } catch (error) {
       console.warn('Failed to load easements layer:', error);
     }
 
-    // Continue with remaining layers...
+    try {
+      // 4. Biodiversity Values
+      const biodiversityConfig = {
+        url: 'https://www.lmbc.nsw.gov.au/arcgis/rest/services/BV/BiodiversityValues/MapServer',
+        layerId: 0,
+        size: 2048,
+        padding: 0.2
+      };
+      const biodiversityUrl = await proxyRequest(`${biodiversityConfig.url}/export?${new URLSearchParams({
+        f: 'image',
+        format: 'png32',
+        transparent: 'true',
+        size: `${biodiversityConfig.size},${biodiversityConfig.size}`,
+        bbox: `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`,
+        bboxSR: 4283,
+        imageSR: 4283,
+        layers: `show:${biodiversityConfig.layerId}`,
+        dpi: 96
+      })}`);
+      const biodiversityLayer = await loadImage(biodiversityUrl);
+      drawImage(ctx, biodiversityLayer, canvas.width, canvas.height, 1);
+    } catch (error) {
+      console.warn('Failed to load biodiversity layer:', error);
+    }
+
+    try {
+      // 5. High Voltage Power Lines
+      const powerLinesConfig = {
+        url: 'https://services.ga.gov.au/gis/rest/services/Foundation_Electricity_Infrastructure/MapServer',
+        layerId: 2,
+        size: 2048,
+        padding: 0.2
+      };
+      const powerLinesUrl = await proxyRequest(`${powerLinesConfig.url}/export?${new URLSearchParams({
+        f: 'image',
+        format: 'png32',
+        transparent: 'true',
+        size: `${powerLinesConfig.size},${powerLinesConfig.size}`,
+        bbox: `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`,
+        bboxSR: 4283,
+        imageSR: 4283,
+        layers: `show:${powerLinesConfig.layerId}`,
+        dpi: 96
+      })}`);
+      const powerLinesLayer = await loadImage(powerLinesUrl);
+      drawImage(ctx, powerLinesLayer, canvas.width, canvas.height, 1);
+    } catch (error) {
+      console.warn('Failed to load power lines layer:', error);
+    }
+
+    try {
+      // 6. 1AEP Flood Extents from Giraffe layer
+      console.log('Starting flood extents capture...');
+      const floodConfig = {
+        baseUrl: 'https://portal.data.nsw.gov.au/arcgis/rest/services/Hosted/nsw_1aep_flood_extents/FeatureServer/0',
+        layerId: 5180,
+        token: 'QDq34qxdrCUpry4fzFUwxHFAFjcwRKAfxJPGIaKeplc-FrvkFrWehGd7gQLVu7PI1lWmVyOBQaAKLCtRsYvUejd1KZJV97Bx0oIUfnurFX2t7LRKUl17wEObD34m60MbEbTnn0dz7HozbY4ZS7nFfkZ-ZZSOqDM0CxRmbNAMVqAJ6jIgZdGju2uPucVbrJj7'
+      };
+
+      // Get the flood layer data from Giraffe
+      console.log('Fetching project layers from Giraffe...');
+      const projectLayers = await giraffeState.get('projectLayers');
+      const floodLayer = projectLayers?.find(layer => layer.layer === floodConfig.layerId);
+      console.log('Found flood layer:', floodLayer);
+      
+      if (floodLayer) {
+        console.log('Calculating Mercator parameters...');
+        const { bbox } = calculateMercatorParams(centerX, centerY, size);
+        console.log('Bbox:', bbox);
+        
+        // Extract the actual service URL from the vector tiles URL
+        const vectorTileUrl = floodLayer.vector_source?.tiles?.[0];
+        const actualServiceUrl = vectorTileUrl?.split('/query?')?.[0];
+        
+        const params = new URLSearchParams({
+          where: '1=1',
+          geometry: bbox,
+          geometryType: 'esriGeometryEnvelope',
+          inSR: 3857,
+          spatialRel: 'esriSpatialRelIntersects',
+          outFields: '*',
+          returnGeometry: true,
+          f: 'geojson',
+          token: floodLayer.vector_source?.tiles?.[0]?.split('token=')?.[1] || floodConfig.token
+        });
+
+        // Use the actual service URL from the vector tiles, or fall back to the config URL
+        const url = `${actualServiceUrl || floodConfig.baseUrl}/query?${params.toString()}`;
+        console.log('Flood request URL:', url);
+        
+        const floodResponse = await proxyRequest(url);
+        console.log('Flood response:', floodResponse);
+
+        if (floodResponse.features?.length > 0) {
+          console.log(`Drawing ${floodResponse.features.length} flood features...`);
+          floodResponse.features.forEach((feature, index) => {
+            console.log(`Drawing flood feature ${index + 1}...`);
+            
+            // Handle MultiPolygon geometry type
+            if (feature.geometry.type === 'MultiPolygon') {
+              feature.geometry.coordinates.forEach(polygonCoords => {
+                // Each polygonCoords is an array where the first element is the outer ring
+                drawBoundary(ctx, polygonCoords[0], centerX, centerY, size, config.size || config.width, {
+                  fill: true,
+                  strokeStyle: 'rgba(0, 0, 255, 1)',
+                  fillStyle: 'rgba(0, 0, 255, 1)',
+                  lineWidth: 2
+                });
+              });
+            } else {
+              // Handle regular Polygon geometry type
+              drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.size || config.width, {
+                fill: true,
+                strokeStyle: 'rgba(0, 0, 255, 1)',
+                fillStyle: 'rgba(0, 0, 255, 1)',
+                lineWidth: 2
+              });
+            }
+          });
+          console.log('Finished drawing flood features');
+        } else {
+          console.log('No flood features found in response');
+        }
+      } else {
+        console.log('Flood layer not found in project layers');
+      }
+    } catch (error) {
+      console.error('Failed to load flood extents:', error);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack
+      });
+    }
 
     // Always draw boundaries even if some layers fail
     drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.size || config.width, {
@@ -160,41 +305,76 @@ export async function captureContourMap(feature, developableArea = null) {
   try {
     const config = LAYER_CONFIGS[SCREENSHOT_TYPES.CONTOUR];
     const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
-    const { centerMercX, centerMercY, sizeInMeters } = calculateMercatorParams(centerX, centerY, size);
     
-    console.log('Contour map params:', { centerMercX, centerMercY, sizeInMeters });
+    console.log('Raw coordinates:', { centerX, centerY, size });
     
     // Create base canvas
     const canvas = createCanvas(config.width || config.size, config.height || config.size);
     const ctx = canvas.getContext('2d', { alpha: true });
 
     try {
-      // 1. Aerial imagery (base)
+      // 1. Aerial imagery (base) - Use Mercator coordinates like other working slides
       console.log('Loading aerial layer...');
-      const baseMap = await getWMSImage(LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL], centerMercX, centerMercY, sizeInMeters);
+      const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];
+      const { bbox } = calculateMercatorParams(centerX, centerY, size);
+      
+      const params = new URLSearchParams({
+        SERVICE: 'WMS',
+        VERSION: '1.3.0',
+        REQUEST: 'GetMap',
+        BBOX: bbox,
+        CRS: 'EPSG:3857',
+        WIDTH: aerialConfig.width || aerialConfig.size,
+        HEIGHT: aerialConfig.height || aerialConfig.size,
+        LAYERS: aerialConfig.layers,
+        STYLES: '',
+        FORMAT: 'image/png',
+        DPI: 300,
+        MAP_RESOLUTION: 300,
+        FORMAT_OPTIONS: 'dpi:300'
+      });
+
+      const url = `${aerialConfig.url}?${params.toString()}`;
+      console.log('Aerial request URL:', url);
+      const baseMap = await loadImage(url);
       console.log('Aerial layer loaded');
-      drawImage(ctx, baseMap, canvas.width, canvas.height, 1.0);
+      drawImage(ctx, baseMap, canvas.width, canvas.height, 0.7);
     } catch (error) {
       console.warn('Failed to load aerial layer:', error);
     }
 
     try {
-      // 2. Contour layer with reduced opacity
+      // 2. Contour layer with reduced opacity - Use GDA94 coordinates
       console.log('Loading contour layer...');
-      const contourLayer = await getArcGISImage(LAYER_CONFIGS[SCREENSHOT_TYPES.CONTOUR], centerMercX, centerMercY, sizeInMeters);
+      const params = new URLSearchParams({
+        f: 'image',
+        format: 'png32',
+        transparent: 'false',
+        size: `${config.size},${config.size}`,
+        bboxSR: 4283,
+        imageSR: 4283,
+        bbox: `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`,
+        layers: `show:${config.layerId}`,
+        dpi: config.dpi || 300
+      });
+
+      const url = `${config.url}/export?${params.toString()}`;
+      console.log('Contour request URL:', url);
+      const proxyUrl = await proxyRequest(url);
+      const contourLayer = await loadImage(proxyUrl);
+      
       console.log('Contour layer loaded');
-      drawImage(ctx, contourLayer, canvas.width, canvas.height, 0.6);
+      drawImage(ctx, contourLayer, canvas.width, canvas.height, 0.7);
     } catch (error) {
       console.warn('Failed to load contour layer:', error);
     }
 
-    // 3. Draw boundaries using original coordinates
+    // Draw boundaries - These should use the raw coordinates since we're in GDA94
     drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.size || config.width, {
       strokeStyle: '#FF0000',
       lineWidth: 3
     });
 
-    // 4. Draw developable area if available
     if (developableArea?.features?.[0]) {
       drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.size || config.width, {
         strokeStyle: '#02d1b8',
@@ -206,6 +386,259 @@ export async function captureContourMap(feature, developableArea = null) {
     return canvas.toDataURL('image/png', 1.0);
   } catch (error) {
     console.error('Failed to capture contour map:', error);
+    return null;
+  }
+}
+
+export async function captureRegularityMap(feature, developableArea = null) {
+  if (!feature) return null;
+  
+  try {
+    const config = {
+      width: 2048,
+      height: 2048,
+      padding: 0.1
+    };
+    
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    
+    // Create base canvas
+    const canvas = createCanvas(config.width, config.height);
+    const ctx = canvas.getContext('2d', { alpha: true });
+
+    try {
+      // 1. Aerial imagery (base) - Use Mercator coordinates like contour map
+      console.log('Loading aerial layer...');
+      const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];
+      const { bbox } = calculateMercatorParams(centerX, centerY, size);
+      
+      const params = new URLSearchParams({
+        SERVICE: 'WMS',
+        VERSION: '1.3.0',
+        REQUEST: 'GetMap',
+        BBOX: bbox,
+        CRS: 'EPSG:3857',
+        WIDTH: aerialConfig.width || aerialConfig.size,
+        HEIGHT: aerialConfig.height || aerialConfig.size,
+        LAYERS: aerialConfig.layers,
+        STYLES: '',
+        FORMAT: 'image/png',
+        DPI: 300,
+        MAP_RESOLUTION: 300,
+        FORMAT_OPTIONS: 'dpi:300'
+      });
+
+      const url = `${aerialConfig.url}?${params.toString()}`;
+      console.log('Aerial request URL:', url);
+      const baseMap = await loadImage(url);
+      console.log('Aerial layer loaded');
+      drawImage(ctx, baseMap, canvas.width, canvas.height, 0.7);
+    } catch (error) {
+      console.warn('Failed to load aerial layer:', error);
+    }
+
+    // Draw property boundary
+    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+      strokeStyle: '#FF0000',
+      lineWidth: 6
+    });
+
+    // Draw developable area if it exists
+    if (developableArea?.features?.[0]) {
+      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
+        strokeStyle: '#02d1b8',
+        lineWidth: 12,
+        dashArray: [20, 10]
+      });
+    }
+
+    return canvas.toDataURL('image/png', 1.0);
+  } catch (error) {
+    console.error('Failed to capture regularity map:', error);
+    return null;
+  }
+}
+
+export async function captureHeritageMap(feature, developableArea = null) {
+  if (!feature) return null;
+  
+  try {
+    const config = {
+      width: 2048,
+      height: 2048,
+      padding: 0.1
+    };
+    
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    
+    // Create base canvas
+    const canvas = createCanvas(config.width, config.height);
+    const ctx = canvas.getContext('2d', { alpha: true });
+
+    try {
+      // 1. Aerial imagery (base)
+      const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];
+      const { bbox } = calculateMercatorParams(centerX, centerY, size);
+      
+      const params = new URLSearchParams({
+        SERVICE: 'WMS',
+        VERSION: '1.3.0',
+        REQUEST: 'GetMap',
+        BBOX: bbox,
+        CRS: 'EPSG:3857',
+        WIDTH: aerialConfig.width || aerialConfig.size,
+        HEIGHT: aerialConfig.height || aerialConfig.size,
+        LAYERS: aerialConfig.layers,
+        STYLES: '',
+        FORMAT: 'image/png',
+        DPI: 300,
+        MAP_RESOLUTION: 300,
+        FORMAT_OPTIONS: 'dpi:300'
+      });
+
+      const url = `${aerialConfig.url}?${params.toString()}`;
+      const baseMap = await loadImage(url);
+      drawImage(ctx, baseMap, canvas.width, canvas.height, 0.7);
+    } catch (error) {
+      console.warn('Failed to load aerial layer:', error);
+    }
+
+    try {
+      // 2. Heritage layer
+      const heritageConfig = {
+        url: 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/EPI_Primary_Planning_Layers/MapServer',
+        layerId: 0,
+        size: 2048,
+        padding: 0.2
+      };
+      
+      const heritageUrl = await proxyRequest(`${heritageConfig.url}/export?${new URLSearchParams({
+        f: 'image',
+        format: 'png32',
+        transparent: 'true',
+        size: `${heritageConfig.size},${heritageConfig.size}`,
+        bbox: `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`,
+        bboxSR: 4283,
+        imageSR: 4283,
+        layers: `show:${heritageConfig.layerId}`,
+        dpi: 96
+      })}`);
+      
+      const heritageLayer = await loadImage(heritageUrl);
+      drawImage(ctx, heritageLayer, canvas.width, canvas.height, 0.8);
+    } catch (error) {
+      console.warn('Failed to load heritage layer:', error);
+    }
+
+    // Draw boundaries
+    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+      strokeStyle: '#FF0000',
+      lineWidth: 6
+    });
+
+    if (developableArea?.features?.[0]) {
+      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
+        strokeStyle: '#02d1b8',
+        lineWidth: 12,
+        dashArray: [20, 10]
+      });
+    }
+
+    return canvas.toDataURL('image/png', 1.0);
+  } catch (error) {
+    console.error('Failed to capture heritage map:', error);
+    return null;
+  }
+}
+
+export async function captureAcidSulfateMap(feature, developableArea = null) {
+  if (!feature) return null;
+  
+  try {
+    const config = {
+      width: 2048,
+      height: 2048,
+      padding: 0.1
+    };
+    
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    
+    // Create base canvas
+    const canvas = createCanvas(config.width, config.height);
+    const ctx = canvas.getContext('2d', { alpha: true });
+
+    try {
+      // 1. Aerial imagery (base)
+      const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];
+      const { bbox } = calculateMercatorParams(centerX, centerY, size);
+      
+      const params = new URLSearchParams({
+        SERVICE: 'WMS',
+        VERSION: '1.3.0',
+        REQUEST: 'GetMap',
+        BBOX: bbox,
+        CRS: 'EPSG:3857',
+        WIDTH: aerialConfig.width || aerialConfig.size,
+        HEIGHT: aerialConfig.height || aerialConfig.size,
+        LAYERS: aerialConfig.layers,
+        STYLES: '',
+        FORMAT: 'image/png',
+        DPI: 300,
+        MAP_RESOLUTION: 300,
+        FORMAT_OPTIONS: 'dpi:300'
+      });
+
+      const url = `${aerialConfig.url}?${params.toString()}`;
+      const baseMap = await loadImage(url);
+      drawImage(ctx, baseMap, canvas.width, canvas.height, 0.7);
+    } catch (error) {
+      console.warn('Failed to load aerial layer:', error);
+    }
+
+    try {
+      // 2. Acid Sulfate Soils layer
+      const acidSulfateConfig = {
+        url: 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/Protection/MapServer',
+        layerId: 1,
+        size: 2048,
+        padding: 0.2
+      };
+      
+      const acidSulfateUrl = await proxyRequest(`${acidSulfateConfig.url}/export?${new URLSearchParams({
+        f: 'image',
+        format: 'png32',
+        transparent: 'true',
+        size: `${acidSulfateConfig.size},${acidSulfateConfig.size}`,
+        bbox: `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`,
+        bboxSR: 4283,
+        imageSR: 4283,
+        layers: `show:${acidSulfateConfig.layerId}`,
+        dpi: 96
+      })}`);
+      
+      const acidSulfateLayer = await loadImage(acidSulfateUrl);
+      drawImage(ctx, acidSulfateLayer, canvas.width, canvas.height, 0.8);
+    } catch (error) {
+      console.warn('Failed to load acid sulfate soils layer:', error);
+    }
+
+    // Draw boundaries
+    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+      strokeStyle: '#FF0000',
+      lineWidth: 6
+    });
+
+    if (developableArea?.features?.[0]) {
+      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
+        strokeStyle: '#02d1b8',
+        lineWidth: 12,
+        dashArray: [20, 10]
+      });
+    }
+
+    return canvas.toDataURL('image/png', 1.0);
+  } catch (error) {
+    console.error('Failed to capture acid sulfate soils map:', error);
     return null;
   }
 } 

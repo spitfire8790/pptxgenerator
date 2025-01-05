@@ -1,5 +1,38 @@
 import { convertCmValues } from '../utils/units';
 import scoringCriteria from './scoringLogic';
+import { proxyRequest } from '../utils/services/proxyService';
+
+const getElevationData = async (geometry) => {
+  const url = 'https://spatial.industry.nsw.gov.au/arcgis/rest/services/PUBLIC/Contours/MapServer/0/query';
+  const params = new URLSearchParams({
+    f: 'json',
+    geometryType: 'esriGeometryPolygon',
+    geometry: JSON.stringify(geometry),
+    spatialRel: 'esriSpatialRelIntersects',
+    outFields: 'elevation',
+    returnGeometry: false
+  });
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+    const response = await proxyRequest(`${url}?${params}`);
+    clearTimeout(timeoutId);
+
+    if (response.features && response.features.length > 0) {
+      const elevations = response.features.map(f => f.attributes.elevation);
+      return {
+        min: Math.min(...elevations),
+        max: Math.max(...elevations)
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error('Error querying elevation data:', error);
+    return null;
+  }
+};
 
 const styles = {
   title: {
@@ -46,7 +79,7 @@ const styles = {
   mapContainer: {
     x: (index) => `${15 + (index * 35)}%`,
     y: '18%',
-    w: '32%',
+    w: '50%',
     h: '50%'
   },
   mapTitle: {
@@ -75,7 +108,7 @@ const styles = {
     align: 'left',
     valign: 'top',
     wrap: true,
-    h: '5%',
+    h: '12%',
   },
   sourceText: {
     fontSize: 8,
@@ -162,60 +195,129 @@ export async function addSecondaryAttributesSlide(pptx, properties) {
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
       x: '5%',
       y: '18%',
-      w: '43%',
-      h: '70%',
+      w: '40%',
+      h: '61%',
       fill: 'FFFFFF',
-      line: { color: '002664', width: 1 }
+      line: { color: '002664', width: 1.5 }
     }));
     
-    // Add left map title
-    slide.addText('Site Contour', convertCmValues({
+    // First add the blue vertical bars
+    slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
       x: '5%',
       y: '18%',
-      w: '43%',
-      h: '6%',
-      fill: '002664',
+      w: '6%',
+      h: '61%',
+      fill: '002664'
+    }));
+
+    // Then add the rotated text on top with correct positioning
+    slide.addText('Site Contour', convertCmValues({
+      x: '-22.5%',    // Negative x to account for rotation
+      y: '45%',     // Centered vertically
+      w: '61%',     // Original height becomes width when rotated
+      h: '6%',      // Original width becomes height when rotated
       color: 'FFFFFF',
       fontSize: 14,
       fontFace: 'Public Sans',
       align: 'center',
-      valign: 'middle'
+      valign: 'middle',
+      rotate: 270    // Use rotate instead of transform
     }));
 
     // Add left map
+    console.log('Contour screenshot data:', {
+      exists: !!properties.contourScreenshot,
+      type: properties.contourScreenshot ? typeof properties.contourScreenshot : 'undefined',
+      length: properties.contourScreenshot ? properties.contourScreenshot.length : 0
+    });
+
     if (properties.contourScreenshot) {
-      slide.addImage({
-        data: properties.contourScreenshot,
-        ...convertCmValues({
-          x: '5%',
-          y: '24%',
-          w: '43%',
-          h: '50%',
-          sizing: {
-            type: 'contain',
-            align: 'center',
-            valign: 'middle'
-          }
-        })
-      });
+      try {
+        slide.addImage({
+          data: properties.contourScreenshot,
+          ...convertCmValues({
+            x: '11%',
+            y: '18%',
+            w: '34%',
+            h: '61%',
+            sizing: {
+              type: 'contain',
+              align: 'center',
+              valign: 'middle'
+            }
+          })
+        });
+        console.log('Successfully added contour map image');
+      } catch (error) {
+        console.error('Failed to add contour map image:', error);
+      }
+    } else {
+      console.warn('No contour screenshot available');
+      // Add placeholder or error message
+      slide.addText('Contour map unavailable', convertCmValues({
+        x: '5%',
+        y: '24%',
+        w: '40%',
+        h: '50%',
+        fontSize: 12,
+        color: 'FF0000',
+        align: 'center',
+        valign: 'middle'
+      }));
     }
 
-    // Add left description box
+    // Add left description box with gap
+    let elevationText = 'Elevation data unavailable.';
+    let contourScore = 0;
+    let elevationChange = 0;
+
+    if (properties.developableArea && properties.developableArea[0]) {
+      const geometry = {
+        rings: [properties.developableArea[0].geometry.coordinates[0]]
+      };
+      const elevationData = await getElevationData(geometry);
+      if (elevationData === null) {
+        // No contours found - site is flat
+        contourScore = 3;
+        elevationText = 'The developable area is flat with no change in elevation.';
+      } else {
+        elevationChange = elevationData.max - elevationData.min;
+        contourScore = scoringCriteria.contours.calculateScore(elevationChange);
+        elevationText = `The developable area has a minimum elevation of ${elevationData.min} metres, maximum elevation of ${elevationData.max} metres, and change in elevation of ${elevationChange} metres.`;
+      }
+    } else if (properties.site__geometry) {
+      // Fallback to site geometry if no developable area
+      const geometry = {
+        rings: [properties.site__geometry]
+      };
+      const elevationData = await getElevationData(geometry);
+      if (elevationData === null) {
+        // No contours found - site is flat
+        contourScore = 3;
+        elevationText = 'The site is flat with no change in elevation.';
+      } else {
+        elevationChange = elevationData.max - elevationData.min;
+        contourScore = scoringCriteria.contours.calculateScore(elevationChange);
+        elevationText = `The site has a minimum elevation of ${elevationData.min} metres, maximum elevation of ${elevationData.max} metres, and change in elevation of ${elevationChange} metres.`;
+      }
+    }
+
+    // Update the box color based on score
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
       x: '5%',
-      y: '75%',
-      w: '43%',
-      h: '9%',
-      fill: 'FFFBF2',
+      y: '80%',
+      w: '40%',
+      h: '12%',
+      fill: scoringCriteria.contours.getScoreColor(contourScore).replace('#', ''),
       line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
     }));
 
-    // Add left description text
-    slide.addText('The site is relatively flat.', convertCmValues({
+    // Add description text and score separately
+    slide.addText(elevationText, convertCmValues({
       x: '5%',
-      y: '75%',
-      w: '43%',
-      h: '5%',
+      y: '80%',
+      w: '40%',
+      h: '8%',  // Reduced height for main text
       fontSize: 7,
       color: '363636',
       fontFace: 'Public Sans',
@@ -224,11 +326,33 @@ export async function addSecondaryAttributesSlide(pptx, properties) {
       wrap: true
     }));
 
-    // Add left source text
-    slide.addText('Source: NSW 2M Elevation Contours, NSW Spatial Portal, 2024', convertCmValues({
+    // Add score text separately
+    slide.addText(`Score: ${contourScore}/3`, convertCmValues({
       x: '5%',
-      y: '81%',
-      w: '43%',
+      y: '86%',  // Position just above the line
+      w: '40%',
+      h: '4%',
+      fontSize: 7,
+      color: '363636',
+      fontFace: 'Public Sans',
+      bold: true,
+      align: 'right'
+    }));
+
+    // For Contour section (left) - Add before the source text
+    slide.addShape(pptx.shapes.LINE, convertCmValues({
+      x: '6%',
+      y: '88.5%',
+      w: '34%',
+      h: 0,
+      line: { color: '8C8C8C', width: 0.4 }
+    }));
+
+    // Add source text for contour
+    slide.addText('Source: NSW 2M Elevation Contours, NSW Department of Customer Service, 2024', convertCmValues({
+      x: '5%',
+      y: '88%',
+      w: '40%',
       h: '3%',
       fontSize: 6,
       color: '363636',
@@ -238,64 +362,130 @@ export async function addSecondaryAttributesSlide(pptx, properties) {
       wrap: true
     }));
 
-    // Add right map container (Site Regularity)
+    // Right map container (Site Regularity)
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
-      x: '52%',
+      x: '50%',
       y: '18%',
-      w: '43%',
-      h: '70%',
+      w: '40%',
+      h: '61%',
       fill: 'FFFFFF',
-      line: { color: '002664', width: 1 }
+      line: { color: '002664', width: 1.5 }
     }));
-    
-    // Add right map title
-    slide.addText('Site Regularity', convertCmValues({
-      x: '52%',
+
+    // First add the blue vertical bars
+    slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
+      x: '50%',
       y: '18%',
-      w: '43%',
-      h: '6%',
-      fill: '002664',
+      w: '6%',
+      h: '61%',
+      fill: '002664'
+    }));
+
+    // Then add the rotated text on top with correct positioning
+    slide.addText('Site Regularity', convertCmValues({
+      x: '22.5%',     // Adjusted x position for right side
+      y: '45%',     // Centered vertically
+      w: '61%',     // Original height becomes width when rotated
+      h: '6%',      // Original width becomes height when rotated
       color: 'FFFFFF',
       fontSize: 14,
       fontFace: 'Public Sans',
       align: 'center',
-      valign: 'middle'
+      valign: 'middle',
+      rotate: 270    // Use rotate instead of transform
     }));
 
     // Add right map
+    console.log('Regularity screenshot data:', {
+      exists: !!properties.regularityScreenshot,
+      type: properties.regularityScreenshot ? typeof properties.regularityScreenshot : 'undefined',
+      length: properties.regularityScreenshot ? properties.regularityScreenshot.length : 0
+    });
+
     if (properties.regularityScreenshot) {
-      slide.addImage({
-        data: properties.regularityScreenshot,
-        ...convertCmValues({
-          x: '52%',
-          y: '24%',
-          w: '43%',
-          h: '50%',
-          sizing: {
-            type: 'contain',
-            align: 'center',
-            valign: 'middle'
-          }
-        })
-      });
+      try {
+        slide.addImage({
+          data: properties.regularityScreenshot,
+          ...convertCmValues({
+            x: '56%',
+            y: '18%',
+            w: '34%',
+            h: '61%',
+            sizing: {
+              type: 'contain',
+              align: 'center',
+              valign: 'middle'
+            }
+          })
+        });
+      } catch (error) {
+        console.error('Failed to add regularity map image:', error);
+        addErrorMessage();
+      }
+    } else {
+      console.warn('No regularity screenshot available');
+      addErrorMessage();
     }
 
-    // Add right description box
+    function addErrorMessage() {
+      slide.addText('Regularity map unavailable', convertCmValues({
+        x: '56%',
+        y: '18%',
+        w: '34%',
+        h: '61%',
+        fontSize: 12,
+        color: 'FF0000',
+        align: 'center',
+        valign: 'middle'
+      }));
+    }
+
+    // Calculate regularity score
+    let regularityScore = 0;
+    let regularityText = 'Site regularity could not be assessed.';
+
+    if (properties.developableArea && properties.developableArea[0]) {
+      const geometry = {
+        type: 'Feature',
+        geometry: properties.developableArea[0].geometry
+      };
+      console.log('Developable area geometry:', JSON.stringify(geometry));
+      console.log('Developable area geometry details:', {
+        type: geometry.type,
+        coordinates: geometry.geometry.coordinates,
+        holes: geometry.geometry.coordinates.length > 1 ? 'Yes' : 'No',
+        vertexCount: geometry.geometry.coordinates[0].length
+      });
+      regularityScore = scoringCriteria.siteRegularity.calculateScore(geometry);
+      regularityText = `The developable area is ${regularityScore === 3 ? 'highly regular' : regularityScore === 2 ? 'moderately regular' : 'irregular'} in shape.`;
+    } else if (properties.site__geometry) {
+      const geometry = {
+        type: 'Feature',
+        geometry: {
+          type: 'Polygon',
+          coordinates: [properties.site__geometry]
+        }
+      };
+      regularityScore = scoringCriteria.siteRegularity.calculateScore(geometry);
+      regularityText = `The site is ${regularityScore === 3 ? 'highly regular' : regularityScore === 2 ? 'moderately regular' : 'irregular'} in shape.`;
+    }
+
+    // Add right description box with gap
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
-      x: '52%',
-      y: '75%',
-      w: '43%',
-      h: '9%',
-      fill: 'FFFBF2',
+      x: '50%',
+      y: '80%',
+      w: '40%',
+      h: '12%',  // Match contours height
+      fill: scoringCriteria.siteRegularity.getScoreColor(regularityScore).replace('#', ''),
       line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
     }));
 
-    // Add right description text
-    slide.addText('The site is regular in shape.', convertCmValues({
-      x: '52%',
-      y: '75%',
-      w: '43%',
-      h: '5%',
+    // Add description text
+    slide.addText(regularityText, convertCmValues({
+      x: '50%',
+      y: '80%',
+      w: '40%',
+      h: '8%',  // Match contours text height
       fontSize: 7,
       color: '363636',
       fontFace: 'Public Sans',
@@ -304,11 +494,33 @@ export async function addSecondaryAttributesSlide(pptx, properties) {
       wrap: true
     }));
 
-    // Add right source text
-    slide.addText('Source: Land ID Metromap by Aerometrex', convertCmValues({
-      x: '52%',
-      y: '81%',
-      w: '43%',
+    // Add score text
+    slide.addText(`Score: ${regularityScore}/3`, convertCmValues({
+      x: '50%',
+      y: '86%',  // Match contours score position
+      w: '40%',
+      h: '4%',
+      fontSize: 7,
+      color: '363636',
+      fontFace: 'Public Sans',
+      bold: true,
+      align: 'right'
+    }));
+
+    // Add line
+    slide.addShape(pptx.shapes.LINE, convertCmValues({
+      x: '51%',
+      y: '88.5%',  // Match contours line position
+      w: '34%',
+      h: 0,
+      line: { color: '8C8C8C', width: 0.4 }
+    }));
+
+    // Add source text
+    slide.addText('Source: Land IQ - Metromap by Aerometrex', convertCmValues({
+      x: '50%',
+      y: '88%',  // Match contours source position
+      w: '40%',
       h: '3%',
       fontSize: 6,
       color: '363636',

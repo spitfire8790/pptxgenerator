@@ -4,12 +4,12 @@ const styles = {
   imageContainer: {
     x: 0,
     y: 0,
-    w: '50%',
+    w: '56%',
     h: '100%',
     fill: { type: 'solid', color: '002664' }
   },
   dividerLine: {
-    x: '52%',
+    x: '57%',
     y: '2%',
     w: 0.01,
     h: '94%',
@@ -17,7 +17,7 @@ const styles = {
     fill: { color: '002664' }
   },
   sensitiveText: {
-    x: '53%',
+    x: '58%',
     y: '2%',
     w: '25%',
     h: '3%',
@@ -28,7 +28,7 @@ const styles = {
     fontFace: 'Public Sans'
   },
   header: {
-    x: '53%',
+    x: '58%',
     y: '10%',
     w: '43%',
     h: '5%',
@@ -38,7 +38,7 @@ const styles = {
     fontFace: 'Public Sans'
   },
   title: {
-    x: '53%',
+    x: '58%',
     y: '24%',
     w: '43%',
     h: '15%',
@@ -49,7 +49,7 @@ const styles = {
     fontFace: 'Public Sans Light'
   },
   subtitle: {
-    x: '53%',
+    x: '58%',
     y: '60%',
     w: '43%',
     h: '5%',
@@ -59,7 +59,7 @@ const styles = {
     fontFace: 'Public Sans Light'
   },
   address: {
-    x: '53%',
+    x: '58%',
     y: '68%',
     w: '43%',
     h: '5%',
@@ -69,7 +69,7 @@ const styles = {
     fontFace: 'Public Sans Light'
   },
   date: {
-    x: '53%',
+    x: '58%',
     y: '92%',
     w: '43%',
     h: '5%',
@@ -94,7 +94,7 @@ export function addCoverSlide(pptx, properties) {
       data: properties.screenshot,
       x: 0,
       y: 0,
-      w: '50%',
+      w: '56%',
       h: '100%',
       sizing: {
         type: 'cover',

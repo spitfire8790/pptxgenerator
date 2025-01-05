@@ -45,7 +45,7 @@ const styles = {
     sizing: { type: 'contain' }
   },
   developableAreaBox: {
-    x: '8%',
+    x: '9%',
     y: '20%',
     w: '35%',
     h: '12%',
@@ -59,7 +59,7 @@ const styles = {
     h: '0.5'
   },
   developableAreaText: {
-    x: '8%',
+    x: '9%',
     y: '20%',
     w: '35%',
     h: '12%',
@@ -75,7 +75,7 @@ const styles = {
     h: '0.4'
   },
   attributeBoxes: {
-    x: '8%',
+    x: '9%',
     y: index => `${34 + (index * 9.5)}%`,
     w: '38%',
     h: '8%',
@@ -95,9 +95,9 @@ const styles = {
     line: { color: '002664', width: 1.5 }
   },
   scoreContainer: {
-    x: '8%',
+    x: '9%',
     y: '22%',
-    w: '35%',
+    w: '34%',
     h: '8%',
     fill: '4CAF50'
   },
@@ -150,16 +150,16 @@ const styles = {
     x: '85%',
     y: '20%',
     w: '10%',
-    h: '45%',
+    h: '30%',
     fill: 'FFFFFF',
-    line: { color: '002664', width: 1 }
+    line: { color: '002664', width: 1.5 }
   },
   legendHeader: {
     x: '85%',
     y: '21%',
     w: '10%',
     h: '3%',
-    fontSize: 8,
+    fontSize: 10,
     color: '002664',
     bold: true,
     fontFace: 'Public Sans',
@@ -171,9 +171,9 @@ const styles = {
       fontSize: 7,
       color: '363636',
       fontFace: 'Public Sans',
-      lineSpacing: 12
+      lineSpacing: 10
     },
-    spacing: 6,
+    spacing: 4,
     containerPadding: 1.5
   }
 };
@@ -212,13 +212,13 @@ const addLegend = (slide, pptx) => {
     },
     { 
       symbol: 'line', 
-      text: 'High Voltage\nOverhead Power',
-      style: { line: { color: 'FFD700', width: 2 } }
+      text: 'HV Powerlines',
+      style: { line: { color: '#E41A1C', width: 2 } }
     },
     { 
       symbol: 'line', 
       text: 'Easements',
-      style: { line: { color: 'CD853F', width: 2 } }
+      style: { line: { color: 'FCC3EC', width: 2 } }
     },
     { 
       symbol: 'rectangle', 
@@ -227,26 +227,29 @@ const addLegend = (slide, pptx) => {
     },
     { 
       symbol: 'rectangle', 
-      text: '1AEP Flood Extents',
+      text: '1AEP Flood',
       style: { fill: '0000FF', line: { color: '0000FF', width: 1 } }
     }
   ];
 
   legendItems.forEach((item, index) => {
     const yOffset = (index * styles.legendItem.spacing) + styles.legendItem.containerPadding;
+    const iconY = parseFloat(styles.legendContainer.y) + 5 + yOffset;
     
     if (item.symbol === 'rectangle') {
       slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
         x: `${parseFloat(styles.legendContainer.x) + styles.legendItem.containerPadding}%`,
-        y: `${parseFloat(styles.legendContainer.y) + 5 + yOffset}%`,
+        y: `${iconY}%`,
         w: styles.legendItem.iconSize,
         h: styles.legendItem.iconSize,
         ...item.style
       }));
     } else if (item.symbol === 'line') {
+      const lineY = iconY + (styles.legendItem.iconSize / 2);
+      
       slide.addShape(pptx.shapes.LINE, convertCmValues({
         x: `${parseFloat(styles.legendContainer.x) + styles.legendItem.containerPadding}%`,
-        y: `${parseFloat(styles.legendContainer.y) + 5 + yOffset + (styles.legendItem.iconSize/2)}%`,
+        y: `${lineY}%`,
         w: styles.legendItem.iconSize,
         h: 0,
         ...item.style
@@ -255,7 +258,7 @@ const addLegend = (slide, pptx) => {
 
     slide.addText(item.text, convertCmValues({
       x: `${parseFloat(styles.legendContainer.x) + styles.legendItem.containerPadding + 1}%`,
-      y: `${parseFloat(styles.legendContainer.y) + 5 + yOffset}%`,
+      y: `${iconY}%`,
       w: '8%',
       h: styles.legendItem.iconSize,
       ...styles.legendItem.textStyle,
@@ -317,7 +320,7 @@ export async function addPrimarySiteAttributesSlide(pptx, properties) {
     },
     { 
       text: '\n\nNote: The developable area defined is indicative only for the purposes of desktop assessment. The exact developable area is subject to further due diligence.', 
-      options: { fontSize: 7, italic: true, color: '666666', lineSpacing: 12 } 
+      options: { fontSize: 7, italic: true, color: '666666', lineSpacing: 10 } 
     }
   ], convertCmValues({
     ...styles.developableAreaText,
@@ -372,7 +375,7 @@ export async function addPrimarySiteAttributesSlide(pptx, properties) {
 
     // Add box
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
-      x: '8%',
+      x: '9%',
       y: `${34 + (index * 9.5)}%`,
       w: '35%',
       h: '8%',
@@ -392,9 +395,9 @@ export async function addPrimarySiteAttributesSlide(pptx, properties) {
         } 
       }
     ], convertCmValues({
-      x: '8%',
+      x: '9%',
       y: `${34 + (index * 9.5)}%`,
-      w: '35%',
+      w: '34%',
       h: '8%',
       fontSize: 8,
       fontFace: 'Public Sans',

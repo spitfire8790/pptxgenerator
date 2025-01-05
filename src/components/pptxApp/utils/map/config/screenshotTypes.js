@@ -4,5 +4,10 @@ export const SCREENSHOT_TYPES = {
   COVER: 'cover',
   ZONING: 'zoning',
   FSR: 'fsr',
-  HOB: 'hob'
+  HOB: 'hob',
+  CONTOUR: 'contour',
+  WIDE: 'wide',
+  REGULARITY: 'regularity',
+  HERITAGE: 'heritage',
+  ACID_SULFATE_SOILS: 'acidSulfateSoils'
 }; 

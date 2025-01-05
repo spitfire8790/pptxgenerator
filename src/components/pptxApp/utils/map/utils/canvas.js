@@ -28,9 +28,14 @@ export function drawImage(ctx, image, width, height, opacity = 1.0) {
 // canvasSize: Size of the canvas (assumed square)
 // style: Optional object containing visual properties (strokeStyle, lineWidth, dashArray)
 export function drawBoundary(ctx, coordinates, centerX, centerY, size, canvasSize, style = {}) {
-  // Set up line styling with defaults (red color, dynamic width based on canvas size)
+  // Set up line styling with defaults
   ctx.strokeStyle = style.strokeStyle || '#FF0000';
   ctx.lineWidth = style.lineWidth !== undefined ? style.lineWidth : Math.max(canvasSize / 256, 5);
+  
+  // Set fill style if specified
+  if (style.fillStyle) {
+    ctx.fillStyle = style.fillStyle;
+  }
   
   // Apply dashed line pattern if specified
   if (style.dashArray) {
@@ -59,8 +64,17 @@ export function drawBoundary(ctx, coordinates, centerX, centerY, size, canvasSiz
     }
   });
 
-  // Close and stroke the path, reset any dash pattern
+  // Close the path
   ctx.closePath();
+  
+  // Fill if fillStyle is specified
+  if (style.fill && style.fillStyle) {
+    ctx.fill();
+  }
+  
+  // Stroke the path
   ctx.stroke();
-  ctx.setLineDash([]); // Reset dash pattern
+  
+  // Reset dash pattern
+  ctx.setLineDash([]);
 } 

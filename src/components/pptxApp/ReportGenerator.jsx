@@ -3,7 +3,8 @@ import { generateReport } from '../../lib/powerpoint';
 import { addCoverSlide } from './slides/coverSlide';
 import { addPropertySnapshotSlide } from './slides/propertySnapshotSlide';
 import { addPlanningSlide } from './slides/planningSlide';
-import { captureMapScreenshot, capturePrimarySiteAttributesMap, captureContourMap } from './utils/map/services/screenshot';
+import { addPlanningSlide2 } from './slides/planningSlide2';
+import { captureMapScreenshot, capturePrimarySiteAttributesMap, captureContourMap, captureRegularityMap, captureHeritageMap, captureAcidSulfateMap } from './utils/map/services/screenshot';
 import { SCREENSHOT_TYPES } from './utils/map/config/screenshotTypes';
 import SlidePreview from './SlidePreview';
 import PlanningMapView from './PlanningMapView';
@@ -18,7 +19,8 @@ const slideOptions = [
   { id: 'snapshot', label: 'Property Snapshot', addSlide: addPropertySnapshotSlide },
   { id: 'primaryAttributes', label: 'Primary Site Attributes', addSlide: addPrimarySiteAttributesSlide },
   { id: 'secondaryAttributes', label: 'Secondary Attributes', addSlide: addSecondaryAttributesSlide },
-  { id: 'planning', label: 'Planning', addSlide: addPlanningSlide }
+  { id: 'planning', label: 'Planning', addSlide: addPlanningSlide },
+  { id: 'planningTwo', label: 'Heritage & Acid Sulfate Soils', addSlide: addPlanningSlide2 }
 ];
 
 const ReportGenerator = ({ selectedFeature }) => {
@@ -31,7 +33,8 @@ const ReportGenerator = ({ selectedFeature }) => {
     snapshot: true,
     primaryAttributes: true,
     secondaryAttributes: true,
-    planning: true
+    planning: true,
+    planningTwo: true
   });
   const [developableArea, setDevelopableArea] = useState(null);
   const planningMapRef = useRef();
@@ -64,6 +67,12 @@ const ReportGenerator = ({ selectedFeature }) => {
     }
   }, [selectedFeature]);
 
+  useEffect(() => {
+    if (selectedFeature) {
+      handleScreenshotCapture();
+    }
+  }, [selectedFeature]);
+
   const generatePropertyReport = async () => {
     if (!selectedFeature) return;
     
@@ -83,6 +92,9 @@ const ReportGenerator = ({ selectedFeature }) => {
       const hobScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.HOB, true, developableArea);
       const compositeMapScreenshot = await capturePrimarySiteAttributesMap(selectedFeature, developableArea);
       const contourScreenshot = await captureContourMap(selectedFeature, developableArea);
+      const regularityScreenshot = await captureRegularityMap(selectedFeature, developableArea);
+      const heritageScreenshot = await captureHeritageMap(selectedFeature, developableArea);
+      const acidSulfateScreenshot = await captureAcidSulfateMap(selectedFeature, developableArea);
       
       console.log('Aerial Screenshot:', aerialScreenshot ? 'Present' : 'Missing');
       console.log('Snapshot Screenshot:', snapshotScreenshot ? 'Present' : 'Missing');
@@ -116,6 +128,7 @@ const ReportGenerator = ({ selectedFeature }) => {
         site_suitability__landzone: selectedFeature.properties.copiedFrom.site_suitability__landzone,
         reportDate,
         selectedSlides,
+        site__geometry: selectedFeature.geometry.coordinates[0],
         screenshot: coverScreenshot,
         snapshotScreenshot: aerialScreenshot,
         zoningScreenshot: screenshots.zoningScreenshot || zoningScreenshot,
@@ -124,29 +137,34 @@ const ReportGenerator = ({ selectedFeature }) => {
         developableArea: developableArea?.features || null,
         compositeMapScreenshot,
         scores: {},
-        contourScreenshot: screenshots.contourScreenshot,
-        regularityScreenshot: screenshots.regularityScreenshot
+        contourScreenshot,
+        regularityScreenshot,
+        heritageScreenshot,
+        acidSulfateSoilsScreenshot: acidSulfateScreenshot,
+        acidSulfateScreenshot
       };
 
       // Generate the report with progress tracking
       await generateReport(propertyData, (progress) => {
-        // Map progress percentage to steps
-        if (progress <= 20) {
+        if (progress <= 15) {
           setCurrentStep('cover');
-        } else if (progress <= 40) {
+        } else if (progress <= 30) {
           setCompletedSteps(prev => [...new Set([...prev, 'cover'])]);
           setCurrentStep('snapshot');
-        } else if (progress <= 60) {
+        } else if (progress <= 45) {
           setCompletedSteps(prev => [...new Set([...prev, 'cover', 'snapshot'])]);
           setCurrentStep('primaryAttributes');
-        } else if (progress <= 80) {
+        } else if (progress <= 60) {
           setCompletedSteps(prev => [...new Set([...prev, 'cover', 'snapshot', 'primaryAttributes'])]);
           setCurrentStep('secondaryAttributes');
-        } else if (progress <= 90) {
+        } else if (progress <= 75) {
           setCompletedSteps(prev => [...new Set([...prev, 'cover', 'snapshot', 'primaryAttributes', 'secondaryAttributes'])]);
           setCurrentStep('planning');
-        } else {
+        } else if (progress <= 90) {
           setCompletedSteps(prev => [...new Set([...prev, 'cover', 'snapshot', 'primaryAttributes', 'secondaryAttributes', 'planning'])]);
+          setCurrentStep('planningTwo');
+        } else {
+          setCompletedSteps(prev => [...new Set([...prev, 'cover', 'snapshot', 'primaryAttributes', 'secondaryAttributes', 'planning', 'planningTwo'])]);
           setCurrentStep('finalizing');
         }
       });

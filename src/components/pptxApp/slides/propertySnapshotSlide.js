@@ -209,7 +209,7 @@ export function addPropertySnapshotSlide(pptx, properties) {
 
   slide.addTable(tableData, {
     ...convertCmValues(styles.table),
-    colW: [0.95, 1.3, 3.9],
+    colW: [0.95, 1.3, 4.1],
     border: { type: 'solid', color: '363636', pt: 0.5 },
     rowH: [
       0.27, // Header row
@@ -245,7 +245,7 @@ export function addPropertySnapshotSlide(pptx, properties) {
   if (properties.snapshotScreenshot) {
     // First add white background rectangle
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
-      x: '55%',
+      x: '56%',
       y: '20%',
       w: '39%',
       h: '70%',
@@ -257,7 +257,7 @@ export function addPropertySnapshotSlide(pptx, properties) {
     slide.addImage({
       data: properties.snapshotScreenshot,
       ...convertCmValues({
-        x: '55%',
+        x: '56%',
         y: '20%',
         w: '39%',
         h: '70%',

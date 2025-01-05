@@ -1,7 +1,7 @@
 import { PROXY_CONFIG } from '../config/proxyConfig';
 
 export async function proxyRequest(url, options = {}) {
-  const proxyUrl = PROXY_CONFIG.baseUrl;
+  const proxyUrl = 'http://localhost:3000/proxy';
   
   try {
     const response = await fetch(proxyUrl, {
