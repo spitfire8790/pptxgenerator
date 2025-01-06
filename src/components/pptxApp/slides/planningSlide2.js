@@ -248,22 +248,6 @@ export async function addPlanningSlide2(pptx, properties) {
      rotate: 270    // Use rotate instead of transform
    }));
 
-   // Add heritage legend
-   slide.addImage({
-     path: "/images/heritage-layer-legend.png",
-     ...convertCmValues({
-       x: '26%',      // Position in bottom right of heritage map section
-       y: '64%',      // Just above the description box
-       w: '18%',      // Width to ensure readability
-       h: '14%',      // Height to maintain aspect ratio
-       sizing: {
-         type: 'contain',
-         align: 'right',
-         valign: 'bottom'
-       }
-     })
-   });
-
    // Add left map
    console.log('Heritage screenshot data:', {
     exists: !!properties.heritageScreenshot,

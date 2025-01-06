@@ -200,7 +200,7 @@ export async function capturePrimarySiteAttributesMap(feature, developableArea =
       const floodConfig = {
         baseUrl: 'https://portal.data.nsw.gov.au/arcgis/rest/services/Hosted/nsw_1aep_flood_extents/FeatureServer/0',
         layerId: 5180,
-        token: 'QDq34qxdrCUpry4fzFUwxHFAFjcwRKAfxJPGIaKeplc-FrvkFrWehGd7gQLVu7PI1lWmVyOBQaAKLCtRsYvUejd1KZJV97Bx0oIUfnurFX2t7LRKUl17wEObD34m60MbEbTnn0dz7HozbY4ZS7nFfkZ-ZZSOqDM0CxRmbNAMVqAJ6jIgZdGju2uPucVbrJj7'
+        token: '69nxk_t_BcjVpDQJmKbDIrEfIkhJe1fQOIOfQ3Sm_SXveHwi9hJsBTme-8W9iFYbT1m_EAbEuqb8mRjDdpv_Y2zm3Dy2eEjR4ZG7qW_J3ycGZUqWRQ2e7Yg5NgnQKSPfed0rpooMSYCLGeSfP_1ONWxW2FVwQNV4lgY0wdo3J0DkyOb7SQXjtBEyMTnCqfFB'
       };
 
       // Get the flood layer data from Giraffe
