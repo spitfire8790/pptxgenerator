@@ -5,7 +5,6 @@ import { logAvailableLayers } from './utils/map/utils/layerDetails';
 const DevelopableAreaSelector = ({ onLayerSelect, selectedFeature }) => {
   const [drawingLayers, setDrawingLayers] = useState([]);
   const [selectedLayer, setSelectedLayer] = useState(null);
-  const [isInitialized, setIsInitialized] = useState(false);
 
   const fetchLayers = async () => {
     try {
@@ -15,6 +14,7 @@ const DevelopableAreaSelector = ({ onLayerSelect, selectedFeature }) => {
       
       if (!rawSections?.features) {
         console.log('No valid rawSections data available');
+        setDrawingLayers([]); // Reset to empty array when no data
         return;
       }
       
@@ -38,35 +38,30 @@ const DevelopableAreaSelector = ({ onLayerSelect, selectedFeature }) => {
       
     } catch (error) {
       console.error('Error in fetchLayers:', error);
+      setDrawingLayers([]); // Reset to empty array on error
     }
   };
 
-  // Initial setup and listener registration
+  // Set up listener for rawSections changes
   useEffect(() => {
-    if (!isInitialized) {
-      console.log('Initializing DevelopableAreaSelector');
-      
-      // Initial fetch
+    console.log('Setting up rawSections listener');
+    
+    // Initial fetch
+    fetchLayers();
+
+    // Set up listener for rawSections changes
+    const unsubscribe = giraffeState.addListener(['rawSections'], () => {
+      console.log('rawSections changed, fetching layers');
       fetchLayers();
+    });
 
-      // Set up listener for rawSections changes
-      const unsubscribe = giraffeState.addListener(['rawSections'], (key, value) => {
-        console.log('rawSections changed:', { key, value });
-        if (value?.features?.length > 0) {
-          fetchLayers();
-        }
-      });
-
-      setIsInitialized(true);
-
-      return () => {
-        console.log('Cleaning up DevelopableAreaSelector');
-        if (typeof unsubscribe === 'function') {
-          unsubscribe();
-        }
-      };
-    }
-  }, [isInitialized]);
+    return () => {
+      console.log('Cleaning up DevelopableAreaSelector');
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, []); // Empty dependency array - only run once on mount
 
   // Reset selected layer when feature changes
   useEffect(() => {
@@ -95,35 +90,30 @@ const DevelopableAreaSelector = ({ onLayerSelect, selectedFeature }) => {
     }
   };
 
-  if (drawingLayers.length === 0) {
-    return (
-      <div className="p-4 bg-white rounded-lg shadow mb-4">
-        <h3 className="text-lg font-semibold mb-2">Select Developable Area Layer</h3>
-        <p className="text-gray-500">No layers available. Create one using Giraffe's drawing tools.</p>
-      </div>
-    );
-  }
-
   return (
     <div className="p-4 bg-white rounded-lg shadow mb-4">
       <h3 className="text-lg font-semibold mb-2">Select Developable Area Layer</h3>
-      <div className="space-y-2">
-        {drawingLayers.map((layer) => (
-          <label 
-            key={layer.id}
-            className="flex items-center space-x-2"
-          >
-            <input
-              type="radio"
-              name="developableArea"
-              checked={selectedLayer === layer.id}
-              onChange={() => handleLayerSelect(layer.id)}
-              className="w-4 h-4 text-blue-600"
-            />
-            <span>{layer.layerId}</span>
-          </label>
-        ))}
-      </div>
+      {drawingLayers.length === 0 ? (
+        <p className="text-gray-500">No layers available. Create one using Giraffe's drawing tools.</p>
+      ) : (
+        <div className="space-y-2">
+          {drawingLayers.map((layer) => (
+            <label 
+              key={layer.id}
+              className="flex items-center space-x-2"
+            >
+              <input
+                type="radio"
+                name="developableArea"
+                checked={selectedLayer === layer.id}
+                onChange={() => handleLayerSelect(layer.id)}
+                className="w-4 h-4 text-blue-600"
+              />
+              <span>{layer.layerId}</span>
+            </label>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

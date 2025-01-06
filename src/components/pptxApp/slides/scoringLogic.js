@@ -237,7 +237,7 @@ const scoringCriteria = {
     },
     getScoreDescription: (score, soilsData) => {
       if (!soilsData || !soilsData.LAY_CLASS) {
-        return "Developable area is not impacted by acid sulfate soils";
+        return "Developable area is not impacted by acid sulfate soils.";
       }
       
       const classes = soilsData.LAY_CLASS.split(',').map(c => c.trim()).join(', ');

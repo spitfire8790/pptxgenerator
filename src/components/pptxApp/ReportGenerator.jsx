@@ -4,7 +4,8 @@ import { addCoverSlide } from './slides/coverSlide';
 import { addPropertySnapshotSlide } from './slides/propertySnapshotSlide';
 import { addPlanningSlide } from './slides/planningSlide';
 import { addPlanningSlide2 } from './slides/planningSlide2';
-import { captureMapScreenshot, capturePrimarySiteAttributesMap, captureContourMap, captureRegularityMap, captureHeritageMap, captureAcidSulfateMap } from './utils/map/services/screenshot';
+import { addServicingSlide } from './slides/servicingSlide';
+import { captureMapScreenshot, capturePrimarySiteAttributesMap, captureContourMap, captureRegularityMap, captureHeritageMap, captureAcidSulfateMap, captureWaterMainsMap } from './utils/map/services/screenshot';
 import { SCREENSHOT_TYPES } from './utils/map/config/screenshotTypes';
 import SlidePreview from './SlidePreview';
 import PlanningMapView from './PlanningMapView';
@@ -20,7 +21,8 @@ const slideOptions = [
   { id: 'primaryAttributes', label: 'Primary Site Attributes', addSlide: addPrimarySiteAttributesSlide },
   { id: 'secondaryAttributes', label: 'Secondary Attributes', addSlide: addSecondaryAttributesSlide },
   { id: 'planning', label: 'Planning', addSlide: addPlanningSlide },
-  { id: 'planningTwo', label: 'Heritage & Acid Sulfate Soils', addSlide: addPlanningSlide2 }
+  { id: 'planningTwo', label: 'Heritage & Acid Sulfate Soils', addSlide: addPlanningSlide2 },
+  { id: 'servicing', label: 'Servicing', addSlide: addServicingSlide }
 ];
 
 const ReportGenerator = ({ selectedFeature }) => {
@@ -34,7 +36,8 @@ const ReportGenerator = ({ selectedFeature }) => {
     primaryAttributes: true,
     secondaryAttributes: true,
     planning: true,
-    planningTwo: true
+    planningTwo: true,
+    servicing: true
   });
   const [developableArea, setDevelopableArea] = useState(null);
   const planningMapRef = useRef();
@@ -95,6 +98,7 @@ const ReportGenerator = ({ selectedFeature }) => {
       const regularityScreenshot = await captureRegularityMap(selectedFeature, developableArea);
       const heritageScreenshot = await captureHeritageMap(selectedFeature, developableArea);
       const acidSulfateScreenshot = await captureAcidSulfateMap(selectedFeature, developableArea);
+      const waterMainsScreenshot = await captureWaterMainsMap(selectedFeature, developableArea);
       
       console.log('Aerial Screenshot:', aerialScreenshot ? 'Present' : 'Missing');
       console.log('Snapshot Screenshot:', snapshotScreenshot ? 'Present' : 'Missing');
@@ -141,7 +145,8 @@ const ReportGenerator = ({ selectedFeature }) => {
         regularityScreenshot,
         heritageScreenshot,
         acidSulfateSoilsScreenshot: acidSulfateScreenshot,
-        acidSulfateScreenshot
+        acidSulfateScreenshot,
+        waterMainsScreenshot
       };
 
       // Generate the report with progress tracking

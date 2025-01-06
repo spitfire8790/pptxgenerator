@@ -7,6 +7,7 @@ const steps = [
   { id: 'primaryAttributes', label: 'Adding Primary Attributes' },
   { id: 'secondaryAttributes', label: 'Adding Secondary Attributes' },
   { id: 'planning', label: 'Generating Planning Details' },
+  { id: 'servicing', label: 'Checking Site Servicing' },
   { id: 'finalizing', label: 'Finalising Report' }
 ];
 

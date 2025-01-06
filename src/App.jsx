@@ -34,10 +34,10 @@ function App() {
         - absolute positioning to float over the map
         - top-4 and left-4 give 16px padding from top-left corner
         - z-10 ensures it stays above the map
-        - w-[400px] sets a fixed width
+        - w-[950px] sets a fixed width
         - bg-white, rounded-lg, and shadow-lg give it a card-like appearance
       */}
-      <div className="absolute top-4 left-4 z-10 w-[950px] bg-white rounded-4g shadow-lg">
+      <div className="absolute top-2 left-2 z-10 w-[980px] bg-white rounded-8g shadow-2g">
         <ReportGenerator selectedFeature={selectedFeature} />
       </div>
 

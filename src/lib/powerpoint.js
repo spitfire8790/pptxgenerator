@@ -8,6 +8,7 @@ import { addPlanningSlide } from '../components/pptxApp/slides/planningSlide';
 import { addPrimarySiteAttributesSlide } from '../components/pptxApp/slides/primarySiteAttributesSlide';
 import { addSecondaryAttributesSlide } from '../components/pptxApp/slides/secondaryAttributesSlide';
 import { addPlanningSlide2 } from '../components/pptxApp/slides/planningSlide2';
+import { addServicingSlide } from '../components/pptxApp/slides/servicingSlide';
 
 export async function generateReport(properties, onProgress) {
   try {
@@ -61,6 +62,13 @@ export async function generateReport(properties, onProgress) {
     if (properties.selectedSlides.planning2 !== false) {
       await addPlanningSlide2(pptx, properties);
       progress = 95;
+      onProgress?.(progress);
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    if (properties.selectedSlides.servicing !== false) {
+      await addServicingSlide(pptx, properties);
+      progress = 98;
       onProgress?.(progress);
       await new Promise(resolve => setTimeout(resolve, 300));
     }

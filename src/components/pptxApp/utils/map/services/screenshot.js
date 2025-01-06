@@ -120,26 +120,29 @@ export async function capturePrimarySiteAttributesMap(feature, developableArea =
     }
 
     try {
-      // 3. Easements with proxy
+      // 3. Easements layer 
       const easementsConfig = {
-        url: 'https://portal.spatial.nsw.gov.au/server/rest/services/NSW_Land_Parcel_Property_Theme/MapServer',
-        layerId: 9,
+        url: 'https://mapuat3.environment.nsw.gov.au/arcgis/rest/services/Common/Admin_3857/MapServer',
+        layerId: 25,
         size: 2048,
         padding: 0.2
       };
-      const easementsUrl = await proxyRequest(`${easementsConfig.url}/export?${new URLSearchParams({
+
+      const params = new URLSearchParams({
         f: 'image',
         format: 'png32',
         transparent: 'true',
         size: `${easementsConfig.size},${easementsConfig.size}`,
         bbox: `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`,
-        bboxSR: 4283,
-        imageSR: 4283,
+        bboxSR: 3857,  // Changed to Web Mercator since the service is in 3857
+        imageSR: 3857,
         layers: `show:${easementsConfig.layerId}`,
         dpi: 96
-      })}`);
-      const easementsLayer = await loadImage(easementsUrl);
-      drawImage(ctx, easementsLayer, canvas.width, canvas.height, 1);
+      });
+
+      // Direct request without proxy since it's a UAT environment
+      const easementsLayer = await loadImage(`${easementsConfig.url}/export?${params.toString()}`);
+      drawImage(ctx, easementsLayer, canvas.width, canvas.height, 0.7);
     } catch (error) {
       console.warn('Failed to load easements layer:', error);
     }
@@ -639,6 +642,105 @@ export async function captureAcidSulfateMap(feature, developableArea = null) {
     return canvas.toDataURL('image/png', 1.0);
   } catch (error) {
     console.error('Failed to capture acid sulfate soils map:', error);
+    return null;
+  }
+}
+
+export async function captureWaterMainsMap(feature, developableArea = null) {
+  if (!feature) return null;
+  
+  try {
+    const config = {
+      width: 2048,
+      height: 2048,
+      padding: 0.1
+    };
+    
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    
+    // Create base canvas
+    const canvas = createCanvas(config.width, config.height);
+    const ctx = canvas.getContext('2d', { alpha: true });
+
+    try {
+      // 1. Aerial imagery (base)
+      const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];
+      const { bbox } = calculateMercatorParams(centerX, centerY, size);
+      
+      const params = new URLSearchParams({
+        SERVICE: 'WMS',
+        VERSION: '1.3.0',
+        REQUEST: 'GetMap',
+        BBOX: bbox,
+        CRS: 'EPSG:3857',
+        WIDTH: aerialConfig.width || aerialConfig.size,
+        HEIGHT: aerialConfig.height || aerialConfig.size,
+        LAYERS: aerialConfig.layers,
+        STYLES: '',
+        FORMAT: 'image/png',
+        DPI: 300,
+        MAP_RESOLUTION: 300,
+        FORMAT_OPTIONS: 'dpi:300'
+      });
+
+      const url = `${aerialConfig.url}?${params.toString()}`;
+      const baseMap = await loadImage(url);
+      drawImage(ctx, baseMap, canvas.width, canvas.height, 0.7);
+    } catch (error) {
+      console.warn('Failed to load aerial layer:', error);
+    }
+
+    try {
+      // 2. Water Mains layer
+      console.log('Fetching project layers...');
+      const projectLayers = await giraffeState.get('projectLayers');
+      const waterMainsLayer = projectLayers?.find(layer => layer.layer === 14235);
+      console.log('Found water mains layer:', waterMainsLayer);
+      
+      if (waterMainsLayer) {
+        const vectorTileUrl = waterMainsLayer.vector_source?.tiles?.[0];
+        if (vectorTileUrl) {
+          const waterMainsUrl = await proxyRequest(`${vectorTileUrl.split('{z}/{x}/{y}/')[0]}/export?${new URLSearchParams({
+            f: 'image',
+            format: 'png32',
+            transparent: 'true',
+            size: `${config.width},${config.height}`,
+            bbox: `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`,
+            bboxSR: 4283,
+            imageSR: 4283,
+            layers: 'show:0',
+            dpi: 96
+          })}`);
+          
+          const waterMainsLayer = await loadImage(waterMainsUrl);
+          drawImage(ctx, waterMainsLayer, canvas.width, canvas.height, 0.8);
+        } else {
+          console.warn('Vector tiles URL not found');
+        }
+      } else {
+        console.warn('Water mains layer not found in project layers');
+      }
+    } catch (error) {
+      console.warn('Failed to load water mains layer:', error);
+    }
+
+    // Draw boundaries
+    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+      strokeStyle: '#FF0000',
+      lineWidth: 6
+    });
+
+    if (developableArea?.features?.[0]) {
+      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
+        strokeStyle: '#02d1b8',
+        lineWidth: 12,
+        dashArray: [20, 10]
+      });
+    }
+
+    return canvas.toDataURL('image/png', 1.0);
+  } catch (error) {
+    console.error('Failed to capture water mains map:', error);
     return null;
   }
 } 
