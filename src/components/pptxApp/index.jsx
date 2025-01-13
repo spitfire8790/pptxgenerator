@@ -66,7 +66,7 @@ const MapScreenshotApp = () => {
   ];
 
   return (
-    <div className="flex h-screen">
+    <div className="flex h-screen bg-white">
       {/* Left Side Navigation */}
       <div className="w-48 border-r border-gray-200 bg-white flex flex-col flex-shrink-0">
         <div className="p-4">
@@ -132,7 +132,7 @@ const MapScreenshotApp = () => {
           <div className="flex h-full">
             <div 
               style={{ width: `${sidebarWidth}px` }}
-              className="flex-shrink-0 overflow-auto bg-gray-50"
+              className="flex-shrink-0 overflow-auto bg-white"
             >
               <PropertyOverview selectedFeature={selectedFeature} />
             </div>
@@ -145,7 +145,7 @@ const MapScreenshotApp = () => {
           <div className="flex h-full">
             <div 
               style={{ width: `${sidebarWidth}px` }}
-              className="flex-shrink-0 overflow-auto bg-gray-50"
+              className="flex-shrink-0 overflow-auto bg-white"
             >
               <Planning selectedFeature={selectedFeature} />
             </div>
@@ -158,7 +158,7 @@ const MapScreenshotApp = () => {
           <div className="flex h-full">
             <div 
               style={{ width: `${sidebarWidth}px` }}
-              className="flex-shrink-0 overflow-auto bg-gray-50"
+              className="flex-shrink-0 overflow-auto bg-white"
             >
               <Development selectedFeature={selectedFeature} />
             </div>
@@ -186,7 +186,7 @@ const MapScreenshotApp = () => {
           <div className="flex h-full">
             <div 
               style={{ width: `${sidebarWidth}px` }}
-              className="flex-shrink-0 overflow-auto bg-gray-50"
+              className="flex-shrink-0 overflow-auto bg-white"
             >
               <Sales selectedFeature={selectedFeature} />
             </div>
@@ -199,7 +199,7 @@ const MapScreenshotApp = () => {
           <div className="flex h-full">
             <div 
               style={{ width: `${sidebarWidth}px` }}
-              className="flex-shrink-0 overflow-auto bg-gray-50 p-4"
+              className="flex-shrink-0 overflow-auto bg-white p-4"
             >
               <Topography selectedFeature={selectedFeature} />
             </div>
@@ -212,7 +212,7 @@ const MapScreenshotApp = () => {
           <div className="flex h-full">
             <div 
               style={{ width: `${sidebarWidth}px` }}
-              className="flex-shrink-0 overflow-auto bg-gray-50"
+              className="flex-shrink-0 overflow-auto bg-white"
             >
               <Climate selectedFeature={selectedFeature} />
             </div>
@@ -225,7 +225,7 @@ const MapScreenshotApp = () => {
           <div className="flex h-full">
             <div 
               style={{ width: `${sidebarWidth}px` }}
-              className="flex-shrink-0 overflow-auto bg-gray-50"
+              className="flex-shrink-0 overflow-auto bg-white"
             >
               <AreaOverview selectedFeature={selectedFeature} />
             </div>
@@ -238,7 +238,7 @@ const MapScreenshotApp = () => {
           <div className="flex h-full">
             <div 
               style={{ width: `${sidebarWidth}px` }}
-              className="flex-shrink-0 overflow-auto bg-gray-50"
+              className="flex-shrink-0 overflow-auto bg-white"
             >
               <LayerDrawing selectedFeature={selectedFeature} />
             </div>
@@ -251,7 +251,7 @@ const MapScreenshotApp = () => {
           <div className="flex h-full">
             <div 
               style={{ width: `${sidebarWidth}px` }}
-              className="flex-shrink-0 overflow-auto bg-gray-50"
+              className="flex-shrink-0 overflow-auto bg-white"
             >
               <ReportGenerator selectedFeature={selectedFeature} />
             </div>

@@ -10,6 +10,40 @@ import { giraffeState } from '@gi-nx/iframe-sdk';
 
 console.log('Aerial config:', LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL]);
 
+function formatBBox(bbox) {
+  // Split bbox string into coordinates
+  const coords = bbox.split(',').map(Number);
+  
+  // Ensure coordinates are in correct order: xmin,ymin,xmax,ymax
+  const [x1, y1, x2, y2] = coords;
+  const xmin = Math.min(x1, x2);
+  const ymin = Math.min(y1, y2);
+  const xmax = Math.max(x1, x2);
+  const ymax = Math.max(y1, y2);
+  
+  // Format to 6 decimal places and ensure positive/negative signs
+  return [xmin, ymin, xmax, ymax]
+    .map(coord => (coord >= 0 ? '+' : '') + coord.toFixed(6))
+    .join(',');
+}
+
+async function getArcGISImage(config, centerX, centerY, size) {
+  const params = new URLSearchParams({
+    f: 'image',
+    format: 'png32',
+    transparent: 'true',
+    size: `${config.size},${config.size}`,
+    bbox: formatBBox(`${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`),
+    bboxSR: '4283',  // Add quotes to ensure it's sent as string
+    imageSR: '4283',
+    layers: `show:${config.layerId}`,
+    dpi: '96'
+  });
+
+  const url = `${config.url}/export?${params.toString()}`;
+  return await proxyRequest(url);
+}
+
 export async function captureMapScreenshot(feature, type = SCREENSHOT_TYPES.SNAPSHOT, drawBoundaryLine = true, developableArea = null) {
   if (!feature || !LAYER_CONFIGS[type]) return null;
   
@@ -55,7 +89,12 @@ export async function captureMapScreenshot(feature, type = SCREENSHOT_TYPES.SNAP
 
     return canvas.toDataURL('image/png', 1.0);
   } catch (error) {
-    console.warn('Failed to capture screenshot:', error);
+    console.error('Screenshot capture failed:', {
+      type,
+      error: error.message,
+      stack: error.stack,
+      config: LAYER_CONFIGS[type]
+    });
     return null;
   }
 }
@@ -134,9 +173,9 @@ export async function capturePrimarySiteAttributesMap(feature, developableArea =
         format: 'png32',
         transparent: 'true',
         size: `${easementsConfig.size},${easementsConfig.size}`,
-        bbox: `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`,
-        bboxSR: 3857,  // Changed to Web Mercator since the service is in 3857
-        imageSR: 3857,
+        bbox: formatBBox(`${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`),
+        bboxSR: 4283,
+        imageSR: 4283,
         layers: `show:${easementsConfig.layerId}`,
         dpi: 96
       });
@@ -161,7 +200,7 @@ export async function capturePrimarySiteAttributesMap(feature, developableArea =
         format: 'png32',
         transparent: 'true',
         size: `${biodiversityConfig.size},${biodiversityConfig.size}`,
-        bbox: `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`,
+        bbox: formatBBox(`${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`),
         bboxSR: 4283,
         imageSR: 4283,
         layers: `show:${biodiversityConfig.layerId}`,
@@ -186,7 +225,7 @@ export async function capturePrimarySiteAttributesMap(feature, developableArea =
         format: 'png32',
         transparent: 'true',
         size: `${powerLinesConfig.size},${powerLinesConfig.size}`,
-        bbox: `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`,
+        bbox: formatBBox(`${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`),
         bboxSR: 4283,
         imageSR: 4283,
         layers: `show:${powerLinesConfig.layerId}`,
@@ -366,7 +405,7 @@ export async function captureContourMap(feature, developableArea = null) {
         size: `${config.size},${config.size}`,
         bboxSR: 4283,
         imageSR: 4283,
-        bbox: `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`,
+        bbox: formatBBox(`${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`),
         layers: `show:${config.layerId}`,
         dpi: config.dpi || 300
       });
@@ -530,7 +569,7 @@ export async function captureHeritageMap(feature, developableArea = null) {
         format: 'png32',
         transparent: 'true',
         size: `${heritageConfig.size},${heritageConfig.size}`,
-        bbox: `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`,
+        bbox: formatBBox(`${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`),
         bboxSR: 4283,
         imageSR: 4283,
         layers: `show:${heritageConfig.layerId}`,
@@ -622,7 +661,7 @@ export async function captureAcidSulfateMap(feature, developableArea = null) {
         format: 'png32',
         transparent: 'true',
         size: `${acidSulfateConfig.size},${acidSulfateConfig.size}`,
-        bbox: `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`,
+        bbox: formatBBox(`${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`),
         bboxSR: 4283,
         imageSR: 4283,
         layers: `show:${acidSulfateConfig.layerId}`,

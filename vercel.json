@@ -12,6 +12,32 @@
   ],
   "routes": [
     {
+      "src": "/api/proxy/(.*)",
+      "methods": ["GET", "POST", "OPTIONS"],
+      "headers": {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept"
+      },
+      "dest": "https://$1"
+    },
+    {
+      "src": "/api/spatial/(.*)",
+      "methods": ["GET", "POST", "OPTIONS"],
+      "headers": {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
+        "Cache-Control": "no-cache"
+      },
+      "dest": "https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/$1",
+      "continue": true
+    },
+    {
+      "src": "/api/nsw/(.*)",
+      "dest": "https://portal.spatial.nsw.gov.au/server/rest/services/$1"
+    },
+    {
       "src": "/api/eplanning/(.*)",
       "dest": "https://api.apps1.nsw.gov.au/eplanning/$1"
     },

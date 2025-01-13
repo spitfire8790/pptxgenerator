@@ -1,23 +1,37 @@
 import { PROXY_CONFIG } from '../config/proxyConfig';
 
 export async function proxyRequest(url, options = {}) {
-  const proxyUrl = 'http://localhost:3000/proxy';
+  // Handle different URL patterns
+  let proxyUrl = url;
   
+  if (url.includes('mapprod3.environment.nsw.gov.au')) {
+    // Extract the path after 'services/'
+    const servicePath = url.split('arcgis/rest/services/')[1];
+    proxyUrl = `/api/spatial/${servicePath}`;
+  } else if (url.includes('portal.spatial.nsw.gov.au')) {
+    const servicePath = url.split('server/rest/services/')[1];
+    proxyUrl = `/api/nsw/${servicePath}`;
+  } else if (url.includes('api.apps1.nsw.gov.au')) {
+    const servicePath = url.split('eplanning/')[1];
+    proxyUrl = `/api/eplanning/${servicePath}`;
+  } else {
+    proxyUrl = url.replace(/^https?:\/\//, '/api/proxy/');
+  }
+
+  // Add timestamp to bypass caching for image requests
+  if (url.includes('/export') || url.includes('GetMap')) {
+    proxyUrl += `${proxyUrl.includes('?') ? '&' : '?'}_ts=${Date.now()}`;
+  }
+
   try {
     const response = await fetch(proxyUrl, {
-      method: 'POST',
+      method: options.method || 'GET',
       headers: {
-        'Content-Type': 'application/json',
+        'Accept': '*/*',
+        'User-Agent': 'Mozilla/5.0',
+        ...options.headers,
       },
-      body: JSON.stringify({
-        url,
-        method: options.method || 'GET',
-        headers: {
-          ...options.headers,
-          'Origin': window.location.origin,
-        },
-        body: options.body,
-      }),
+      body: options.body,
     });
 
     if (!response.ok) {
@@ -32,29 +46,11 @@ export async function proxyRequest(url, options = {}) {
       return URL.createObjectURL(blob);
     }
 
-    // Clone response for potential double reading
-    const clonedResponse = response.clone();
-
-    // For GeoJSON responses
-    if (url.includes('f=geojson')) {
-      try {
-        return await response.json();
-      } catch (error) {
-        console.warn('Failed to parse GeoJSON response, trying text:', error);
-        const text = await clonedResponse.text();
-        try {
-          return JSON.parse(text);
-        } catch {
-          throw new Error('Failed to parse response as JSON');
-        }
-      }
-    }
-
     // For all other responses
     try {
       return await response.json();
     } catch {
-      return await clonedResponse.text();
+      return await response.text();
     }
   } catch (error) {
     console.error('Proxy request failed:', error);
