@@ -7,7 +7,8 @@ export const LAYER_CONFIGS = {
     opacity: 1,
     width: 2048,
     height: 2048,
-    padding: 0.3
+    padding: 0.3,
+    dpi: 300,
   },
   [SCREENSHOT_TYPES.COVER]: {
     url: 'https://api.metromap.com.au/ogc/gda2020/key/cstti1v27eq9nu61qu4g5hmzziouk84x211rfim0mb35cujvqpt1tufytqk575pe/service',
@@ -15,7 +16,8 @@ export const LAYER_CONFIGS = {
     opacity: 1,
     width: 2048,
     height: 2048,
-    padding: 0.5
+    padding: 0.5,
+    dpi: 300,
   },
   [SCREENSHOT_TYPES.SNAPSHOT]: {
     url: 'https://api.metromap.com.au/ogc/gda2020/key/cstti1v27eq9nu61qu4g5hmzziouk84x211rfim0mb35cujvqpt1tufytqk575pe/service',
@@ -23,25 +25,38 @@ export const LAYER_CONFIGS = {
     opacity: 1,
     width: 2048,
     height: 3584,
-    padding: 0.1
+    padding: 0.1,
+    dpi: 300,
   },
   [SCREENSHOT_TYPES.ZONING]: {
     url: 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/EPI_Primary_Planning_Layers/MapServer',
     layerId: 2,
     size: 2048,
-    padding: 0.2
+    padding: 0.2,
+    dpi: 300,
+    format: 'png32',
+    transparent: true,
+    showBoundary: true
   },
   [SCREENSHOT_TYPES.FSR]: {
     url: 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/Principal_Planning_Layers/MapServer',
     layerId: 4,
     size: 2048,
-    padding: 0.2
+    padding: 0.2,
+    dpi: 300,
+    format: 'png32',
+    transparent: true,
+    showBoundary: true
   },
   [SCREENSHOT_TYPES.HOB]: {
     url: 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/Principal_Planning_Layers/MapServer',
     layerId: 7,
     size: 2048,
-    padding: 0.2
+    padding: 0.2,
+    dpi: 300,
+    format: 'png32',
+    transparent: true,
+    showBoundary: true
   },
   [SCREENSHOT_TYPES.CONTOUR]: {
     url: 'https://spatial.industry.nsw.gov.au/arcgis/rest/services/PUBLIC/Contours/MapServer',
@@ -63,5 +78,33 @@ export const LAYER_CONFIGS = {
     format: 'png32',
     transparent: true,
     spatialReference: 4283
+  },
+  [SCREENSHOT_TYPES.WATER_MAINS]: {
+    url: 'https://portal.data.nsw.gov.au/arcgis/rest/services/Hosted/NSW_Water_Sewer_Infrastructure/FeatureServer/13',
+    layerId: 14235,
+    size: 2048,
+    padding: 0.2,
+    dpi: 300,
+    format: 'png32',
+    transparent: true,
+  },
+  [SCREENSHOT_TYPES.SEWER_MAINS]: {
+    url: 'https://portal.data.nsw.gov.au/arcgis/rest/services/Hosted/NSW_Water_Sewer_Infrastructure/FeatureServer/11',
+    layerId: 14112,
+    size: 2048,
+    padding: 0.2,
+    dpi: 300,
+    format: 'png32',
+    transparent: true
+  },
+  [SCREENSHOT_TYPES.POWER]: {
+    url: 'https://services-ap1.arcgis.com/ug6sGLFkytbXYo4f/ArcGIS/rest/services/LUAL_Network_LV_Feature_Public/FeatureServer',
+    layerId: 0,
+    size: 2048,
+    padding: 0.2,
+    dpi: 300,
+    format: 'png32',
+    transparent: true,
+    spatialReference: 3857
   }
-}; 
+};

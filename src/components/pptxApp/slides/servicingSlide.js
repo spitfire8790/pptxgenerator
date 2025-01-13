@@ -1,6 +1,5 @@
 import { convertCmValues } from '../utils/units';
-import scoringCriteria from './scoringLogic';
-import { captureWaterMainsMap } from '../utils/map/services/screenshot';
+import { captureWaterMainsMap, captureSewerMap, capturePowerMap } from '../utils/map/services/screenshot';
 
 export async function addServicingSlide(pptx, properties) {
   const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
@@ -52,32 +51,6 @@ export async function addServicingSlide(pptx, properties) {
       valign: 'middle'
     }));
 
-    // Capture and add water map
-    try {
-      const waterScreenshot = await captureWaterMainsMap(properties.geometry, properties.developableArea);
-      if (waterScreenshot) {
-        slide.addImage({
-          data: waterScreenshot,
-          ...convertCmValues({
-            x: '5%',
-            y: '24%',
-            w: '28%',
-            h: '50%',
-            sizing: {
-              type: 'contain',
-              align: 'center',
-              valign: 'middle'
-            }
-          })
-        });
-      } else {
-        addErrorMessage(slide, 'Water', '5%');
-      }
-    } catch (error) {
-      console.error('Error adding water map:', error);
-      addErrorMessage(slide, 'Water', '5%');
-    }
-
     // Section 2 - Sewer (Middle)
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
       x: '36%',
@@ -101,24 +74,6 @@ export async function addServicingSlide(pptx, properties) {
       align: 'center',
       valign: 'middle'
     }));
-
-    // Add sewer map
-    if (properties.sewerScreenshot) {
-      slide.addImage({
-        data: properties.sewerScreenshot,
-        ...convertCmValues({
-          x: '36%',
-          y: '24%',
-          w: '28%',
-          h: '50%',
-          sizing: {
-            type: 'contain',
-            align: 'center',
-            valign: 'middle'
-          }
-        })
-      });
-    }
 
     // Section 3 - Power (Right)
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
@@ -144,90 +99,52 @@ export async function addServicingSlide(pptx, properties) {
       valign: 'middle'
     }));
 
-    // Add power map
-    if (properties.powerScreenshot) {
-      slide.addImage({
-        data: properties.powerScreenshot,
-        ...convertCmValues({
-          x: '67%',
-          y: '24%',
-          w: '28%',
-          h: '50%',
-          sizing: {
-            type: 'contain',
-            align: 'center',
-            valign: 'middle'
-          }
-        })
-      });
+    // Add infrastructure maps for each section
+    try {
+      // Water section
+      if (properties.waterMainsScreenshot) {
+        slide.addImage({
+          data: properties.waterMainsScreenshot,
+          ...convertCmValues({
+            x: '5%',
+            y: '24%',
+            w: '28%',
+            h: '50%',
+            sizing: { type: 'contain', align: 'center', valign: 'middle' }
+          })
+        });
+      }
+
+      // Sewer section
+      if (properties.sewerScreenshot) {
+        slide.addImage({
+          data: properties.sewerScreenshot,
+          ...convertCmValues({
+            x: '36%',
+            y: '24%',
+            w: '28%',
+            h: '50%',
+            sizing: { type: 'contain', align: 'center', valign: 'middle' }
+          })
+        });
+      }
+
+      // Power section
+      if (properties.powerScreenshot?.image) {
+        slide.addImage({
+          data: properties.powerScreenshot.image,
+          ...convertCmValues({
+            x: '67%',
+            y: '24%',
+            w: '28%',
+            h: '50%',
+            sizing: { type: 'contain', align: 'center', valign: 'middle' }
+          })
+        });
+      }
+    } catch (error) {
+      console.error('Error adding infrastructure maps:', error);
     }
-
-    // Add description boxes for each section
-    // Water description box
-    slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
-      x: '5%',
-      y: '75%',
-      w: '28%',
-      h: '9%',
-      fill: 'FFFBF2',
-      line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
-    }));
-
-    // Sewer description box
-    slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
-      x: '36%',
-      y: '75%',
-      w: '28%',
-      h: '9%',
-      fill: 'FFFBF2',
-      line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
-    }));
-
-    // Power description box
-    slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
-      x: '67%',
-      y: '75%',
-      w: '28%',
-      h: '9%',
-      fill: 'FFFBF2',
-      line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
-    }));
-
-    // Calculate overall servicing score
-    const servicingScore = Math.round((waterScore + sewerScore + powerScore) / 3);
-    const scoreDescription = scoringCriteria.servicing.getScoreDescription(servicingScore);
-
-    // Store the score in properties for later use in summary slide
-    properties.scores = properties.scores || {};
-    properties.scores.servicing = servicingScore;
-
-    // Add score container with dynamic color based on score
-    slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
-      x: '5%',
-      y: '92%',
-      w: '90%',
-      h: '3%',
-      fill: scoringCriteria.servicing.getScoreColor(servicingScore).replace('#', ''),
-      line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
-    }));
-
-    // Add score text
-    slide.addText([
-      { text: 'Servicing Score: ', options: { bold: true } },
-      { text: `${servicingScore}/3`, options: { bold: true } },
-      { text: ' - ' },
-      { text: scoreDescription }
-    ], convertCmValues({
-      x: '5%',
-      y: '92%',
-      w: '90%',
-      h: '3%',
-      fontSize: 8,
-      color: '363636',
-      fontFace: 'Public Sans',
-      align: 'left',
-      valign: 'middle'
-    }));
 
     // Add footer elements
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.footerLine));
@@ -238,32 +155,8 @@ export async function addServicingSlide(pptx, properties) {
 
   } catch (error) {
     console.error('Error generating servicing slide:', error);
-    slide.addText('Error generating servicing slide: ' + error.message, {
-      x: '10%',
-      y: '45%',
-      w: '80%',
-      h: '10%',
-      fontSize: 14,
-      color: 'FF0000',
-      align: 'center'
-    });
+    return slide;
   }
-
-  return slide;
-}
-
-// Helper function for error messages
-function addErrorMessage(slide, service, xPosition) {
-  slide.addText(`${service} map unavailable`, convertCmValues({
-    x: xPosition,
-    y: '24%',
-    w: '28%',
-    h: '50%',
-    fontSize: 12,
-    color: 'FF0000',
-    align: 'center',
-    valign: 'middle'
-  }));
 }
 
 const styles = {

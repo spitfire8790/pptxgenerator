@@ -2,6 +2,16 @@ import { convertCmValues } from '../utils/units';
 import scoringCriteria from './scoringLogic';
 import { area } from '@turf/area';
 
+const calculateFontSize = (text, maxLength = 50) => {
+  if (!text) return 8; // Default font size
+  // Start reducing font size if text is longer than maxLength
+  if (text.length > maxLength) {
+    const reduction = Math.floor((text.length - maxLength) / 50); // Reduce size for every 50 extra characters
+    return Math.max(6, 8 - reduction); // Don't go smaller than 6pt
+  }
+  return 8;
+};
+
 const styles = {
   title: {
     x: '4%',

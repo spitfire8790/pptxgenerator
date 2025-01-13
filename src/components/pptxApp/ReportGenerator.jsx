@@ -5,7 +5,7 @@ import { addPropertySnapshotSlide } from './slides/propertySnapshotSlide';
 import { addPlanningSlide } from './slides/planningSlide';
 import { addPlanningSlide2 } from './slides/planningSlide2';
 import { addServicingSlide } from './slides/servicingSlide';
-import { captureMapScreenshot, capturePrimarySiteAttributesMap, captureContourMap, captureRegularityMap, captureHeritageMap, captureAcidSulfateMap, captureWaterMainsMap } from './utils/map/services/screenshot';
+import { captureMapScreenshot, capturePrimarySiteAttributesMap, captureContourMap, captureRegularityMap, captureHeritageMap, captureAcidSulfateMap, captureWaterMainsMap, captureSewerMap, capturePowerMap } from './utils/map/services/screenshot';
 import { SCREENSHOT_TYPES } from './utils/map/config/screenshotTypes';
 import SlidePreview from './SlidePreview';
 import PlanningMapView from './PlanningMapView';
@@ -46,31 +46,6 @@ const ReportGenerator = ({ selectedFeature }) => {
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
-    async function getPreviewScreenshot() {
-      if (selectedFeature) {
-        const screenshot = await captureMapScreenshot(selectedFeature);
-        setPreviewScreenshot(screenshot);
-      }
-    }
-    getPreviewScreenshot();
-  }, [selectedFeature]);
-
-  useEffect(() => {
-    if (selectedFeature && planningMapRef.current) {
-      // Reset screenshots state for planning views
-      setScreenshots(prev => ({
-        ...prev,
-        zoningScreenshot: null,
-        fsrScreenshot: null,
-        hobScreenshot: null
-      }));
-      
-      // Trigger new screenshots capture
-      planningMapRef.current.captureScreenshots();
-    }
-  }, [selectedFeature]);
-
-  useEffect(() => {
     if (selectedFeature) {
       handleScreenshotCapture();
     }
@@ -98,13 +73,22 @@ const ReportGenerator = ({ selectedFeature }) => {
       const regularityScreenshot = await captureRegularityMap(selectedFeature, developableArea);
       const heritageScreenshot = await captureHeritageMap(selectedFeature, developableArea);
       const acidSulfateScreenshot = await captureAcidSulfateMap(selectedFeature, developableArea);
-      const waterMainsScreenshot = await captureWaterMainsMap(selectedFeature, developableArea);
+      const { image: waterMainsScreenshot } = await captureWaterMainsMap(selectedFeature, developableArea) || {};
+      const { image: sewerScreenshot } = await captureSewerMap(selectedFeature, developableArea) || {};
+      const powerScreenshot = await capturePowerMap(selectedFeature, developableArea);
       
       console.log('Aerial Screenshot:', aerialScreenshot ? 'Present' : 'Missing');
       console.log('Snapshot Screenshot:', snapshotScreenshot ? 'Present' : 'Missing');
       console.log('Zoning Screenshot:', zoningScreenshot ? 'Present' : 'Missing');
       console.log('FSR Screenshot:', fsrScreenshot ? 'Present' : 'Missing');
       console.log('HOB Screenshot:', hobScreenshot ? 'Present' : 'Missing');
+      console.log('Composite Map Screenshot:', compositeMapScreenshot ? 'Present' : 'Missing');
+      console.log('Contour Screenshot:', contourScreenshot ? 'Present' : 'Missing');
+      console.log('Regularity Screenshot:', regularityScreenshot ? 'Present' : 'Missing');
+      console.log('Heritage Screenshot:', heritageScreenshot ? 'Present' : 'Missing');
+      console.log('Acid Sulfate Screenshot:', acidSulfateScreenshot ? 'Present' : 'Missing');
+      console.log('Water Mains Screenshot:', waterMainsScreenshot ? 'Present' : 'Missing');
+
 
       setCompletedSteps(prev => [...prev, 'screenshots']);
       setCurrentStep('cover');
@@ -135,9 +119,9 @@ const ReportGenerator = ({ selectedFeature }) => {
         site__geometry: selectedFeature.geometry.coordinates[0],
         screenshot: coverScreenshot,
         snapshotScreenshot: aerialScreenshot,
-        zoningScreenshot: screenshots.zoningScreenshot || zoningScreenshot,
-        fsrScreenshot: screenshots.fsrScreenshot || fsrScreenshot,
-        hobScreenshot: screenshots.hobScreenshot || hobScreenshot,
+        zoningScreenshot: zoningScreenshot,
+        fsrScreenshot: fsrScreenshot,
+        hobScreenshot: hobScreenshot,
         developableArea: developableArea?.features || null,
         compositeMapScreenshot,
         scores: {},
@@ -146,7 +130,9 @@ const ReportGenerator = ({ selectedFeature }) => {
         heritageScreenshot,
         acidSulfateSoilsScreenshot: acidSulfateScreenshot,
         acidSulfateScreenshot,
-        waterMainsScreenshot
+        waterMainsScreenshot,
+        sewerScreenshot,
+        powerScreenshot
       };
 
       // Generate the report with progress tracking

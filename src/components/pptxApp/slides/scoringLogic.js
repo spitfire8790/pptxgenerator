@@ -255,6 +255,101 @@ const scoringCriteria = {
     getScoreColor: (score) => {
       return scoreColors[score] || scoreColors[0];
     }
+  },
+  water: {
+    calculateScore: (waterFeatures, developableArea) => {
+      if (!waterFeatures?.length || !developableArea?.features?.[0]) {
+        return 1; // Default to lowest score if no data
+      }
+
+      // Create a polygon from developable area
+      const developablePolygon = turf.polygon([developableArea.features[0].geometry.coordinates[0]]);
+
+      // Find the minimum distance to any water main
+      let minDistance = Infinity;
+      
+      waterFeatures.forEach(feature => {
+        if (feature.geometry.type === 'LineString') {
+          const line = turf.lineString(feature.geometry.coordinates);
+          const distance = turf.pointToLineDistance(
+            turf.centerOfMass(developablePolygon),
+            line,
+            { units: 'meters' }
+          );
+          minDistance = Math.min(minDistance, distance);
+        } else if (feature.geometry.type === 'MultiLineString') {
+          feature.geometry.coordinates.forEach(coords => {
+            const line = turf.lineString(coords);
+            const distance = turf.pointToLineDistance(
+              turf.centerOfMass(developablePolygon),
+              line,
+              { units: 'meters' }
+            );
+            minDistance = Math.min(minDistance, distance);
+          });
+        }
+      });
+
+      // Return score based on distance
+      if (minDistance <= 5) return 3;
+      if (minDistance <= 10) return 2;
+      return 1;
+    },
+
+    getScoreDescription: (score) => {
+      switch (score) {
+        case 3:
+          return "Site is serviced by water main";
+        case 2:
+          return "Site has water mains in close proximity";
+        case 1:
+          return "Site is not serviced by water mains";
+        default:
+          return "Water servicing not assessed";
+      }
+    },
+
+    getScoreColor: (score) => {
+      return scoreColors[score] || scoreColors[0];
+    }
+  },
+  servicing: {
+    calculateScore: (waterScore, sewerScore, powerScore) => {
+      // Validate inputs
+      if (typeof waterScore !== 'number' || typeof sewerScore !== 'number' || typeof powerScore !== 'number') {
+        return 0;
+      }
+      
+      // Calculate average score
+      const average = (waterScore + sewerScore + powerScore) / 3;
+      
+      // Round to nearest whole number
+      return Math.round(average);
+    },
+    getScoreDescription: (score) => {
+      switch(score) {
+        case 3:
+          return "Excellent servicing potential";
+        case 2:
+          return "Good servicing potential";
+        case 1:
+          return "Fair servicing potential";
+        default:
+          return "Poor servicing potential";
+      }
+    },
+    getScoreColor: (score) => {
+      switch(score) {
+        case 3:
+          return "92D050";  // Green
+        case 2:
+          return "FFC000";  // Yellow
+        case 1:
+          return "FF0000";  // Red
+        default:
+          return "FF0000";  // Red
+      }
+    }
   }
 };
 

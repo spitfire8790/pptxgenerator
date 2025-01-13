@@ -23,12 +23,10 @@ const PlanningMapView = ({ feature, onScreenshotCapture, developableArea }, ref)
     }
   }, [feature, developableArea, onScreenshotCapture]);
 
-  // Add effect to trigger screenshot capture when feature or developableArea changes
   useEffect(() => {
     captureScreenshots();
   }, [feature, developableArea, captureScreenshots]);
 
-  // Expose the capture function to parent
   React.useImperativeHandle(ref, () => ({
     captureScreenshots
   }));

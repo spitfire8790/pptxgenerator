@@ -9,5 +9,8 @@ export const SCREENSHOT_TYPES = {
   WIDE: 'wide',
   REGULARITY: 'regularity',
   HERITAGE: 'heritage',
-  ACID_SULFATE_SOILS: 'acidSulfateSoils'
-}; 
+  ACID_SULFATE_SOILS: 'acidSulfateSoils',
+  WATER_MAINS: 'waterMains',
+  SEWER_MAINS: 'sewerMains',
+  POWER: 'power'
+};

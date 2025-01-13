@@ -11,32 +11,52 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 
 // Proxy endpoint
 app.post('/proxy', async (req, res) => {
   const { url, method, headers, body } = req.body;
 
-  console.log('Proxy request received:', { url, method });
+  console.log('Proxy request received for URL:', url);
+  console.log('Request method:', method);
+  console.log('Request headers:', headers);
 
   try {
+    // Validate URL
+    const targetUrl = new URL(url);
+    
+    // Add additional headers for ArcGIS requests
+    const requestHeaders = {
+      ...headers,
+      'User-Agent': 'Mozilla/5.0',
+      'Accept': '*/*',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Connection': 'keep-alive',
+      'Referer': targetUrl.origin,
+    };
+
     const response = await fetch(url, {
       method: method || 'GET',
-      headers: {
-        ...headers,
-        'User-Agent': 'Mozilla/5.0',
-        'Accept': 'image/png,image/*,*/*'
-      },
+      headers: requestHeaders,
       body: body ? JSON.stringify(body) : undefined,
+      timeout: 30000, // 30 second timeout
     });
 
     console.log('External service response:', {
       status: response.status,
+      statusText: response.statusText,
       contentType: response.headers.get('content-type')
     });
 
     if (!response.ok) {
-      throw new Error(`External service responded with status: ${response.status}`);
+      const errorText = await response.text();
+      console.error('External service error:', errorText);
+      return res.status(response.status).json({
+        error: 'External service error',
+        status: response.status,
+        statusText: response.statusText,
+        details: errorText
+      });
     }
 
     // Forward the response
@@ -44,17 +64,18 @@ app.post('/proxy', async (req, res) => {
     res.set('Content-Type', contentType);
 
     if (contentType?.includes('image')) {
-      const buffer = await response.arrayBuffer();
-      res.send(Buffer.from(buffer));
+      const buffer = await response.buffer();
+      res.send(buffer);
     } else {
-      const data = await response.text();
-      res.send(data);
+      const text = await response.text();
+      res.send(text);
     }
   } catch (error) {
     console.error('Detailed proxy error:', error);
     res.status(500).json({ 
       error: 'Proxy request failed',
-      details: error.message,
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
       url: url
     });
   }

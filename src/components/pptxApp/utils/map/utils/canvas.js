@@ -28,6 +28,13 @@ export function drawImage(ctx, image, width, height, opacity = 1.0) {
 // canvasSize: Size of the canvas (assumed square)
 // style: Optional object containing visual properties (strokeStyle, lineWidth, dashArray)
 export function drawBoundary(ctx, coordinates, centerX, centerY, size, canvasSize, style = {}) {
+  if (!coordinates || !Array.isArray(coordinates)) {
+    console.error('Invalid coordinates:', coordinates);
+    return;
+  }
+
+
+
   // Set up line styling with defaults
   ctx.strokeStyle = style.strokeStyle || '#FF0000';
   ctx.lineWidth = style.lineWidth !== undefined ? style.lineWidth : Math.max(canvasSize / 256, 5);
@@ -47,6 +54,10 @@ export function drawBoundary(ctx, coordinates, centerX, centerY, size, canvasSiz
 
   // Process each coordinate pair
   coordinates.forEach((coord, i) => {
+    if (!Array.isArray(coord) || coord.length < 2) {
+      console.warn('Invalid coordinate pair:', coord);
+      return;
+    }
     // Convert geographic coordinates to Web Mercator projection
     const [mercX, mercY] = convertToWebMercator(coord[0], coord[1]);
     // Calculate Web Mercator parameters for the current view
@@ -77,4 +88,44 @@ export function drawBoundary(ctx, coordinates, centerX, centerY, size, canvasSiz
   
   // Reset dash pattern
   ctx.setLineDash([]);
-} 
+}
+
+export function drawPolyline(ctx, coordinates, centerX, centerY, size, canvasSize, style = {}, isWebMercator = false) {
+  if (!coordinates || !Array.isArray(coordinates)) {
+    console.error('Invalid coordinates:', coordinates);
+    return;
+  }
+
+  ctx.strokeStyle = style.strokeStyle || '#0000FF';
+  ctx.lineWidth = style.lineWidth !== undefined ? style.lineWidth : Math.max(canvasSize / 256, 3);
+  
+  if (style.dashArray) {
+    ctx.setLineDash(style.dashArray);
+  }
+  
+  ctx.beginPath();
+
+  coordinates.forEach((coord, i) => {
+    if (!Array.isArray(coord) || coord.length < 2) {
+      console.warn('Invalid coordinate pair:', coord);
+      return;
+    }
+    
+    // Convert geographic coordinates to Web Mercator projection if they aren't already
+    const [webMercX, webMercY] = convertToWebMercator(coord[0], coord[1]);
+    const { centerMercX, centerMercY, sizeInMeters } = calculateMercatorParams(centerX, centerY, size);
+    
+    // Transform Web Mercator coordinates to canvas pixel coordinates
+    const x = ((webMercX - (centerMercX - sizeInMeters/2)) / sizeInMeters) * canvasSize;
+    const y = ((centerMercY + sizeInMeters/2 - webMercY) / sizeInMeters) * canvasSize;
+    
+    if (i === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+  });
+  
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
