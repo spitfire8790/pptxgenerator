@@ -313,6 +313,90 @@ const scoringCriteria = {
       return scoreColors[score] || scoreColors[0];
     }
   },
+  sewer: {
+    calculateScore: (sewerFeatures, developableArea) => {
+      if (!sewerFeatures?.length || !developableArea?.features?.[0]) {
+        return 1; // Default to lowest score if no data
+      }
+
+      // Similar distance calculation as water
+      const developablePolygon = turf.polygon([developableArea.features[0].geometry.coordinates[0]]);
+      let minDistance = Infinity;
+      
+      sewerFeatures.forEach(feature => {
+        if (feature.geometry.type === 'LineString') {
+          const line = turf.lineString(feature.geometry.coordinates);
+          const distance = turf.pointToLineDistance(
+            turf.centerOfMass(developablePolygon),
+            line,
+            { units: 'meters' }
+          );
+          minDistance = Math.min(minDistance, distance);
+        }
+      });
+
+      if (minDistance <= 5) return 3;
+      if (minDistance <= 10) return 2;
+      return 1;
+    },
+    getScoreDescription: (score) => {
+      switch (score) {
+        case 3:
+          return "Site is serviced by sewer main";
+        case 2:
+          return "Site has sewer mains in close proximity";
+        case 1:
+          return "Site is not serviced by sewer mains";
+        default:
+          return "Sewer servicing not assessed";
+      }
+    },
+    getScoreColor: (score) => {
+      return scoreColors[score] || scoreColors[0];
+    }
+  },
+  power: {
+    calculateScore: (powerFeatures, developableArea) => {
+      if (!powerFeatures?.length || !developableArea?.features?.[0]) {
+        return 1;
+      }
+
+      // Similar distance calculation as water
+      const developablePolygon = turf.polygon([developableArea.features[0].geometry.coordinates[0]]);
+      let minDistance = Infinity;
+      
+      powerFeatures.forEach(feature => {
+        if (feature.geometry.type === 'LineString') {
+          const line = turf.lineString(feature.geometry.coordinates);
+          const distance = turf.pointToLineDistance(
+            turf.centerOfMass(developablePolygon),
+            line,
+            { units: 'meters' }
+          );
+          minDistance = Math.min(minDistance, distance);
+        }
+      });
+
+      if (minDistance <= 5) return 3;
+      if (minDistance <= 10) return 2;
+      return 1;
+    },
+    getScoreDescription: (score) => {
+      switch (score) {
+        case 3:
+          return "Site is serviced by power infrastructure";
+        case 2:
+          return "Site has power infrastructure in close proximity";
+        case 1:
+          return "Site is not serviced by power infrastructure";
+        default:
+          return "Power servicing not assessed";
+      }
+    },
+    getScoreColor: (score) => {
+      return scoreColors[score] || scoreColors[0];
+    }
+  },
   servicing: {
     calculateScore: (waterScore, sewerScore, powerScore) => {
       // Validate inputs
@@ -320,35 +404,35 @@ const scoringCriteria = {
         return 0;
       }
       
-      // Calculate average score
-      const average = (waterScore + sewerScore + powerScore) / 3;
+      // Count number of high-scoring services (score of 3)
+      const highScoreCount = [waterScore, sewerScore, powerScore].filter(score => score === 3).length;
       
-      // Round to nearest whole number
-      return Math.round(average);
+      if (highScoreCount === 3) return 3;
+      if (highScoreCount >= 1) return 2;
+      return 1;
     },
-    getScoreDescription: (score) => {
-      switch(score) {
-        case 3:
-          return "Excellent servicing potential";
-        case 2:
-          return "Good servicing potential";
-        case 1:
-          return "Fair servicing potential";
-        default:
-          return "Poor servicing potential";
+    getScoreDescription: (waterScore, sewerScore, powerScore) => {
+      const services = [];
+      if (waterScore === 3) services.push('water');
+      if (sewerScore === 3) services.push('sewer');
+      if (powerScore === 3) services.push('power');
+
+      if (services.length === 3) {
+        return "Site is serviced by water, sewer and power";
       }
+      
+      if (services.length > 0) {
+        // Format list with Oxford comma if needed
+        if (services.length === 2) {
+          return `Site is serviced by ${services.join(' and ')}`;
+        }
+        return `Site is serviced by ${services[0]}`;
+      }
+      
+      return "Site is not serviced";
     },
     getScoreColor: (score) => {
-      switch(score) {
-        case 3:
-          return "92D050";  // Green
-        case 2:
-          return "FFC000";  // Yellow
-        case 1:
-          return "FF0000";  // Red
-        default:
-          return "FF0000";  // Red
-      }
+      return scoreColors[score] || scoreColors[0];
     }
   }
 };

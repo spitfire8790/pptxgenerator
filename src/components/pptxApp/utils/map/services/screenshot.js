@@ -10,40 +10,6 @@ import { giraffeState } from '@gi-nx/iframe-sdk';
 
 console.log('Aerial config:', LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL]);
 
-function formatBBox(bbox) {
-  // Split bbox string into coordinates
-  const coords = bbox.split(',').map(Number);
-  
-  // Ensure coordinates are in correct order: xmin,ymin,xmax,ymax
-  const [x1, y1, x2, y2] = coords;
-  const xmin = Math.min(x1, x2);
-  const ymin = Math.min(y1, y2);
-  const xmax = Math.max(x1, x2);
-  const ymax = Math.max(y1, y2);
-  
-  // Format to 6 decimal places and ensure positive/negative signs
-  return [xmin, ymin, xmax, ymax]
-    .map(coord => (coord >= 0 ? '+' : '') + coord.toFixed(6))
-    .join(',');
-}
-
-async function getArcGISImage(config, centerX, centerY, size) {
-  const params = new URLSearchParams({
-    f: 'image',
-    format: 'png32',
-    transparent: 'true',
-    size: `${config.size},${config.size}`,
-    bbox: formatBBox(`${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`),
-    bboxSR: '4283',  // Add quotes to ensure it's sent as string
-    imageSR: '4283',
-    layers: `show:${config.layerId}`,
-    dpi: '96'
-  });
-
-  const url = `${config.url}/export?${params.toString()}`;
-  return await proxyRequest(url);
-}
-
 export async function captureMapScreenshot(feature, type = SCREENSHOT_TYPES.SNAPSHOT, drawBoundaryLine = true, developableArea = null) {
   if (!feature || !LAYER_CONFIGS[type]) return null;
   
@@ -89,12 +55,7 @@ export async function captureMapScreenshot(feature, type = SCREENSHOT_TYPES.SNAP
 
     return canvas.toDataURL('image/png', 1.0);
   } catch (error) {
-    console.error('Screenshot capture failed:', {
-      type,
-      error: error.message,
-      stack: error.stack,
-      config: LAYER_CONFIGS[type]
-    });
+    console.warn('Failed to capture screenshot:', error);
     return null;
   }
 }
@@ -173,9 +134,9 @@ export async function capturePrimarySiteAttributesMap(feature, developableArea =
         format: 'png32',
         transparent: 'true',
         size: `${easementsConfig.size},${easementsConfig.size}`,
-        bbox: formatBBox(`${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`),
-        bboxSR: 4283,
-        imageSR: 4283,
+        bbox: `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`,
+        bboxSR: 3857,  // Changed to Web Mercator since the service is in 3857
+        imageSR: 3857,
         layers: `show:${easementsConfig.layerId}`,
         dpi: 96
       });
@@ -200,7 +161,7 @@ export async function capturePrimarySiteAttributesMap(feature, developableArea =
         format: 'png32',
         transparent: 'true',
         size: `${biodiversityConfig.size},${biodiversityConfig.size}`,
-        bbox: formatBBox(`${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`),
+        bbox: `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`,
         bboxSR: 4283,
         imageSR: 4283,
         layers: `show:${biodiversityConfig.layerId}`,
@@ -225,7 +186,7 @@ export async function capturePrimarySiteAttributesMap(feature, developableArea =
         format: 'png32',
         transparent: 'true',
         size: `${powerLinesConfig.size},${powerLinesConfig.size}`,
-        bbox: formatBBox(`${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`),
+        bbox: `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`,
         bboxSR: 4283,
         imageSR: 4283,
         layers: `show:${powerLinesConfig.layerId}`,
@@ -405,7 +366,7 @@ export async function captureContourMap(feature, developableArea = null) {
         size: `${config.size},${config.size}`,
         bboxSR: 4283,
         imageSR: 4283,
-        bbox: formatBBox(`${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`),
+        bbox: `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`,
         layers: `show:${config.layerId}`,
         dpi: config.dpi || 300
       });
@@ -569,7 +530,7 @@ export async function captureHeritageMap(feature, developableArea = null) {
         format: 'png32',
         transparent: 'true',
         size: `${heritageConfig.size},${heritageConfig.size}`,
-        bbox: formatBBox(`${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`),
+        bbox: `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`,
         bboxSR: 4283,
         imageSR: 4283,
         layers: `show:${heritageConfig.layerId}`,
@@ -661,7 +622,7 @@ export async function captureAcidSulfateMap(feature, developableArea = null) {
         format: 'png32',
         transparent: 'true',
         size: `${acidSulfateConfig.size},${acidSulfateConfig.size}`,
-        bbox: formatBBox(`${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`),
+        bbox: `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`,
         bboxSR: 4283,
         imageSR: 4283,
         layers: `show:${acidSulfateConfig.layerId}`,
@@ -796,7 +757,7 @@ export async function captureWaterMainsMap(feature, developableArea = null) {
               console.log(`Drawing water mains feature ${index + 1}...`);
               drawBoundary(ctx, feature.geometry.coordinates, centerX, centerY, size, config.width, {
                 strokeStyle: '#0000FF',
-                lineWidth: 4
+                lineWidth: 8
               });
             });
             console.log('Finished drawing water mains features');
@@ -876,45 +837,58 @@ export async function capturePowerMap(feature, developableArea = null) {
 
       const url = `${aerialConfig.url}?${params.toString()}`;
       const baseMap = await loadImage(url);
-      drawImage(ctx, baseMap, canvas.width, canvas.height, 0.5);
+      drawImage(ctx, baseMap, canvas.width, canvas.height, 0.4);
     } catch (error) {
       console.error('Failed to load aerial layer:', error);
     }
 
     try {
-      // 2. Power infrastructure layer from SIMS
-      console.log('Loading power infrastructure layer...');
-      const projectLayers = await giraffeState.get('projectLayers');
-      const powerLayer = projectLayers?.find(layer => layer.name === "Low Voltage Overhead Services"); 
-      
-      if (powerLayer?.layer_full?.source?.tiles?.[0]) {
-        const tileUrl = powerLayer.layer_full.source.tiles[0];
-        const { bbox } = calculateMercatorParams(centerX, centerY, size);
-        
-        // Extract the base URL and token from the tile URL
-        const baseUrl = tileUrl.split('?')[0];
-        const token = new URLSearchParams(tileUrl.split('?')[1]).get('token');
-        
-        const powerParams = new URLSearchParams({
-          f: 'image',
-          format: 'png32',
-          transparent: 'true',
-          size: `${config.width},${config.height}`,
-          bbox: bbox,
-          bboxSR: 3857,
-          imageSR: 3857,
-          layers: 'show:193',  // Layer ID from the SIMS service
-          dpi: 96,
-          token: token
-        });
+      // 2. Power infrastructure layers
+      console.log('Loading power infrastructure layers...');
+      const powerConfig = {
+        baseUrl: 'https://sims.spatial.nsw.gov.au/arcgis/rest/services/ESSIL_REMO_GDA94/MapServer',
+        layerId: 193
+      };
 
-        const url = `${baseUrl}?${powerParams.toString()}`;
-        console.log('Power infrastructure request URL (token redacted):', url.replace(token, 'REDACTED'));
+      // Get the power layer data from Giraffe
+      console.log('Fetching project layers from Giraffe...');
+      const projectLayers = await giraffeState.get('projectLayers');
+      const powerLayer = projectLayers?.find(layer => layer.layer === 19976);
+      console.log('Found power layer:', powerLayer);
+      
+      if (powerLayer) {
+        console.log('Calculating Mercator parameters...');
+        const { bbox } = calculateMercatorParams(centerX, centerY, size);
+        console.log('Bbox:', bbox);
+
+        // Get the full URL with token from the layer data
+        const tileUrl = powerLayer.layer_full?.style?.source?.tiles?.[0];
+        console.log('Tile URL:', tileUrl);
         
-        const powerLayer = await loadImage(url);
-        drawImage(ctx, powerLayer, canvas.width, canvas.height, 0.8);
-      } else {
-        console.log('Power layer configuration not found');
+        if (tileUrl) {
+          const token = tileUrl.split('token=')?.[1]?.split('&')?.[0];
+          console.log('Extracted token:', token);
+
+          const params = new URLSearchParams({
+            f: 'image',
+            token: token,
+            dpi: '96',
+            transparent: 'true',
+            format: 'png32',
+            bboxSR: '3857',
+            imageSR: '3857',
+            size: `${config.width},${config.height}`,
+            layers: `show:${powerConfig.layerId}`,
+            bbox: bbox
+          });
+
+          const url = `${powerConfig.baseUrl}/export?${params.toString()}`;
+          console.log('Final power request URL (with sensitive info removed):', url.replace(token, 'REDACTED'));
+          
+          const powerUrl = await proxyRequest(url);
+          const powerLayer = await loadImage(powerUrl);
+          drawImage(ctx, powerLayer, canvas.width, canvas.height, 1);
+        }
       }
     } catch (error) {
       console.warn('Failed to load power infrastructure layer:', error);
@@ -1046,7 +1020,7 @@ export async function captureSewerMap(feature, developableArea = null) {
               console.log(`Drawing sewer feature ${index + 1}...`);
               drawBoundary(ctx, feature.geometry.coordinates, centerX, centerY, size, config.width, {
                 strokeStyle: '#964B00',
-                lineWidth: 5
+                lineWidth: 8
               });
             });
             console.log('Finished drawing sewer features');

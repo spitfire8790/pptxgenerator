@@ -1,5 +1,6 @@
 import { convertCmValues } from '../utils/units';
 import { captureWaterMainsMap, captureSewerMap, capturePowerMap } from '../utils/map/services/screenshot';
+import scoringCriteria from './scoringLogic';
 
 export async function addServicingSlide(pptx, properties) {
   const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
@@ -146,8 +147,188 @@ export async function addServicingSlide(pptx, properties) {
       console.error('Error adding infrastructure maps:', error);
     }
 
-    // Add footer elements
+    // Calculate individual scores
+    const waterScore = scoringCriteria.water.calculateScore(properties.waterFeatures, properties.developableArea);
+    const sewerScore = scoringCriteria.sewer.calculateScore(properties.sewerFeatures, properties.developableArea);
+    const powerScore = scoringCriteria.power.calculateScore(properties.powerFeatures, properties.developableArea);
+
+    // Calculate overall servicing score
+    const servicingScore = scoringCriteria.servicing.calculateScore(waterScore, sewerScore, powerScore);
+    const scoreDescription = scoringCriteria.servicing.getScoreDescription(waterScore, sewerScore, powerScore);
+
+    // Store scores in properties for later use
+    properties.scores = {
+      ...properties.scores,
+      water: waterScore,
+      sewer: sewerScore,
+      power: powerScore,
+      servicing: servicingScore
+    };
+
+    // Update the text descriptions
+    const waterDescription = scoringCriteria.water.getScoreDescription(waterScore);
+    const sewerDescription = scoringCriteria.sewer.getScoreDescription(sewerScore);
+    const powerDescription = scoringCriteria.power.getScoreDescription(powerScore);
+
+    // Water Text Box
+    slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
+      x: '5%',
+      y: '75%',
+      w: '28%',
+      h: '9%',
+      fill: 'FFFBF2',
+      line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
+    }));
+
+    // Water Description
+    slide.addText('', convertCmValues({
+      x: '5%',
+      y: '75%',
+      w: '28%',
+      h: '5%',
+      fontSize: 7,
+      color: '363636',
+      fontFace: 'Public Sans',
+      align: 'left',
+      valign: 'top',
+      wrap: true
+    }));
+
+    // Water Source
+    slide.addText('Source: Sydney Water, 2024', convertCmValues({
+      x: '5%',
+      y: '81%',
+      w: '28%',
+      h: '3%',
+      fontSize: 6,
+      color: '363636',
+      fontFace: 'Public Sans Light',
+      italic: true,
+      align: 'left',
+      wrap: true
+    }));
+
+    // Water section line
+    slide.addShape(pptx.shapes.LINE, convertCmValues({
+      x: '6%',
+      y: '81%',
+      w: '26%',
+      h: 0,
+      line: { color: '8C8C8C', width: 0.4 }
+    }));
+
+    // Sewer Text Box
+    slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
+      x: '36%',
+      y: '75%',
+      w: '28%',
+      h: '9%',
+      fill: 'FFFBF2',
+      line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
+    }));
+
+    // Sewer Description
+    slide.addText('', convertCmValues({
+      x: '36%',
+      y: '75%',
+      w: '28%',
+      h: '5%',
+      fontSize: 7,
+      color: '363636',
+      fontFace: 'Public Sans',
+      align: 'left',
+      valign: 'top',
+      wrap: true
+    }));
+
+    // Sewer Source
+    slide.addText('Source: Sydney Water, 2024', convertCmValues({
+      x: '36%',
+      y: '81%',
+      w: '28%',
+      h: '3%',
+      fontSize: 6,
+      color: '363636',
+      fontFace: 'Public Sans Light',
+      italic: true,
+      align: 'left',
+      wrap: true
+    }));
+
+    // Sewer section line
+    slide.addShape(pptx.shapes.LINE, convertCmValues({
+      x: '37%',
+      y: '81%',
+      w: '26%',
+      h: 0,
+      line: { color: '8C8C8C', width: 0.4 }
+    }));
+
+    // Power Text Box
+    slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
+      x: '67%',
+      y: '75%',
+      w: '28%',
+      h: '9%',
+      fill: 'FFFBF2',
+      line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
+    }));
+
+    // Power Description
+    slide.addText('', convertCmValues({
+      x: '67%',
+      y: '75%',
+      w: '28%',
+      h: '5%',
+      fontSize: 7,
+      color: '363636',
+      fontFace: 'Public Sans',
+      align: 'left',
+      valign: 'top',
+      wrap: true
+    }));
+
+    // Power Source
+    slide.addText('Source: Endeavour Energy, 2024', convertCmValues({
+      x: '67%',
+      y: '81%',
+      w: '28%',
+      h: '3%',
+      fontSize: 6,
+      color: '363636',
+      fontFace: 'Public Sans Light',
+      italic: true,
+      align: 'left',
+      wrap: true
+    }));
+
+    // Power section line
+    slide.addShape(pptx.shapes.LINE, convertCmValues({
+      x: '68%',
+      y: '81%',
+      w: '26%',
+      h: 0,
+      line: { color: '8C8C8C', width: 0.4 }
+    }));
+
+    // Add score container with dynamic color based on score
+    slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
+      ...styles.scoreContainer,
+      fill: scoringCriteria.servicing.getScoreColor(servicingScore)
+    }));
+
+    // Add score text
+    slide.addText([
+      { text: 'Servicing Score: ', options: { bold: true } },
+      { text: `${servicingScore}/3`, options: { bold: true } },
+      { text: ' - ' },
+      { text: scoreDescription }
+    ], convertCmValues(styles.scoreText));
+
+    // Add footer line
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.footerLine));
+
+    // Update page number text to match style
     slide.addText('Property and Development NSW', convertCmValues(styles.footer));
     slide.addText('7', convertCmValues(styles.pageNumber));
 
@@ -203,29 +384,49 @@ const styles = {
   },
   footerLine: {
     x: '5%',
-    y: '95%',
+    y: '93%',
     w: '90%',
     h: 0.01,
     line: { color: '002664', width: 0.7 },
     fill: { color: '002664' }
   },
   footer: {
-    x: '5%',
-    y: '95.5%',
-    w: '50%',
-    h: '3%',
-    fontSize: 8,
+    x: '4%',
+    y: '94%',
+    w: '90%',
+    h: '4%',
+    fontSize: 10,
     color: '002664',
-    fontFace: 'Public Sans'
+    fontFace: 'Public Sans',
+    align: 'left'
   },
   pageNumber: {
-    x: '90%',
-    y: '95.5%',
-    w: '5%',
-    h: '3%',
+    x: '94%',
+    y: '94%',
+    w: '4%',
+    h: '4%',
     fontSize: 8,
     color: '002664',
     fontFace: 'Public Sans',
-    align: 'right'
+    align: 'left'
+  },
+  scoreContainer: {
+    x: '5%',
+    y: '85%',
+    w: '90%',
+    h: '6%',
+    fill: 'FFFBF2',
+    line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
+  },
+  scoreText: {
+    x: '5%',
+    y: '85%',
+    w: '90%',
+    h: '6%',
+    fontSize: 8,
+    color: '363636',
+    fontFace: 'Public Sans',
+    align: 'left',
+    valign: 'middle'
   }
 }; 

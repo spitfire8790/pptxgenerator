@@ -1,41 +1,31 @@
 import { PROXY_CONFIG } from '../config/proxyConfig';
 
 export async function proxyRequest(url, options = {}) {
-  // Handle different URL patterns
-  let proxyUrl = url;
+  const proxyUrl = PROXY_CONFIG.baseUrl;
   
-  if (url.includes('mapprod3.environment.nsw.gov.au')) {
-    // Extract the path after 'services/'
-    const servicePath = url.split('arcgis/rest/services/')[1];
-    proxyUrl = `/api/spatial/${servicePath}`;
-  } else if (url.includes('portal.spatial.nsw.gov.au')) {
-    const servicePath = url.split('server/rest/services/')[1];
-    proxyUrl = `/api/nsw/${servicePath}`;
-  } else if (url.includes('api.apps1.nsw.gov.au')) {
-    const servicePath = url.split('eplanning/')[1];
-    proxyUrl = `/api/eplanning/${servicePath}`;
-  } else {
-    proxyUrl = url.replace(/^https?:\/\//, '/api/proxy/');
-  }
-
-  // Add timestamp to bypass caching for image requests
-  if (url.includes('/export') || url.includes('GetMap')) {
-    proxyUrl += `${proxyUrl.includes('?') ? '&' : '?'}_ts=${Date.now()}`;
-  }
-
   try {
+    console.log('Sending proxy request for:', url);
+    
     const response = await fetch(proxyUrl, {
-      method: options.method || 'GET',
+      method: 'POST',
       headers: {
-        'Accept': '*/*',
-        'User-Agent': 'Mozilla/5.0',
-        ...options.headers,
+        'Content-Type': 'application/json',
       },
-      body: options.body,
+      body: JSON.stringify({
+        url,
+        method: options.method || 'GET',
+        headers: {
+          ...options.headers,
+          'Origin': window.location.origin,
+        },
+        body: options.body,
+      }),
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const errorData = await response.json();
+      console.error('Proxy error details:', errorData);
+      throw new Error(`Proxy request failed: ${errorData.error}\n${errorData.details || ''}`);
     }
 
     const contentType = response.headers.get('content-type');
@@ -46,11 +36,14 @@ export async function proxyRequest(url, options = {}) {
       return URL.createObjectURL(blob);
     }
 
-    // For all other responses
+    // Handle JSON responses
     try {
-      return await response.json();
-    } catch {
-      return await response.text();
+      const data = await response.json();
+      return data;
+    } catch (e) {
+      // If JSON parsing fails, return the raw text
+      const text = await response.text();
+      return text;
     }
   } catch (error) {
     console.error('Proxy request failed:', error);

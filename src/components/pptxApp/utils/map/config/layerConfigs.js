@@ -98,13 +98,18 @@ export const LAYER_CONFIGS = {
     transparent: true
   },
   [SCREENSHOT_TYPES.POWER]: {
-    url: 'https://services-ap1.arcgis.com/ug6sGLFkytbXYo4f/ArcGIS/rest/services/LUAL_Network_LV_Feature_Public/FeatureServer',
-    layerId: 0,
+    services: [
+      {
+        url: 'https://services-ap1.arcgis.com/ug6sGLFkytbXYo4f/arcgis/rest/services/LUAL_Network_LV_Public/FeatureServer/0',
+        spatialReference: 3857
+      },
+      {
+        url: 'https://services.arcgis.com/Gbs1D7TkFBVkx0Nz/ArcGIS/rest/services/LookUpNLive/FeatureServer/2',
+        spatialReference: 7856
+      }
+    ],
     size: 2048,
     padding: 0.2,
-    dpi: 300,
-    format: 'png32',
-    transparent: true,
-    spatialReference: 3857
+    dpi: 300
   }
 };
