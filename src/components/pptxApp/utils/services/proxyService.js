@@ -49,4 +49,18 @@ export async function proxyRequest(url, options = {}) {
     console.error('Proxy request failed:', error);
     throw error;
   }
+
+  // Add better error handling for feature requests
+  if (url.includes('/query')) {
+    try {
+      const data = await response.json();
+      if (!data.features) {
+        console.warn('No features found in response:', data);
+      }
+      return data;
+    } catch (e) {
+      console.error('Failed to parse feature response:', e);
+      return { features: [] };
+    }
+  }
 } 

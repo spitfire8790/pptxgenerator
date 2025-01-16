@@ -2,13 +2,14 @@ import { convertCmValues } from '../utils/units';
 import { captureWaterMainsMap, captureSewerMap, capturePowerMap } from '../utils/map/services/screenshot';
 import scoringCriteria from './scoringLogic';
 
-export async function addServicingSlide(pptx, properties) {
-  const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
-
+export async function addServicingSlide(pptx, propertyData) {
   try {
+    console.log('Starting to add servicing slide...');
+    const slide = pptx.addSlide();
+
     // Add title
     slide.addText([
-      { text: properties.site__address, options: { color: styles.title.color } },
+      { text: propertyData.site__address, options: { color: styles.title.color } },
       { text: ' ', options: { breakLine: true } },
       { text: 'Servicing', options: { color: styles.subtitle.color } }
     ], convertCmValues({
@@ -103,9 +104,9 @@ export async function addServicingSlide(pptx, properties) {
     // Add infrastructure maps for each section
     try {
       // Water section
-      if (properties.waterMainsScreenshot) {
+      if (propertyData.waterMainsScreenshot) {
         slide.addImage({
-          data: properties.waterMainsScreenshot,
+          data: propertyData.waterMainsScreenshot,
           ...convertCmValues({
             x: '5%',
             y: '24%',
@@ -117,9 +118,9 @@ export async function addServicingSlide(pptx, properties) {
       }
 
       // Sewer section
-      if (properties.sewerScreenshot) {
+      if (propertyData.sewerScreenshot) {
         slide.addImage({
-          data: properties.sewerScreenshot,
+          data: propertyData.sewerScreenshot,
           ...convertCmValues({
             x: '36%',
             y: '24%',
@@ -131,9 +132,9 @@ export async function addServicingSlide(pptx, properties) {
       }
 
       // Power section
-      if (properties.powerScreenshot?.image) {
+      if (propertyData.powerScreenshot?.image) {
         slide.addImage({
-          data: properties.powerScreenshot.image,
+          data: propertyData.powerScreenshot.image,
           ...convertCmValues({
             x: '67%',
             y: '24%',
@@ -147,28 +148,40 @@ export async function addServicingSlide(pptx, properties) {
       console.error('Error adding infrastructure maps:', error);
     }
 
-    // Calculate individual scores
-    const waterScore = scoringCriteria.water.calculateScore(properties.waterFeatures, properties.developableArea);
-    const sewerScore = scoringCriteria.sewer.calculateScore(properties.sewerFeatures, properties.developableArea);
-    const powerScore = scoringCriteria.power.calculateScore(properties.powerFeatures, properties.developableArea);
+    // Calculate distances along with scores
+    console.log('=== Properties Debug ===');
+    console.log('Full properties object:', propertyData);
+    console.log('Water Features:', propertyData.waterFeatures);
+    console.log('Water Features type:', typeof propertyData.waterFeatures);
+    console.log('Water Features structure:', JSON.stringify(propertyData.waterFeatures, null, 2));
+    console.log('Developable Area:', propertyData.developableArea);
+    const waterResult = scoringCriteria.water.calculateScore(propertyData.waterFeatures, propertyData.developableArea);
+    console.log('Water Result:', waterResult);
+    const sewerResult = scoringCriteria.sewer.calculateScore(propertyData.sewerFeatures, propertyData.developableArea);
+    const powerResult = scoringCriteria.power.calculateScore(propertyData.powerFeatures, propertyData.developableArea);
+
+    // Store scores
+    const waterScore = waterResult.score;
+    const sewerScore = sewerResult.score;
+    const powerScore = powerResult.score;
 
     // Calculate overall servicing score
     const servicingScore = scoringCriteria.servicing.calculateScore(waterScore, sewerScore, powerScore);
     const scoreDescription = scoringCriteria.servicing.getScoreDescription(waterScore, sewerScore, powerScore);
 
-    // Store scores in properties for later use
-    properties.scores = {
-      ...properties.scores,
+    // Store scores in properties
+    propertyData.scores = {
+      ...propertyData.scores,
       water: waterScore,
       sewer: sewerScore,
       power: powerScore,
       servicing: servicingScore
     };
 
-    // Update the text descriptions
-    const waterDescription = scoringCriteria.water.getScoreDescription(waterScore);
-    const sewerDescription = scoringCriteria.sewer.getScoreDescription(sewerScore);
-    const powerDescription = scoringCriteria.power.getScoreDescription(powerScore);
+    // Update the text descriptions with distances
+    const waterDescription = scoringCriteria.water.getScoreDescription(waterScore, waterResult.minDistance);
+    const sewerDescription = scoringCriteria.sewer.getScoreDescription(sewerScore, sewerResult.minDistance);
+    const powerDescription = scoringCriteria.power.getScoreDescription(powerScore, powerResult.minDistance);
 
     // Water Text Box
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
@@ -176,12 +189,12 @@ export async function addServicingSlide(pptx, properties) {
       y: '75%',
       w: '28%',
       h: '9%',
-      fill: 'FFFBF2',
+      fill: waterScore === 1 ? '90EE90' : 'FFB6C1',  // Light green if 1, light red if 0
       line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
     }));
 
     // Water Description
-    slide.addText('', convertCmValues({
+    slide.addText(waterDescription, convertCmValues({
       x: '5%',
       y: '75%',
       w: '28%',
@@ -195,7 +208,7 @@ export async function addServicingSlide(pptx, properties) {
     }));
 
     // Water Source
-    slide.addText('Source: Sydney Water, 2024', convertCmValues({
+    slide.addText('Source: NSW Water Mains, Department of Customer Service, 2025', convertCmValues({
       x: '5%',
       y: '81%',
       w: '28%',
@@ -223,12 +236,12 @@ export async function addServicingSlide(pptx, properties) {
       y: '75%',
       w: '28%',
       h: '9%',
-      fill: 'FFFBF2',
+      fill: sewerScore === 1 ? '90EE90' : 'FFB6C1',  // Light green if 1, light red if 0
       line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
     }));
 
     // Sewer Description
-    slide.addText('', convertCmValues({
+    slide.addText(sewerDescription, convertCmValues({
       x: '36%',
       y: '75%',
       w: '28%',
@@ -242,7 +255,7 @@ export async function addServicingSlide(pptx, properties) {
     }));
 
     // Sewer Source
-    slide.addText('Source: Sydney Water, 2024', convertCmValues({
+    slide.addText('Source: NSW Sewer Mains, Department of Customer Service, 2025', convertCmValues({
       x: '36%',
       y: '81%',
       w: '28%',
@@ -270,12 +283,12 @@ export async function addServicingSlide(pptx, properties) {
       y: '75%',
       w: '28%',
       h: '9%',
-      fill: 'FFFBF2',
+      fill: powerScore === 1 ? '90EE90' : 'FFB6C1',  // Light green if 1, light red if 0
       line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
     }));
 
     // Power Description
-    slide.addText('', convertCmValues({
+    slide.addText(powerDescription, convertCmValues({
       x: '67%',
       y: '75%',
       w: '28%',
@@ -289,7 +302,7 @@ export async function addServicingSlide(pptx, properties) {
     }));
 
     // Power Source
-    slide.addText('Source: Endeavour Energy, 2024', convertCmValues({
+    slide.addText('Source: NSW Power Lines, Department of Customer Service, 2025', convertCmValues({
       x: '67%',
       y: '81%',
       w: '28%',

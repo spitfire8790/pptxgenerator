@@ -133,7 +133,10 @@ const ReportGenerator = ({ selectedFeature }) => {
         acidSulfateScreenshot,
         waterMainsScreenshot,
         sewerScreenshot,
-        powerScreenshot
+        powerScreenshot,
+        waterFeatures: selectedFeature.properties?.waterFeatures,
+        sewerFeatures: selectedFeature.properties?.sewerFeatures,
+        powerFeatures: selectedFeature.properties?.powerFeatures,
       };
 
       // Generate the report with progress tracking

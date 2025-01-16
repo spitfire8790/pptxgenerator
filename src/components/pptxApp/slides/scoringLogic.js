@@ -1,4 +1,9 @@
 import * as turf from '@turf/turf';
+import proj4 from 'proj4';
+
+// Define the coordinate systems
+proj4.defs('EPSG:3857', '+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +no_defs');
+proj4.defs('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
 
 const scoreColors = {
   3: '#E6F2DE', // Green - High suitability
@@ -258,95 +263,178 @@ const scoringCriteria = {
   },
   water: {
     calculateScore: (waterFeatures, developableArea) => {
-      if (!waterFeatures?.length || !developableArea?.features?.[0]) {
-        return 1; // Default to lowest score if no data
+      console.log('=== Water Score Calculation Start ===');
+      console.log('Input validation:');
+      console.log('waterFeatures type:', typeof waterFeatures);
+      console.log('waterFeatures is array:', Array.isArray(waterFeatures));
+      console.log('waterFeatures:', JSON.stringify(waterFeatures, null, 2));
+      console.log('developableArea type:', typeof developableArea);
+      console.log('developableArea:', JSON.stringify(developableArea, null, 2));
+
+      // Handle both direct features array and FeatureCollection format
+      const features = Array.isArray(waterFeatures) ? waterFeatures : waterFeatures?.features || [];
+      console.log('Processed features:', features);
+
+      if (!features?.length || !developableArea?.[0]) {
+        console.log('Missing required inputs - returning 0 score');
+        return { score: 0, minDistance: Infinity };
       }
 
-      // Create a polygon from developable area
-      const developablePolygon = turf.polygon([developableArea.features[0].geometry.coordinates[0]]);
+      try {
+        const developableCoords = developableArea[0].geometry.coordinates[0];
+        console.log('Developable area coordinates:', developableCoords);
+        
+        const developablePolygon = turf.polygon([developableCoords]);
+        console.log('Created developable polygon:', developablePolygon);
+        
+        // Transform coordinates to EPSG:3857 if they are in EPSG:4326
+        const transformedPolygon = turf.transformScale(developablePolygon, 1, { units: 'meters' });
+        console.log('Transformed polygon:', transformedPolygon);
+        
+        const bufferedPolygon = turf.buffer(transformedPolygon, 5, { units: 'meters' });
+        console.log('Buffered polygon:', bufferedPolygon);
+        
+        // Check intersections
+        let intersectionFound = false;
+        features.forEach((feature, index) => {
+          console.log(`\nChecking water feature ${index}:`, feature);
+          console.log(`Water feature ${index} coordinates:`, feature.geometry?.coordinates);
+          
+          if (feature.geometry?.type === 'LineString' || feature.geometry?.type === 'MultiLineString') {
+            const line = turf.lineString(feature.geometry.coordinates);
+            console.log('Created line:', line);
+            console.log('Line coordinates:', line.geometry.coordinates);
+        
+            const intersects = turf.booleanIntersects(bufferedPolygon, line);
+            console.log(`Intersection result for feature ${index}:`, intersects);
+            console.log('Intersection test between:', {
+              bufferedPolygonCoords: bufferedPolygon.geometry.coordinates[0],
+              lineCoords: line.geometry.coordinates
+            });
+        
+            if (intersects) {
+              intersectionFound = true;
+              console.log('Found intersection - will return score 1');
+            }
+          } else {
+            console.log(`Feature ${index} is not a LineString:`, feature.geometry?.type);
+          }
+        });
 
-      // Find the minimum distance to any water main
-      let minDistance = Infinity;
-      
-      waterFeatures.forEach(feature => {
-        if (feature.geometry.type === 'LineString') {
-          const line = turf.lineString(feature.geometry.coordinates);
-          const distance = turf.pointToLineDistance(
-            turf.centerOfMass(developablePolygon),
-            line,
-            { units: 'meters' }
-          );
-          minDistance = Math.min(minDistance, distance);
-        } else if (feature.geometry.type === 'MultiLineString') {
-          feature.geometry.coordinates.forEach(coords => {
-            const line = turf.lineString(coords);
-            const distance = turf.pointToLineDistance(
-              turf.centerOfMass(developablePolygon),
-              line,
-              { units: 'meters' }
-            );
-            minDistance = Math.min(minDistance, distance);
-          });
-        }
-      });
+        const result = {
+          score: intersectionFound ? 1 : 0,
+          minDistance: intersectionFound ? 0 : Infinity
+        };
 
-      // Return score based on distance
-      if (minDistance <= 5) return 3;
-      if (minDistance <= 10) return 2;
-      return 1;
+        console.log('=== Final Result ===');
+        console.log(result);
+
+        return result;
+
+      } catch (error) {
+        console.error('=== Water Score Calculation Error ===');
+        console.error('Error details:', error);
+        console.error('Error stack:', error.stack);
+        return { score: 0, minDistance: Infinity };
+      }
     },
-
-    getScoreDescription: (score) => {
+    getScoreDescription: (score, minDistance) => {
       switch (score) {
-        case 3:
-          return "Site is serviced by water main";
-        case 2:
-          return "Site has water mains in close proximity";
         case 1:
-          return "Site is not serviced by water mains";
+          return "Site has water infrastructure within 5m";
+        case 0:
+          return "No water infrastructure found near site";
         default:
           return "Water servicing not assessed";
       }
     },
-
     getScoreColor: (score) => {
       return scoreColors[score] || scoreColors[0];
     }
   },
   sewer: {
     calculateScore: (sewerFeatures, developableArea) => {
-      if (!sewerFeatures?.length || !developableArea?.features?.[0]) {
-        return 1; // Default to lowest score if no data
+      console.log('=== Sewer Score Calculation Start ===');
+      console.log('Input validation:');
+      console.log('sewerFeatures type:', typeof sewerFeatures);
+      console.log('sewerFeatures is array:', Array.isArray(sewerFeatures));
+      console.log('sewerFeatures:', JSON.stringify(sewerFeatures, null, 2));
+      console.log('developableArea type:', typeof developableArea);
+      console.log('developableArea:', JSON.stringify(developableArea, null, 2));
+
+      // Handle both direct features array and FeatureCollection format
+      const features = Array.isArray(sewerFeatures) ? sewerFeatures : sewerFeatures?.features || [];
+      console.log('Processed features:', features);
+
+      if (!features?.length || !developableArea?.[0]) {
+        console.log('Missing required inputs - returning 0 score');
+        return { score: 0, minDistance: Infinity };
       }
 
-      // Similar distance calculation as water
-      const developablePolygon = turf.polygon([developableArea.features[0].geometry.coordinates[0]]);
-      let minDistance = Infinity;
-      
-      sewerFeatures.forEach(feature => {
-        if (feature.geometry.type === 'LineString') {
-          const line = turf.lineString(feature.geometry.coordinates);
-          const distance = turf.pointToLineDistance(
-            turf.centerOfMass(developablePolygon),
-            line,
-            { units: 'meters' }
-          );
-          minDistance = Math.min(minDistance, distance);
-        }
-      });
+      try {
+        const developableCoords = developableArea[0].geometry.coordinates[0];
+        console.log('Developable area coordinates:', developableCoords);
+        
+        const developablePolygon = turf.polygon([developableCoords]);
+        console.log('Created developable polygon:', developablePolygon);
+        
+        // Transform coordinates to EPSG:3857 if they are in EPSG:4326
+        const transformedPolygon = turf.transformScale(developablePolygon, 1, { units: 'meters' });
+        console.log('Transformed polygon:', transformedPolygon);
+        
+        const bufferedPolygon = turf.buffer(transformedPolygon, 5, { units: 'meters' });
+        console.log('Buffered polygon:', bufferedPolygon);
+        
+        // Check intersections
+        let intersectionFound = false;
+        features.forEach((feature, index) => {
+          console.log(`\nChecking sewer feature ${index}:`, feature);
+          console.log(`Sewer feature ${index} coordinates:`, feature.geometry?.coordinates);
+          
+          if (feature.geometry?.type === 'LineString' || feature.geometry?.type === 'MultiLineString') {
+            const line = turf.lineString(feature.geometry.coordinates);
+            console.log('Created line:', line);
+            console.log('Line coordinates:', line.geometry.coordinates);
+        
+            const intersects = turf.booleanIntersects(bufferedPolygon, line);
+            console.log(`Intersection result for feature ${index}:`, intersects);
+            console.log('Intersection test between:', {
+              bufferedPolygonCoords: bufferedPolygon.geometry.coordinates[0],
+              lineCoords: line.geometry.coordinates
+            });
+        
+            if (intersects) {
+              intersectionFound = true;
+              console.log('Found intersection - will return score 1');
+            }
+          } else {
+            console.log(`Feature ${index} is not a LineString:`, feature.geometry?.type);
+          }
+        });
 
-      if (minDistance <= 5) return 3;
-      if (minDistance <= 10) return 2;
-      return 1;
+        const result = {
+          score: intersectionFound ? 1 : 0,
+          minDistance: intersectionFound ? 0 : Infinity
+        };
+
+        console.log('=== Final Result ===');
+        console.log(result);
+
+        return result;
+
+      } catch (error) {
+        console.error('=== Sewer Score Calculation Error ===');
+        console.error('Error details:', error);
+        console.error('Error stack:', error.stack);
+        return { score: 0, minDistance: Infinity };
+      }
     },
-    getScoreDescription: (score) => {
+    getScoreDescription: (score, minDistance) => {
       switch (score) {
-        case 3:
-          return "Site is serviced by sewer main";
-        case 2:
-          return "Site has sewer mains in close proximity";
         case 1:
-          return "Site is not serviced by sewer mains";
+          return "Site has sewer infrastructure within 5m";
+        case 0:
+          return "No sewer infrastructure found near site";
         default:
           return "Sewer servicing not assessed";
       }
@@ -357,38 +445,87 @@ const scoringCriteria = {
   },
   power: {
     calculateScore: (powerFeatures, developableArea) => {
-      if (!powerFeatures?.length || !developableArea?.features?.[0]) {
-        return 1;
+      console.log('=== Power Score Calculation Start ===');
+      console.log('Input validation:');
+      console.log('powerFeatures type:', typeof powerFeatures);
+      console.log('powerFeatures is array:', Array.isArray(powerFeatures));
+      console.log('powerFeatures:', JSON.stringify(powerFeatures, null, 2));
+      console.log('developableArea type:', typeof developableArea);
+      console.log('developableArea:', JSON.stringify(developableArea, null, 2));
+
+      // Handle both direct features array and FeatureCollection format
+      const features = Array.isArray(powerFeatures) ? powerFeatures : powerFeatures?.features || [];
+      console.log('Processed features:', features);
+
+      if (!features?.length || !developableArea?.[0]) {
+        console.log('Missing required inputs - returning 0 score');
+        return { score: 0, minDistance: Infinity };
       }
 
-      // Similar distance calculation as water
-      const developablePolygon = turf.polygon([developableArea.features[0].geometry.coordinates[0]]);
-      let minDistance = Infinity;
-      
-      powerFeatures.forEach(feature => {
-        if (feature.geometry.type === 'LineString') {
-          const line = turf.lineString(feature.geometry.coordinates);
-          const distance = turf.pointToLineDistance(
-            turf.centerOfMass(developablePolygon),
-            line,
-            { units: 'meters' }
-          );
-          minDistance = Math.min(minDistance, distance);
-        }
-      });
+      try {
+        const developableCoords = developableArea[0].geometry.coordinates[0];
+        console.log('Developable area coordinates:', developableCoords);
+        
+        const developablePolygon = turf.polygon([developableCoords]);
+        console.log('Created developable polygon:', developablePolygon);
+        
+        // Transform coordinates to EPSG:3857 if they are in EPSG:4326
+        const transformedPolygon = turf.transformScale(developablePolygon, 1, { units: 'meters' });
+        console.log('Transformed polygon:', transformedPolygon);
+        
+        const bufferedPolygon = turf.buffer(transformedPolygon, 5, { units: 'meters' });
+        console.log('Buffered polygon:', bufferedPolygon);
+        
+        // Check intersections
+        let intersectionFound = false;
+        features.forEach((feature, index) => {
+          console.log(`\nChecking power feature ${index}:`, feature);
+          console.log(`Power feature ${index} coordinates:`, feature.geometry?.coordinates);
+          
+          if (feature.geometry?.type === 'LineString' || feature.geometry?.type === 'MultiLineString') {
+            const line = turf.lineString(feature.geometry.coordinates);
+            console.log('Created line:', line);
+            console.log('Line coordinates:', line.geometry.coordinates);
+        
+            const intersects = turf.booleanIntersects(bufferedPolygon, line);
+            console.log(`Intersection result for feature ${index}:`, intersects);
+            console.log('Intersection test between:', {
+              bufferedPolygonCoords: bufferedPolygon.geometry.coordinates[0],
+              lineCoords: line.geometry.coordinates
+            });
+        
+            if (intersects) {
+              intersectionFound = true;
+              console.log('Found intersection - will return score 1');
+            }
+          } else {
+            console.log(`Feature ${index} is not a LineString:`, feature.geometry?.type);
+          }
+        });
 
-      if (minDistance <= 5) return 3;
-      if (minDistance <= 10) return 2;
-      return 1;
+        const result = {
+          score: intersectionFound ? 1 : 0,
+          minDistance: intersectionFound ? 0 : Infinity
+        };
+
+        console.log('=== Final Result ===');
+        console.log(result);
+
+        return result;
+
+      } catch (error) {
+        console.error('=== Power Score Calculation Error ===');
+        console.error('Error details:', error);
+        console.error('Error stack:', error.stack);
+        return { score: 0, minDistance: Infinity };
+      }
     },
-    getScoreDescription: (score) => {
+    getScoreDescription: (score, minDistance) => {
       switch (score) {
-        case 3:
-          return "Site is serviced by power infrastructure";
-        case 2:
-          return "Site has power infrastructure in close proximity";
         case 1:
-          return "Site is not serviced by power infrastructure";
+          return "Site has power infrastructure within 5m";
+        case 0:
+          return "No power infrastructure found near site";
         default:
           return "Power servicing not assessed";
       }
@@ -399,37 +536,38 @@ const scoringCriteria = {
   },
   servicing: {
     calculateScore: (waterScore, sewerScore, powerScore) => {
-      // Validate inputs
-      if (typeof waterScore !== 'number' || typeof sewerScore !== 'number' || typeof powerScore !== 'number') {
-        return 0;
-      }
+      // Extract scores from result objects if they exist, otherwise use the raw value
+      const water = typeof waterScore === 'object' ? waterScore.score : waterScore;
+      const sewer = typeof sewerScore === 'object' ? sewerScore.score : sewerScore;
+      const power = typeof powerScore === 'object' ? powerScore.score : powerScore;
       
-      // Count number of high-scoring services (score of 3)
-      const highScoreCount = [waterScore, sewerScore, powerScore].filter(score => score === 3).length;
-      
-      if (highScoreCount === 3) return 3;
-      if (highScoreCount >= 1) return 2;
-      return 1;
+      // Sum up the individual scores (each will be 0 or 1)
+      return water + sewer + power;
     },
     getScoreDescription: (waterScore, sewerScore, powerScore) => {
-      const services = [];
-      if (waterScore === 3) services.push('water');
-      if (sewerScore === 3) services.push('sewer');
-      if (powerScore === 3) services.push('power');
+      // Extract scores from result objects if they exist
+      const water = typeof waterScore === 'object' ? waterScore.score : waterScore;
+      const sewer = typeof sewerScore === 'object' ? sewerScore.score : sewerScore;
+      const power = typeof powerScore === 'object' ? powerScore.score : powerScore;
 
-      if (services.length === 3) {
-        return "Site is serviced by water, sewer and power";
+      const services = [];
+      if (water === 1) services.push('water');
+      if (sewer === 1) services.push('sewer');
+      if (power === 1) services.push('power');
+
+      if (services.length === 0) {
+        return "No servicing infrastructure found";
       }
       
-      if (services.length > 0) {
-        // Format list with Oxford comma if needed
-        if (services.length === 2) {
-          return `Site is serviced by ${services.join(' and ')}`;
-        }
-        return `Site is serviced by ${services[0]}`;
+      if (services.length === 1) {
+        return `Site has ${services[0]} infrastructure`;
       }
       
-      return "Site is not serviced";
+      if (services.length === 2) {
+        return `Site has ${services[0]} and ${services[1]} infrastructure`;
+      }
+      
+      return `Site has water, sewer and power infrastructure`;
     },
     getScoreColor: (score) => {
       return scoreColors[score] || scoreColors[0];
@@ -437,4 +575,4 @@ const scoringCriteria = {
   }
 };
 
-export default scoringCriteria; 
+export default scoringCriteria;

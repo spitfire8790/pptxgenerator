@@ -753,6 +753,10 @@ export async function captureWaterMainsMap(feature, developableArea = null) {
           if (waterMainsResponse.features?.length > 0) {
             console.log(`Drawing ${waterMainsResponse.features.length} water mains features...`);
             waterMainsFeatures = waterMainsResponse.features;
+            
+            // Store the features directly in the feature object
+            feature.properties.waterFeatures = waterMainsFeatures;
+            
             waterMainsFeatures.forEach((feature, index) => {
               console.log(`Drawing water mains feature ${index + 1}...`);
               drawBoundary(ctx, feature.geometry.coordinates, centerX, centerY, size, config.width, {
@@ -784,11 +788,11 @@ export async function captureWaterMainsMap(feature, developableArea = null) {
       });
     }
 
-    return {
-      image: canvas.toDataURL('image/png', 1.0),
-      features: waterMainsFeatures
-    };
+    // Take screenshot
+    const screenshot = await canvas.toDataURL();
+    feature.properties.waterMainsScreenshot = screenshot;
 
+    return { image: screenshot, features: waterMainsFeatures };
   } catch (error) {
     console.error('Failed to capture water mains map:', error);
     return null;
@@ -1016,6 +1020,10 @@ export async function captureSewerMap(feature, developableArea = null) {
           if (sewerResponse.features?.length > 0) {
             console.log(`Drawing ${sewerResponse.features.length} sewer features...`);
             sewerFeatures = sewerResponse.features;
+
+            // Store the features directly in the feature object
+            feature.properties.sewerFeatures = sewerFeatures;
+
             sewerFeatures.forEach((feature, index) => {
               console.log(`Drawing sewer feature ${index + 1}...`);
               drawBoundary(ctx, feature.geometry.coordinates, centerX, centerY, size, config.width, {
