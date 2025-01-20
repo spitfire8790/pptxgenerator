@@ -1917,6 +1917,7 @@ export async function captureBushfireMap(feature, developableArea = null) {
       console.error('Failed to load aerial layer:', error);
     }
 
+    let bushfireFeatures = [];
     try {
       // 2. Bushfire layer
       console.log('Loading bushfire layer...');
@@ -1927,6 +1928,28 @@ export async function captureBushfireMap(feature, developableArea = null) {
         padding: 0.3
       };
 
+      // First get the features
+      const { bbox } = calculateMercatorParams(centerX, centerY, size);
+      const queryParams = new URLSearchParams({
+        where: '1=1',
+        geometry: bbox,
+        geometryType: 'esriGeometryEnvelope',
+        inSR: 3857,
+        spatialRel: 'esriSpatialRelIntersects',
+        outFields: '*',
+        returnGeometry: true,
+        f: 'geojson'
+      });
+
+      const queryUrl = `${bushfireConfig.url}/${bushfireConfig.layerId}/query?${queryParams.toString()}`;
+      const bushfireResponse = await proxyRequest(queryUrl);
+      if (bushfireResponse?.features?.length > 0) {
+        bushfireFeatures = bushfireResponse.features;
+        // Store the features in the feature properties
+        feature.properties.site_suitability__bushfireFeatures = bushfireResponse;
+      }
+
+      // Then get the image
       const params = new URLSearchParams({
         f: 'image',
         format: 'png32',
@@ -1970,9 +1993,9 @@ export async function captureBushfireMap(feature, developableArea = null) {
     }
 
     // Add legend
-    const legendHeight = 200;
-    const legendWidth = 400;
-    const padding = 30;
+    const legendHeight = 240; // Reduced height since we removed source text
+    const legendWidth = 500;
+    const padding = 20;
     const legendX = canvas.width - legendWidth - padding;
     const legendY = canvas.height - legendHeight - padding;
 
@@ -1984,10 +2007,10 @@ export async function captureBushfireMap(feature, developableArea = null) {
     ctx.strokeRect(legendX, legendY, legendWidth, legendHeight);
 
     // Legend title
-    ctx.font = 'bold 32px Public Sans';
+    ctx.font = 'bold 28px Public Sans';
     ctx.fillStyle = '#002664';
     ctx.textBaseline = 'top';
-    ctx.fillText('Bushfire Risk Categories', legendX + padding, legendY + padding);
+    ctx.fillText('Bushfire Prone Land', legendX + padding, legendY + padding);
 
     // Legend items
     const legendItems = [
@@ -1998,18 +2021,21 @@ export async function captureBushfireMap(feature, developableArea = null) {
     ];
 
     ctx.textBaseline = 'middle';
-    ctx.font = '24px Public Sans';
+    ctx.font = '22px Public Sans';
 
     legendItems.forEach((item, index) => {
-      const y = legendY + padding + 60 + (index * 35);
+      const y = legendY + padding + 60 + (index * 45); // Increased spacing between items
       
       // Draw color box
       ctx.fillStyle = item.color;
-      ctx.fillRect(legendX + padding, y - 12, 24, 24);
+      ctx.fillRect(legendX + padding, y - 10, 20, 20);
+      ctx.strokeStyle = '#363636';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(legendX + padding, y - 10, 20, 20);
       
       // Draw label
       ctx.fillStyle = '#363636';
-      ctx.fillText(item.label, legendX + padding + 40, y);
+      ctx.fillText(item.label, legendX + padding + 35, y);
     });
 
     return canvas.toDataURL('image/png', 1.0);
