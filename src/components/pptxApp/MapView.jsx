@@ -28,7 +28,7 @@ const MapView = ({ onFeatureSelect, planningLayer }) => {
       rpc.addLayer({
         type: 'arcgis',
         url: planningLayer,
-        opacity: 0.7
+        opacity: 0.6
       });
     }
 

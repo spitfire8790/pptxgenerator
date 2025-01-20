@@ -9,6 +9,9 @@ import { addPrimarySiteAttributesSlide } from '../components/pptxApp/slides/prim
 import { addSecondaryAttributesSlide } from '../components/pptxApp/slides/secondaryAttributesSlide';
 import { addPlanningSlide2 } from '../components/pptxApp/slides/planningSlide2';
 import { addServicingSlide } from '../components/pptxApp/slides/servicingSlide';
+import { addUtilisationSlide } from '../components/pptxApp/slides/utilisationSlide';
+import { addAccessSlide } from '../components/pptxApp/slides/accessSlide';
+import { addHazardsSlide } from '../components/pptxApp/slides/hazardsSlide';
 
 export async function generateReport(properties, onProgress) {
   try {
@@ -68,6 +71,27 @@ export async function generateReport(properties, onProgress) {
 
     if (properties.selectedSlides.servicing !== false) {
       await addServicingSlide(pptx, properties);
+      progress = 98;
+      onProgress?.(progress);
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    if (properties.selectedSlides.utilisation !== false) {
+      await addUtilisationSlide(pptx, properties);
+      progress = 90;
+      onProgress?.(progress);
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    if (properties.selectedSlides.access !== false) {
+      await addAccessSlide(pptx, properties);
+      progress = 95;
+      onProgress?.(progress);
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    if (properties.selectedSlides.hazards !== false) {
+      await addHazardsSlide(pptx, properties);
       progress = 98;
       onProgress?.(progress);
       await new Promise(resolve => setTimeout(resolve, 300));

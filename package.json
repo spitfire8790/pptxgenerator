@@ -44,7 +44,9 @@
     "lodash-es": "^4.17.21",
     "lucide-react": "^0.292.0",
     "mapbox-gl": "^2.15.0",
+    "node-fetch": "^3.3.0",
     "papaparse": "^5.4.1",
+    "playwright": "^1.49.1",
     "plotly.js": "^2.35.2",
     "pptx-parser": "^1.1.7-beta.9",
     "pptxgenjs": "^3.12.0",
@@ -65,8 +67,7 @@
     "tailwind-merge": "^2.5.4",
     "tailwindcss-animate": "^1.0.7",
     "tiny-invariant": "^1.3.3",
-    "xlsx": "^0.18.5",
-    "node-fetch": "^3.3.0"
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/react": "^18.2.15",

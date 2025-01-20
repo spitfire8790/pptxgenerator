@@ -16,7 +16,7 @@ export const LAYER_CONFIGS = {
     opacity: 1,
     width: 2048,
     height: 2048,
-    padding: 0.5,
+    padding: 1,
     dpi: 300,
   },
   [SCREENSHOT_TYPES.SNAPSHOT]: {
@@ -64,7 +64,7 @@ export const LAYER_CONFIGS = {
     size: 2048,
     width: 2048,
     height: 2048,
-    padding: 0.1,
+    padding: 0.3,
     dpi: 300,
     format: 'png32',
     transparent: true,

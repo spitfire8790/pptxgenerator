@@ -3,9 +3,10 @@ import { captureWaterMainsMap, captureSewerMap, capturePowerMap } from '../utils
 import scoringCriteria from './scoringLogic';
 
 export async function addServicingSlide(pptx, propertyData) {
+  let slide;
   try {
     console.log('Starting to add servicing slide...');
-    const slide = pptx.addSlide();
+    slide = pptx.addSlide();
 
     // Add title
     slide.addText([
@@ -189,7 +190,7 @@ export async function addServicingSlide(pptx, propertyData) {
       y: '75%',
       w: '28%',
       h: '9%',
-      fill: waterScore === 1 ? '90EE90' : 'FFB6C1',  // Light green if 1, light red if 0
+      fill: waterScore === 1 ? 'E6F2DE' : 'FFE6EA',  // Light green if 1, light red if 0
       line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
     }));
 
@@ -236,7 +237,7 @@ export async function addServicingSlide(pptx, propertyData) {
       y: '75%',
       w: '28%',
       h: '9%',
-      fill: sewerScore === 1 ? '90EE90' : 'FFB6C1',  // Light green if 1, light red if 0
+      fill: sewerScore === 1 ? 'E6F2DE' : 'FFE6EA',  // Light green if 1, light red if 0
       line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
     }));
 
@@ -283,7 +284,7 @@ export async function addServicingSlide(pptx, propertyData) {
       y: '75%',
       w: '28%',
       h: '9%',
-      fill: powerScore === 1 ? '90EE90' : 'FFB6C1',  // Light green if 1, light red if 0
+      fill: powerScore === 1 ? 'E6F2DE' : 'FFE6EA',  // Light green if 1, light red if 0
       line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
     }));
 
@@ -349,6 +350,19 @@ export async function addServicingSlide(pptx, propertyData) {
 
   } catch (error) {
     console.error('Error generating servicing slide:', error);
+    // Create an error slide if we haven't created one yet
+    if (!slide) {
+      slide = pptx.addSlide();
+      slide.addText('Error generating servicing slide: ' + error.message, {
+        x: '10%',
+        y: '45%',
+        w: '80%',
+        h: '10%',
+        fontSize: 14,
+        color: 'FF0000',
+        align: 'center'
+      });
+    }
     return slide;
   }
 }

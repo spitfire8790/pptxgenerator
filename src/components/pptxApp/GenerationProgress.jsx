@@ -8,6 +8,9 @@ const steps = [
   { id: 'secondaryAttributes', label: 'Adding Secondary Attributes' },
   { id: 'planning', label: 'Generating Planning Details' },
   { id: 'servicing', label: 'Checking Site Servicing' },
+  { id: 'geoscape', label: 'Adding Utilisation Data' },
+  { id: 'access', label: 'Assessing Site Access' },
+  { id: 'hazards', label: 'Assessing Natural Hazards' },
   { id: 'finalizing', label: 'Finalising Report' }
 ];
 

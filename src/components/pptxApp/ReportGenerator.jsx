@@ -5,7 +5,20 @@ import { addPropertySnapshotSlide } from './slides/propertySnapshotSlide';
 import { addPlanningSlide } from './slides/planningSlide';
 import { addPlanningSlide2 } from './slides/planningSlide2';
 import { addServicingSlide } from './slides/servicingSlide';
-import { captureMapScreenshot, capturePrimarySiteAttributesMap, captureContourMap, captureRegularityMap, captureHeritageMap, captureAcidSulfateMap, captureWaterMainsMap, captureSewerMap, capturePowerMap } from './utils/map/services/screenshot';
+import { 
+  captureMapScreenshot, 
+  capturePrimarySiteAttributesMap, 
+  captureContourMap, 
+  captureRegularityMap, 
+  captureHeritageMap, 
+  captureAcidSulfateMap, 
+  captureWaterMainsMap, 
+  captureSewerMap, 
+  capturePowerMap,
+  captureGeoscapeMap,
+  captureFloodMap,
+  captureBushfireMap
+} from './utils/map/services/screenshot';
 import { SCREENSHOT_TYPES } from './utils/map/config/screenshotTypes';
 import SlidePreview from './SlidePreview';
 import PlanningMapView from './PlanningMapView';
@@ -14,6 +27,9 @@ import DevelopableAreaSelector from './DevelopableAreaSelector';
 import GenerationProgress from './GenerationProgress';
 import { addPrimarySiteAttributesSlide } from './slides/primarySiteAttributesSlide';
 import { addSecondaryAttributesSlide } from './slides/secondaryAttributesSlide';
+import { addUtilisationSlide } from './slides/utilisationSlide';
+import { addAccessSlide } from './slides/accessSlide';
+import { addHazardsSlide } from './slides/hazardsSlide';
 
 const slideOptions = [
   { id: 'cover', label: 'Cover Page', addSlide: addCoverSlide },
@@ -22,7 +38,10 @@ const slideOptions = [
   { id: 'secondaryAttributes', label: 'Secondary Attributes', addSlide: addSecondaryAttributesSlide },
   { id: 'planning', label: 'Planning', addSlide: addPlanningSlide },
   { id: 'planningTwo', label: 'Heritage & Acid Sulfate Soils', addSlide: addPlanningSlide2 },
-  { id: 'servicing', label: 'Servicing', addSlide: addServicingSlide }
+  { id: 'servicing', label: 'Servicing', addSlide: addServicingSlide },
+  { id: 'utilisation', label: 'Utilisation and Improvements', addSlide: addUtilisationSlide },
+  { id: 'access', label: 'Access', addSlide: addAccessSlide },
+  { id: 'hazards', label: 'Natural Hazards', addSlide: addHazardsSlide }
 ];
 
 const ReportGenerator = ({ selectedFeature }) => {
@@ -37,7 +56,10 @@ const ReportGenerator = ({ selectedFeature }) => {
     secondaryAttributes: true,
     planning: true,
     planningTwo: true,
-    servicing: true
+    servicing: true,
+    utilisation: true,
+    access: true,
+    hazards: true
   });
   const [developableArea, setDevelopableArea] = useState(null);
   const planningMapRef = useRef();
@@ -77,7 +99,10 @@ const ReportGenerator = ({ selectedFeature }) => {
       const { image: waterMainsScreenshot } = await captureWaterMainsMap(selectedFeature, developableArea) || {};
       const { image: sewerScreenshot } = await captureSewerMap(selectedFeature, developableArea) || {};
       const powerScreenshot = await capturePowerMap(selectedFeature, developableArea);
-      
+      const { image: geoscapeScreenshot, features: geoscapeFeatures } = await captureGeoscapeMap(selectedFeature, developableArea) || {};
+      const floodMapScreenshot = await captureFloodMap(selectedFeature, developableArea);
+      const bushfireMapScreenshot = await captureBushfireMap(selectedFeature, developableArea);
+
       console.log('Aerial Screenshot:', aerialScreenshot ? 'Present' : 'Missing');
       console.log('Snapshot Screenshot:', snapshotScreenshot ? 'Present' : 'Missing');
       console.log('Zoning Screenshot:', zoningScreenshot ? 'Present' : 'Missing');
@@ -89,7 +114,9 @@ const ReportGenerator = ({ selectedFeature }) => {
       console.log('Heritage Screenshot:', heritageScreenshot ? 'Present' : 'Missing');
       console.log('Acid Sulfate Screenshot:', acidSulfateScreenshot ? 'Present' : 'Missing');
       console.log('Water Mains Screenshot:', waterMainsScreenshot ? 'Present' : 'Missing');
-
+      console.log('Geoscape Screenshot:', geoscapeScreenshot ? 'Present' : 'Missing');
+      console.log('Flood Map Screenshot:', floodMapScreenshot ? 'Present' : 'Missing');
+      console.log('Bushfire Map Screenshot:', bushfireMapScreenshot ? 'Present' : 'Missing');
 
       setCompletedSteps(prev => [...prev, 'screenshots']);
       setCurrentStep('cover');
@@ -137,34 +164,46 @@ const ReportGenerator = ({ selectedFeature }) => {
         waterFeatures: selectedFeature.properties?.waterFeatures,
         sewerFeatures: selectedFeature.properties?.sewerFeatures,
         powerFeatures: selectedFeature.properties?.powerFeatures,
+        site_suitability__floodFeatures: selectedFeature.properties?.site_suitability__floodFeatures,
+        site_suitability__bushfireFeatures: selectedFeature.properties?.site_suitability__bushfireFeatures,
+        geoscapeScreenshot,
+        geoscapeFeatures,
+        floodMapScreenshot,
+        bushfireMapScreenshot,
       };
 
       // Generate the report with progress tracking
       await generateReport(propertyData, (progress) => {
-        if (progress <= 15) {
+        if (progress <= 12) {
           setCurrentStep('cover');
-        } else if (progress <= 30) {
+        } else if (progress <= 24) {
           setCompletedSteps(prev => [...new Set([...prev, 'cover'])]);
           setCurrentStep('snapshot');
-        } else if (progress <= 45) {
+        } else if (progress <= 36) {
           setCompletedSteps(prev => [...new Set([...prev, 'cover', 'snapshot'])]);
           setCurrentStep('primaryAttributes');
-        } else if (progress <= 60) {
+        } else if (progress <= 48) {
           setCompletedSteps(prev => [...new Set([...prev, 'cover', 'snapshot', 'primaryAttributes'])]);
           setCurrentStep('secondaryAttributes');
-        } else if (progress <= 75) {
+        } else if (progress <= 60) {
           setCompletedSteps(prev => [...new Set([...prev, 'cover', 'snapshot', 'primaryAttributes', 'secondaryAttributes'])]);
           setCurrentStep('planning');
-        } else if (progress <= 90) {
+        } else if (progress <= 72) {
           setCompletedSteps(prev => [...new Set([...prev, 'cover', 'snapshot', 'primaryAttributes', 'secondaryAttributes', 'planning'])]);
           setCurrentStep('planningTwo');
-        } else {
+        } else if (progress <= 84) {
           setCompletedSteps(prev => [...new Set([...prev, 'cover', 'snapshot', 'primaryAttributes', 'secondaryAttributes', 'planning', 'planningTwo'])]);
-          setCurrentStep('finalizing');
+          setCurrentStep('servicing');
+        } else if (progress <= 96) {
+          setCompletedSteps(prev => [...new Set([...prev, 'cover', 'snapshot', 'primaryAttributes', 'secondaryAttributes', 'planning', 'planningTwo', 'servicing'])]);
+          setCurrentStep('utilisation');
+        } else {
+          setCompletedSteps(prev => [...new Set([...prev, 'cover', 'snapshot', 'primaryAttributes', 'secondaryAttributes', 'planning', 'planningTwo', 'servicing', 'utilisation'])]);
+          setCurrentStep('finalising');
         }
       });
 
-      setCompletedSteps(prev => [...prev, 'finalizing']);
+      setCompletedSteps(prev => [...prev, 'finalising']);
       setStatus('success');
     } catch (error) {
       console.error('Error generating report:', error);

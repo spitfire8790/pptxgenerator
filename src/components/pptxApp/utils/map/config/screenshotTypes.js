@@ -12,5 +12,6 @@ export const SCREENSHOT_TYPES = {
   ACID_SULFATE_SOILS: 'acidSulfateSoils',
   WATER_MAINS: 'waterMains',
   SEWER_MAINS: 'sewerMains',
-  POWER: 'power'
+  POWER: 'power',
+  STREET_VIEW: 'streetView'
 };

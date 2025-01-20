@@ -23,44 +23,35 @@ export async function proxyRequest(url, options = {}) {
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      console.error('Proxy error details:', errorData);
-      throw new Error(`Proxy request failed: ${errorData.error}\n${errorData.details || ''}`);
+      throw new Error(`Proxy request failed: ${response.statusText}`);
     }
 
     const contentType = response.headers.get('content-type');
     
+    // Clone the response before reading it
+    const responseClone = response.clone();
+    
     // Handle image responses
     if (contentType?.includes('image') || url.includes('/export') || url.includes('GetMap')) {
-      const blob = await response.blob();
+      const blob = await responseClone.blob();
       return URL.createObjectURL(blob);
+    }
+
+    // Handle Street View responses
+    if (url.includes('maps.google.com/maps') || url.includes('google.com/maps')) {
+      return await responseClone.text();
     }
 
     // Handle JSON responses
     try {
-      const data = await response.json();
+      const data = await responseClone.json();
       return data;
     } catch (e) {
       // If JSON parsing fails, return the raw text
-      const text = await response.text();
-      return text;
+      return await response.text();
     }
   } catch (error) {
     console.error('Proxy request failed:', error);
     throw error;
-  }
-
-  // Add better error handling for feature requests
-  if (url.includes('/query')) {
-    try {
-      const data = await response.json();
-      if (!data.features) {
-        console.warn('No features found in response:', data);
-      }
-      return data;
-    } catch (e) {
-      console.error('Failed to parse feature response:', e);
-      return { features: [] };
-    }
   }
 } 
