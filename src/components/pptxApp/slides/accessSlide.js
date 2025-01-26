@@ -1,7 +1,7 @@
 import { convertCmValues } from '../utils/units';
 import scoringCriteria from './scoringLogic';
 import { proxyRequest } from '../utils/services/proxyService';
-import { captureRoadsMap } from '../utils/map/services/screenshot';
+import { captureRoadsMap, captureUDPPrecinctMap, capturePTALMap } from '../utils/map/services/screenshot';
 
 const styles = {
   title: {
@@ -78,6 +78,24 @@ const styles = {
 export async function addAccessSlide(pptx, propertyData) {
   try {
     console.log('Starting to add access slide...');
+    
+    // Format developableArea consistently for both scoring and screenshots
+    const formattedDevelopableArea = propertyData.developableArea?.length ? {
+      type: 'FeatureCollection',
+      features: propertyData.developableArea.map(area => ({
+        type: 'Feature',
+        geometry: area.geometry
+      }))
+    } : null;
+    
+    // Calculate scores and descriptions first
+    const roadsScoreResult = scoringCriteria.roads.calculateScore(propertyData.roadFeatures, propertyData.developableArea);
+    const roadsDescription = scoringCriteria.roads.getScoreDescription(roadsScoreResult);
+    
+    const udpScoreResult = scoringCriteria.udpPrecincts.calculateScore(propertyData.udpPrecincts, propertyData.developableArea);
+    const udpDescription = scoringCriteria.udpPrecincts.getScoreDescription(udpScoreResult);
+
+    // Create slide
     const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
 
     // Add title
@@ -132,7 +150,7 @@ export async function addAccessSlide(pptx, propertyData) {
         coordinates: [propertyData.site__geometry]
       },
       properties: propertyData
-    }, propertyData.developableArea);
+    }, formattedDevelopableArea);
     if (roadsScreenshot) {
       slide.addImage({
         data: roadsScreenshot,
@@ -146,25 +164,22 @@ export async function addAccessSlide(pptx, propertyData) {
       });
     }
 
-    // Roads Text Box
+    // Roads description box
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
       x: '5%',
       y: '75%',
       w: '28%',
-      h: '14%',
-      fill: 'FFFBF2',
+      h: '12%',
+      fill: scoringCriteria.roads.getScoreColor(roadsScoreResult.score).replace('#', ''),
       line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
     }));
 
-    // Roads description
-    const roadsScore = scoringCriteria.roads.calculateScore(propertyData.roadFeatures, propertyData.developableArea);
-    const roadsDescription = scoringCriteria.roads.getScoreDescription(roadsScore);
-    
+    // Roads description text
     slide.addText(roadsDescription, convertCmValues({
       x: '5%',
       y: '75%',
       w: '28%',
-      h: '5%',
+      h: '8%',
       fontSize: 7,
       color: '363636',
       fontFace: 'Public Sans',
@@ -173,10 +188,32 @@ export async function addAccessSlide(pptx, propertyData) {
       wrap: true
     }));
 
-    // Roads Source
+    // Roads score text
+    slide.addText(`Score: ${roadsScoreResult.score}/3`, convertCmValues({
+      x: '5%',
+      y: '80%',
+      w: '28%',
+      h: '4%',
+      fontSize: 7,
+      color: '363636',
+      fontFace: 'Public Sans',
+      bold: true,
+      align: 'right'
+    }));
+
+    // Roads line
+    slide.addShape(pptx.shapes.LINE, convertCmValues({
+      x: '6%',
+      y: '83.5%',
+      w: '26%',
+      h: 0,
+      line: { color: '8C8C8C', width: 0.4 }
+    }));
+
+    // Roads source text
     slide.addText('Source: NSW Road Segments, DPHI, 2024', convertCmValues({
       x: '5%',
-      y: '86%',
+      y: '83%',
       w: '28%',
       h: '3%',
       fontSize: 6,
@@ -196,7 +233,7 @@ export async function addAccessSlide(pptx, propertyData) {
       line: { color: '8C8C8C', width: 0.4 }
     }));
 
-    // Section 2 - Strategic (Middle) - Placeholder for now
+    // Section 2 - Strategic (Middle)
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
       x: '36%',
       y: '18%',
@@ -220,7 +257,96 @@ export async function addAccessSlide(pptx, propertyData) {
       valign: 'middle'
     }));
 
-    // Section 3 - PTAL (Right) - Placeholder for now
+    // Add UDP precincts map
+    const udpScreenshot = await captureUDPPrecinctMap({
+      geometry: {
+        coordinates: [propertyData.site__geometry]
+      },
+      properties: propertyData
+    }, formattedDevelopableArea);
+    if (udpScreenshot) {
+      slide.addImage({
+        data: udpScreenshot,
+        ...convertCmValues({
+          x: '36%',
+          y: '24%',
+          w: '28%',
+          h: '50%',
+          sizing: { type: 'contain', align: 'center', valign: 'middle' }
+        })
+      });
+    }
+
+    // UDP Precincts description box
+    slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
+      x: '36%',
+      y: '75%',
+      w: '28%',
+      h: '12%',
+      fill: scoringCriteria.udpPrecincts.getScoreColor(udpScoreResult.score).replace('#', ''),
+      line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
+    }));
+
+    // UDP Precincts description text
+    slide.addText(udpDescription, convertCmValues({
+      x: '36%',
+      y: '75%',
+      w: '28%',
+      h: '8%',
+      fontSize: 7,
+      color: '363636',
+      fontFace: 'Public Sans',
+      align: 'left',
+      valign: 'top',
+      wrap: true
+    }));
+
+    // UDP Precincts score text
+    slide.addText(`Score: ${udpScoreResult.score}/3`, convertCmValues({
+      x: '36%',
+      y: '80%',
+      w: '28%',
+      h: '4%',
+      fontSize: 7,
+      color: '363636',
+      fontFace: 'Public Sans',
+      bold: true,
+      align: 'right'
+    }));
+
+    // UDP Precincts line
+    slide.addShape(pptx.shapes.LINE, convertCmValues({
+      x: '37%',
+      y: '83.5%',
+      w: '26%',
+      h: 0,
+      line: { color: '8C8C8C', width: 0.4 }
+    }));
+
+    // UDP Precincts source text
+    slide.addText('Source: Urban Development Program, DPHI, 2024', convertCmValues({
+      x: '36%',
+      y: '83%',
+      w: '28%',
+      h: '3%',
+      fontSize: 6,
+      color: '363636',
+      fontFace: 'Public Sans Light',
+      italic: true,
+      align: 'left',
+      wrap: true
+    }));
+
+    // For UDP Precincts section (middle)
+    slide.addShape(pptx.shapes.LINE, convertCmValues({
+      x: '37%',
+      y: '86%',
+      w: '26%',
+      h: 0,
+      line: { color: '8C8C8C', width: 0.4 }
+    }));
+
+    // Section 3 - PTAL (Right)
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
       x: '67%',
       y: '18%',
@@ -244,6 +370,103 @@ export async function addAccessSlide(pptx, propertyData) {
       valign: 'middle'
     }));
 
+    // Add PTAL map
+    const ptalScreenshot = await capturePTALMap({
+      geometry: {
+        coordinates: [propertyData.site__geometry]
+      },
+      properties: propertyData
+    }, formattedDevelopableArea);
+    if (ptalScreenshot) {
+      slide.addImage({
+        data: ptalScreenshot,
+        ...convertCmValues({
+          x: '67%',
+          y: '24%',
+          w: '28%',
+          h: '50%',
+          sizing: { type: 'contain', align: 'center', valign: 'middle' }
+        })
+      });
+    }
+
+    // PTAL description box
+    const ptalScoreResult = scoringCriteria.ptal.calculateScore(
+      propertyData.intersectingPtalValues || propertyData.ptalValues
+    );
+    const ptalDescription = scoringCriteria.ptal.getScoreDescription(
+      ptalScoreResult,
+      propertyData.intersectingPtalValues || propertyData.ptalValues
+    );
+
+    slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
+      x: '67%',
+      y: '75%',
+      w: '28%',
+      h: '12%',
+      fill: scoringCriteria.ptal.getScoreColor(ptalScoreResult).replace('#', ''),
+      line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
+    }));
+
+    // PTAL description text
+    slide.addText(ptalDescription, convertCmValues({
+      x: '67%',
+      y: '75%',
+      w: '28%',
+      h: '8%',
+      fontSize: 7,
+      color: '363636',
+      fontFace: 'Public Sans',
+      align: 'left',
+      valign: 'top',
+      wrap: true
+    }));
+
+    // PTAL score text
+    slide.addText(`Score: ${ptalScoreResult}/3`, convertCmValues({
+      x: '67%',
+      y: '80%',
+      w: '28%',
+      h: '4%',
+      fontSize: 7,
+      color: '363636',
+      fontFace: 'Public Sans',
+      bold: true,
+      align: 'right'
+    }));
+
+    // PTAL line
+    slide.addShape(pptx.shapes.LINE, convertCmValues({
+      x: '68%',
+      y: '83.5%',
+      w: '26%',
+      h: 0,
+      line: { color: '8C8C8C', width: 0.4 }
+    }));
+
+    // PTAL source text
+    slide.addText('Source: Transport for NSW, 2024', convertCmValues({
+      x: '67%',
+      y: '83%',
+      w: '28%',
+      h: '3%',
+      fontSize: 6,
+      color: '363636',
+      fontFace: 'Public Sans Light',
+      italic: true,
+      align: 'left',
+      wrap: true
+    }));
+
+    // For PTAL section (right)
+    slide.addShape(pptx.shapes.LINE, convertCmValues({
+      x: '68%',
+      y: '86%',
+      w: '26%',
+      h: 0,
+      line: { color: '8C8C8C', width: 0.4 }
+    }));
+
     // Add footer line
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.footerLine));
 
@@ -251,10 +474,12 @@ export async function addAccessSlide(pptx, propertyData) {
     slide.addText('Property and Development NSW', convertCmValues(styles.footer));
     slide.addText('8', convertCmValues(styles.pageNumber));
 
+    return slide;
   } catch (error) {
     console.error('Error adding access slide:', error);
     try {
-      slide.addText('Error generating access slide: ' + error.message, {
+      const errorSlide = pptx.addSlide({ masterName: 'NSW_MASTER' });
+      errorSlide.addText('Error generating access slide: ' + error.message, {
         x: '10%',
         y: '45%',
         w: '80%',
@@ -263,8 +488,10 @@ export async function addAccessSlide(pptx, propertyData) {
         color: 'FF0000',
         align: 'center'
       });
-    } catch (finalError) {
-      console.error('Failed to add error message to slide:', finalError);
+      return errorSlide;
+    } catch (slideError) {
+      console.error('Failed to add error message to slide:', slideError);
+      throw error; // Re-throw the original error
     }
   }
 }

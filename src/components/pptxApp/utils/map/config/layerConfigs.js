@@ -7,7 +7,7 @@ export const LAYER_CONFIGS = {
     opacity: 1,
     width: 2048,
     height: 2048,
-    padding: 0.3,
+    padding: 0.2,
     dpi: 300,
   },
   [SCREENSHOT_TYPES.COVER]: {

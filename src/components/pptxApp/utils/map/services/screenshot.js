@@ -8,6 +8,7 @@ import { proxyRequest } from '../../services/proxyService';
 import { loadImage } from '../utils/image';
 import { giraffeState } from '@gi-nx/iframe-sdk';
 
+
 console.log('Aerial config:', LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL]);
 
 export async function captureMapScreenshot(feature, type = SCREENSHOT_TYPES.SNAPSHOT, drawBoundaryLine = true, developableArea = null) {
@@ -854,19 +855,27 @@ export async function capturePowerMap(feature, developableArea = null) {
       // 2. Power infrastructure layers
       console.log('Loading power infrastructure layers...');
       
+      // Define power config
+      const powerConfig = {
+        baseUrl: 'https://portal.data.nsw.gov.au/arcgis/rest/services/Hosted/NSW_Electricity_Infrastructure/FeatureServer/0',
+        layerId: 19976
+      };
+      
       // Get the power layer data from Giraffe
       console.log('Fetching project layers from Giraffe...');
       const projectLayers = await giraffeState.get('projectLayers');
-      const powerLayer = projectLayers?.find(layer => layer.layer === 19976);
+      const powerLayer = projectLayers?.find(layer => layer.layer === powerConfig.layerId);
       console.log('Found power layer:', powerLayer);
       
       if (powerLayer) {
         console.log('Processing Giraffe power layer...');
         const { bbox } = calculateMercatorParams(centerX, centerY, size);
-        const tileUrl = powerLayer.layer_full?.style?.source?.tiles?.[0];
+        const vectorTileUrl = powerLayer.layer_full?.vector_source?.tiles?.[0];
         
-        if (tileUrl) {
-          const token = tileUrl.split('token=')?.[1]?.split('&')?.[0];
+        if (vectorTileUrl) {
+          const decodedUrl = decodeURIComponent(vectorTileUrl.split('/featureServer/{z}/{x}/{y}/')?.[1] || '');
+          const extractedToken = decodedUrl.split('token=')?.[1]?.split('&')?.[0];
+          
           const params = new URLSearchParams({
             where: '1=1',
             geometry: bbox,
@@ -876,11 +885,14 @@ export async function capturePowerMap(feature, developableArea = null) {
             outFields: '*',
             returnGeometry: true,
             f: 'geojson',
-            token: token
+            token: extractedToken
           });
 
           const url = `${powerConfig.baseUrl}/query?${params.toString()}`;
+          console.log('Final power request URL (with sensitive info removed):', url.replace(extractedToken, 'REDACTED'));
+          
           const powerResponse = await proxyRequest(url);
+          console.log('Power response:', powerResponse);
 
           if (powerResponse.features?.length > 0) {
             console.log(`Drawing ${powerResponse.features.length} Giraffe power features...`);
@@ -901,9 +913,10 @@ export async function capturePowerMap(feature, developableArea = null) {
 
       // Add LUAL power infrastructure layer
       console.log('Loading LUAL power infrastructure layer...');
+      const { bbox: mercatorBbox } = calculateMercatorParams(centerX, centerY, size);
       const lualParams = new URLSearchParams({
         where: '1=1',
-        geometry: bbox,
+        geometry: mercatorBbox,
         geometryType: 'esriGeometryEnvelope',
         inSR: 3857,
         spatialRel: 'esriSpatialRelIntersects',
@@ -913,14 +926,15 @@ export async function capturePowerMap(feature, developableArea = null) {
       });
 
       const lualUrl = `https://services-ap1.arcgis.com/ug6sGLFkytbXYo4f/arcgis/rest/services/LUAL_Network_LV_Public/FeatureServer/0/query?${lualParams.toString()}`;
-      const lualResponse = await fetch(lualUrl);
-      const lualData = await lualResponse.json();
+      console.log('LUAL request URL:', lualUrl);
+      const lualResponse = await proxyRequest(lualUrl);
+      console.log('LUAL response:', lualResponse);
 
-      if (lualData.features?.length > 0) {
-        console.log(`Drawing ${lualData.features.length} LUAL power features...`);
-        powerFeatures = powerFeatures.concat(lualData.features);
+      if (lualResponse.features?.length > 0) {
+        console.log(`Drawing ${lualResponse.features.length} LUAL power features...`);
+        powerFeatures = powerFeatures.concat(lualResponse.features);
 
-        lualData.features.forEach((feature, index) => {
+        lualResponse.features.forEach((feature, index) => {
           console.log(`Drawing LUAL power feature ${index + 1}...`);
           const style = feature.properties.ASSET_TYPE === 'OH' ? {
             strokeStyle: '#FFBD33',
@@ -1308,7 +1322,7 @@ export async function captureStreetViewScreenshot(feature) {
           const bearing = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
 
           // Create the street view image
-          const streetViewUrl = `https://maps.googleapis.com/maps/api/streetview?size=3840x2160&location=${panoramaLat},${panoramaLng}&heading=${bearing}&pitch=0&fov=120&key=${API_KEY}`;
+          const streetViewUrl = `https://maps.googleapis.com/maps/api/streetview?size=3840x2160&location=${panoramaLat},${panoramaLng}&heading=${bearing}&pitch=0&fov=90&key=${API_KEY}`;
           console.log('Found valid Street View location, requesting image');
           const streetViewImage = await loadImage(streetViewUrl);
 
@@ -1551,7 +1565,7 @@ export async function captureRoadsMap(feature, developableArea = null) {
         bboxSR: 3857,
         imageSR: 3857,
         layers: 'show:0',
-        dpi: 96
+        dpi: 300
       });
 
       const url = `${roadsConfig.url}/export?${params.toString()}`;
@@ -2041,6 +2055,727 @@ export async function captureBushfireMap(feature, developableArea = null) {
     return canvas.toDataURL('image/png', 1.0);
   } catch (error) {
     console.error('Failed to capture bushfire map:', error);
+    return null;
+  }
+}
+
+// Add helper function for drawing rounded rectangle text boxes
+function drawRoundedTextBox(ctx, text, x, y, padding = 10, cornerRadius = 5) {
+  // Offset the y position up by half the box height to center on point
+  const yOffset = -15; // Half of box height (30/2)
+  y = y + yOffset;
+
+  // Measure text width
+  const textMetrics = ctx.measureText(text);
+  const boxWidth = textMetrics.width + (padding * 2);
+  const boxHeight = 30; // Fixed height for consistency
+  
+  // Center the box horizontally on the point
+  x = x - (boxWidth / 2);
+  
+  // Draw rounded rectangle background
+  ctx.beginPath();
+  ctx.moveTo(x + cornerRadius, y);
+  ctx.lineTo(x + boxWidth - cornerRadius, y);
+  ctx.quadraticCurveTo(x + boxWidth, y, x + boxWidth, y + cornerRadius);
+  ctx.lineTo(x + boxWidth, y + boxHeight - cornerRadius);
+  ctx.quadraticCurveTo(x + boxWidth, y + boxHeight, x + boxWidth - cornerRadius, y + boxHeight);
+  ctx.lineTo(x + cornerRadius, y + boxHeight);
+  ctx.quadraticCurveTo(x, y + boxHeight, x, y + boxHeight - cornerRadius);
+  ctx.lineTo(x, y + cornerRadius);
+  ctx.quadraticCurveTo(x, y, x + cornerRadius, y);
+  ctx.closePath();
+  
+  // Fill white background
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+  ctx.fill();
+  
+  // Draw orange stroke
+  ctx.strokeStyle = 'rgba(255, 165, 0, 0.8)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  
+  // Draw text
+  ctx.fillStyle = '#000000';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x + padding, y + (boxHeight / 2));
+}
+
+export async function captureUDPPrecinctMap(feature, developableArea) {
+  if (!feature) return null;
+  console.log('Starting UDP precinct map capture...');
+
+  try {
+    const config = {
+      width: 2048,
+      height: 2048,
+      padding: 5
+    };
+    
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    
+    // Create base canvas
+    const canvas = createCanvas(config.width, config.height);
+    const ctx = canvas.getContext('2d', { alpha: true });
+
+    try {
+      // 1. Aerial imagery (base)
+      console.log('Loading aerial base layer...');
+      const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];
+      const { bbox } = calculateMercatorParams(centerX, centerY, size);
+      
+      const params = new URLSearchParams({
+        SERVICE: 'WMS',
+        VERSION: '1.3.0',
+        REQUEST: 'GetMap',
+        BBOX: bbox,
+        CRS: 'EPSG:3857',
+        WIDTH: config.width,
+        HEIGHT: config.height,
+        LAYERS: aerialConfig.layers,
+        STYLES: '',
+        FORMAT: 'image/png',
+        DPI: 300,
+        MAP_RESOLUTION: 300,
+        FORMAT_OPTIONS: 'dpi:300'
+      });
+
+      const url = `${aerialConfig.url}?${params.toString()}`;
+      const baseMap = await loadImage(url);
+      drawImage(ctx, baseMap, canvas.width, canvas.height, 0.5);
+    } catch (error) {
+      console.error('Failed to load aerial layer:', error);
+    }
+
+    try {
+      // 2. UDP Precincts layer
+      console.log('Loading UDP precincts...');
+      const udpResponse = await fetch('/UDP_Precincts.geojson');
+      const udpData = await udpResponse.json();
+      
+      if (udpData.features?.length > 0) {
+        console.log(`Drawing ${udpData.features.length} UDP precinct features...`);
+        
+        // Store the features in the feature object for scoring
+        if (feature.properties) {
+          feature.properties.udpPrecincts = udpData.features;
+        } else {
+          feature.properties = { udpPrecincts: udpData.features };
+        }
+
+        // Set font for labels before drawing features
+        ctx.font = 'bold 24px Public Sans';
+
+        udpData.features.forEach((precinctFeature, index) => {
+          console.log(`Drawing UDP precinct feature ${index + 1}...`);
+          if (precinctFeature.geometry?.coordinates) {
+            // For MultiPolygon, draw each polygon
+            if (precinctFeature.geometry.type === 'MultiPolygon') {
+              precinctFeature.geometry.coordinates.forEach(polygonCoords => {
+                polygonCoords.forEach(coords => {
+                  drawBoundary(ctx, coords, centerX, centerY, size, config.width, {
+                    fill: true,
+                    strokeStyle: 'rgba(255, 165, 0, 0.8)',
+                    fillStyle: 'rgba(255, 165, 0, 0.5)',
+                    lineWidth: 2
+                  });
+                });
+              });
+            } else if (precinctFeature.geometry.type === 'Polygon') {
+              // For single Polygon
+              precinctFeature.geometry.coordinates.forEach(coords => {
+                drawBoundary(ctx, coords, centerX, centerY, size, config.width, {
+                  fill: true,
+                  strokeStyle: 'rgba(255, 165, 0, 0.8)',
+                  fillStyle: 'rgba(255, 165, 0, 0.5)',
+                  lineWidth: 2
+                });
+              });
+            }
+
+            // Calculate centroid for label placement
+            let bounds = {
+              minX: Infinity,
+              minY: Infinity,
+              maxX: -Infinity,
+              maxY: -Infinity
+            };
+
+            const updateBounds = (coords) => {
+              coords.forEach(coord => {
+                bounds.minX = Math.min(bounds.minX, coord[0]);
+                bounds.minY = Math.min(bounds.minY, coord[1]);
+                bounds.maxX = Math.max(bounds.maxX, coord[0]);
+                bounds.maxY = Math.max(bounds.maxY, coord[1]);
+              });
+            };
+
+            if (precinctFeature.geometry.type === 'MultiPolygon') {
+              precinctFeature.geometry.coordinates.forEach(polygonCoords => {
+                polygonCoords.forEach(coords => {
+                  updateBounds(coords);
+                });
+              });
+            } else {
+              precinctFeature.geometry.coordinates.forEach(coords => {
+                updateBounds(coords);
+              });
+            }
+
+            // Calculate centroid from bounds
+            const centroidX = (bounds.minX + bounds.maxX) / 2;
+            const centroidY = (bounds.minY + bounds.maxY) / 2;
+
+            // Convert centroid to canvas coordinates
+            const canvasX = ((centroidX - (centerX - size/2)) / size) * config.width;
+            const canvasY = config.height - ((centroidY - (centerY - size/2)) / size) * config.height;
+
+            // Draw label if precinct name exists
+            if (precinctFeature.properties?.precinct_name) {
+              console.log(`Drawing label for ${precinctFeature.properties.Precinct_Name} at (${canvasX}, ${canvasY})`);
+              drawRoundedTextBox(ctx, precinctFeature.properties.Precinct_Name, canvasX, canvasY);
+            }
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load UDP precincts:', error);
+    }
+
+    // Draw boundaries
+    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+      strokeStyle: '#FF0000',
+      lineWidth: 6
+    });
+
+    if (developableArea?.features?.[0]) {
+      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
+        strokeStyle: '#02d1b8',
+        lineWidth: 12,
+        dashArray: [20, 10]
+      });
+    }
+
+    // Add legend
+    const legendHeight = 200;
+    const legendWidth = 400;
+    const padding = 20;
+    const legendX = canvas.width - legendWidth - padding;
+    const legendY = canvas.height - legendHeight - padding;
+
+    // Draw legend background with border
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.strokeStyle = '#002664';
+    ctx.lineWidth = 2;
+    ctx.fillRect(legendX, legendY, legendWidth, legendHeight);
+    ctx.strokeRect(legendX, legendY, legendWidth, legendHeight);
+
+    // Legend title
+    ctx.font = 'bold 28px Public Sans';
+    ctx.fillStyle = '#002664';
+    ctx.textBaseline = 'top';
+    ctx.fillText('UDP Growth Precincts', legendX + padding, legendY + padding);
+
+    // Legend items
+    const legendItems = [
+      { color: 'rgba(255, 165, 0, 0.5)', label: 'UDP Growth Precinct' }
+    ];
+
+    ctx.textBaseline = 'middle';
+    ctx.font = '22px Public Sans';
+
+    legendItems.forEach((item, index) => {
+      const y = legendY + padding + 60 + (index * 45);
+      
+      // Draw color box
+      ctx.fillStyle = item.color;
+      ctx.fillRect(legendX + padding, y - 10, 20, 20);
+      ctx.strokeStyle = '#363636';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(legendX + padding, y - 10, 20, 20);
+      
+      // Draw label
+      ctx.fillStyle = '#363636';
+      ctx.fillText(item.label, legendX + padding + 35, y);
+    });
+
+    return canvas.toDataURL('image/png', 1.0);
+  } catch (error) {
+    console.error('Failed to capture UDP precinct map:', error);
+    return null;
+  }
+}
+
+export async function capturePTALMap(feature, developableArea = null) {
+  if (!feature) return null;
+  console.log('Starting PTAL map capture...');
+
+  try {
+    const config = {
+      width: 2048,
+      height: 2048,
+      padding: 1 
+    };
+    
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    let ptalFeatures = [];
+    
+    // Create base canvas
+    const canvas = createCanvas(config.width, config.height);
+    const ctx = canvas.getContext('2d', { alpha: true });
+
+    try {
+      // 1. Aerial imagery (base)
+      console.log('Loading aerial base layer...');
+      const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];
+      const { bbox } = calculateMercatorParams(centerX, centerY, size);
+      
+      const params = new URLSearchParams({
+        SERVICE: 'WMS',
+        VERSION: '1.3.0',
+        REQUEST: 'GetMap',
+        BBOX: bbox,
+        CRS: 'EPSG:3857',
+        WIDTH: config.width,
+        HEIGHT: config.height,
+        LAYERS: aerialConfig.layers,
+        STYLES: '',
+        FORMAT: 'image/png',
+        DPI: 300,
+        MAP_RESOLUTION: 300,
+        FORMAT_OPTIONS: 'dpi:300'
+      });
+
+      const url = `${aerialConfig.url}?${params.toString()}`;
+      const baseMap = await loadImage(url);
+      drawImage(ctx, baseMap, canvas.width, canvas.height, 0.5);
+    } catch (error) {
+      console.error('Failed to load aerial layer:', error);
+    }
+
+    try {
+      // 2. PTAL layer
+      console.log('Loading PTAL layer...');
+      const ptalConfig = {
+        baseUrl: 'https://portal.data.nsw.gov.au/arcgis/rest/services/Hosted/ptal_dec20_gdb__(1)/FeatureServer/0',
+        layerId: 0,
+        token: 'TIfzHvP3Q0ognblFDNOYZ_U82HdqCSo7-hZIMRZOzzGIE0qGxSxWoRiYtv4u8SBosoSjjhl9g3D6z4DMfg_rmZ4ArX3aKVAI-CZELBO59MK0wdImL7ahNazBa3ZiQpuWAMTrg2tmC1gYxfhuOpCx9SpiMOSJlDZITjKLN_cKlaJfv0dOgQsg7fBEqqL98l0dCNBR8vERYqp4Cw-cQKlcpHdYgy-FZmp9OmZpUFUmQFRa2VzXdfn537_YRGm_KPKF'
+      };
+
+      // Color mapping for PTAL values
+      const ptalColors = {
+        '1 - Low': '#ff000080',
+        '2 - Low-Medium': '#ff7f0e80',
+        '3 - Medium': '#f2ff0080',
+        '4 - Medium-High': '#0e9aff80',
+        '5 - High': '#a8ff7f80',
+        '6 - Very High': '#1d960480'
+      };
+
+      // Get the PTAL features
+      const { bbox } = calculateMercatorParams(centerX, centerY, size);
+      const params = new URLSearchParams({
+        where: '1=1',
+        geometry: bbox,
+        geometryType: 'esriGeometryEnvelope',
+        inSR: 3857,
+        spatialRel: 'esriSpatialRelIntersects',
+        outFields: '*',
+        returnGeometry: true,
+        f: 'geojson',
+        token: ptalConfig.token
+      });
+
+      const url = `${ptalConfig.baseUrl}/query?${params.toString()}`;
+      console.log('PTAL request URL:', url);
+      
+      const ptalResponse = await proxyRequest(url);
+      console.log('PTAL response:', ptalResponse);
+
+      if (ptalResponse?.features?.length > 0) {
+        console.log(`Drawing ${ptalResponse.features.length} PTAL features...`);
+        ptalFeatures = ptalResponse.features;
+
+        // Store the features in the feature object for scoring
+        if (feature.properties) {
+          feature.properties.ptalValues = ptalFeatures.map(f => f.properties.ptal);
+        } else {
+          feature.properties = { ptalValues: ptalFeatures.map(f => f.properties.ptal) };
+        }
+
+        ptalFeatures.forEach((ptalFeature, index) => {
+          console.log(`Drawing PTAL feature ${index + 1}...`);
+          const ptalValue = ptalFeature.properties.ptal;
+          const color = ptalColors[ptalValue] || '#808080'; // Default gray if value not found
+
+          drawBoundary(ctx, ptalFeature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+            fill: true,
+            strokeStyle: '#000000',
+            fillStyle: color,
+            lineWidth: 2
+          });
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to load PTAL layer:', error);
+    }
+
+    // Draw boundaries
+    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+      strokeStyle: '#FF0000',
+      lineWidth: 6
+    });
+
+    if (developableArea?.features?.[0]) {
+      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
+        strokeStyle: '#02d1b8',
+        lineWidth: 12,
+        dashArray: [20, 10]
+      });
+    }
+
+    // Add legend
+    const legendHeight = 360;
+    const legendWidth = 400;
+    const padding = 20;
+    const legendX = canvas.width - legendWidth - padding;
+    const legendY = canvas.height - legendHeight - padding;
+
+    // Draw legend background with border
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.strokeStyle = '#002664';
+    ctx.lineWidth = 2;
+    ctx.fillRect(legendX, legendY, legendWidth, legendHeight);
+    ctx.strokeRect(legendX, legendY, legendWidth, legendHeight);
+
+    // Legend title
+    ctx.font = 'bold 28px Public Sans';
+    ctx.fillStyle = '#002664';
+    ctx.textBaseline = 'top';
+    ctx.fillText('Public Transport Access Level', legendX + padding, legendY + padding);
+
+    // Legend items
+    const legendItems = [
+      { color: '#ff0000', label: '1 - Low' },
+      { color: '#ff7f0e', label: '2 - Low-Medium' },
+      { color: '#f2ff00', label: '3 - Medium' },
+      { color: '#0e9aff', label: '4 - Medium-High' },
+      { color: '#a8ff7f', label: '5 - High' },
+      { color: '#1d9604', label: '6 - Very High' }
+    ];
+
+    ctx.textBaseline = 'middle';
+    ctx.font = '22px Public Sans';
+
+    legendItems.forEach((item, index) => {
+      const y = legendY + padding + 60 + (index * 45);
+      
+      // Draw color box
+      ctx.fillStyle = item.color;
+      ctx.fillRect(legendX + padding, y - 10, 20, 20);
+      ctx.strokeStyle = '#363636';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(legendX + padding, y - 10, 20, 20);
+      
+      // Draw label
+      ctx.fillStyle = '#363636';
+      ctx.fillText(item.label, legendX + padding + 35, y);
+    });
+
+    return canvas.toDataURL('image/png', 1.0);
+  } catch (error) {
+    console.error('Failed to capture PTAL map:', error);
+    return null;
+  }
+}
+
+export async function captureContaminationMap(feature, developableArea = null) {
+  if (!feature) return null;
+  console.log('Starting contamination map capture...');
+
+  try {
+    const config = {
+      width: 2048,
+      height: 2048,
+      padding: 0.3
+    };
+    
+    // Pass developableArea to calculateBounds
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    
+    // Create base canvas
+    const canvas = createCanvas(config.width, config.height);
+    const ctx = canvas.getContext('2d', { alpha: true });
+
+    try {
+      // 1. Aerial imagery (base)
+      console.log('Loading aerial base layer...');
+      const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];
+      const { bbox } = calculateMercatorParams(centerX, centerY, size);
+      
+      const params = new URLSearchParams({
+        SERVICE: 'WMS',
+        VERSION: '1.3.0',
+        REQUEST: 'GetMap',
+        BBOX: bbox,
+        CRS: 'EPSG:3857',
+        WIDTH: config.width,
+        HEIGHT: config.height,
+        LAYERS: aerialConfig.layers,
+        STYLES: '',
+        FORMAT: 'image/png',
+        DPI: 300,
+        MAP_RESOLUTION: 300,
+        FORMAT_OPTIONS: 'dpi:300'
+      });
+
+      const url = `${aerialConfig.url}?${params.toString()}`;
+      const baseMap = await loadImage(url);
+      drawImage(ctx, baseMap, canvas.width, canvas.height, 0.7);
+    } catch (error) {
+      console.error('Failed to load aerial layer:', error);
+    }
+
+    try {
+      // 2. Contamination layer
+      console.log('Loading contamination layer...');
+      const contaminationConfig = {
+        url: 'https://maptest2.environment.nsw.gov.au/arcgis/rest/services/EPA/EPACS/MapServer',
+        layerId: 1,
+        size: 2048,
+        padding: 0.3
+      };
+
+      // Get the contamination features
+      const { bbox } = calculateMercatorParams(centerX, centerY, size);
+      const queryParams = new URLSearchParams({
+        f: 'json',
+        geometry: bbox,
+        geometryType: 'esriGeometryEnvelope',
+        spatialRel: 'esriSpatialRelIntersects',
+        outFields: 'SiteName',
+        returnGeometry: true,
+        inSR: 3857,
+        outSR: 3857
+      });
+
+      const queryUrl = `${contaminationConfig.url}/${contaminationConfig.layerId}/query?${queryParams.toString()}`;
+      const contaminationResponse = await proxyRequest(queryUrl);
+      
+      if (contaminationResponse?.features?.length > 0) {
+        console.log(`Drawing ${contaminationResponse.features.length} contamination features...`);
+        
+        // Convert features from Web Mercator to WGS84
+        const convertedFeatures = contaminationResponse.features.map(feature => {
+          const rings = feature.geometry.rings.map(ring => 
+            ring.map(coord => {
+              // Convert from Web Mercator to WGS84
+              const lon = (coord[0] * 180) / 20037508.34;
+              const lat = (Math.atan(Math.exp(coord[1] * Math.PI / 20037508.34)) * 360 / Math.PI) - 90;
+              return [lon, lat];
+            })
+          );
+
+          return {
+            ...feature,
+            geometry: {
+              type: 'Polygon',
+              coordinates: rings
+            }
+          };
+        });
+        
+        // Store both the features and developableArea for scoring
+        if (feature.properties) {
+          feature.properties.contaminatedLandFeatures = convertedFeatures;
+          if (developableArea) {
+            feature.properties.developableArea = developableArea;
+          }
+        } else {
+          feature.properties = { 
+            contaminatedLandFeatures: convertedFeatures,
+            ...(developableArea && { developableArea })
+          };
+        }
+        
+        contaminationResponse.features.forEach((contaminationFeature, index) => {
+          console.log(`Drawing contamination feature ${index + 1}...`);
+          if (contaminationFeature.geometry?.coordinates) {
+            drawBoundary(ctx, contaminationFeature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+              fill: true,
+              strokeStyle: 'rgba(255, 0, 0, 0.8)',
+              fillStyle: 'rgba(255, 0, 0, 0.4)',
+              lineWidth: 2
+            });
+          }
+        });
+      }
+
+      // Then get the image layer for additional visual elements
+      const { bbox: mercatorBbox } = calculateMercatorParams(centerX, centerY, size);
+      const params = new URLSearchParams({
+        f: 'image',
+        format: 'png32',
+        transparent: 'true',
+        size: `${contaminationConfig.size},${contaminationConfig.size}`,
+        bbox: mercatorBbox,
+        bboxSR: 3857,
+        imageSR: 3857,
+        layers: `show:${contaminationConfig.layerId}`,
+        dpi: 96
+      });
+
+      const url = `${contaminationConfig.url}/export?${params.toString()}`;
+      console.log('Requesting contamination layer through proxy...', url);
+      
+      const proxyUrl = await proxyRequest(url);
+      if (!proxyUrl) {
+        throw new Error('Failed to get proxy URL for contamination layer');
+      }
+      
+      console.log('Loading contamination image from proxy URL...');
+      const contaminationLayer = await loadImage(proxyUrl);
+      console.log('Contamination layer loaded successfully');
+      drawImage(ctx, contaminationLayer, canvas.width, canvas.height, 0.8);
+    } catch (error) {
+      console.warn('Failed to load contamination layer:', error);
+    }
+
+    // Draw boundaries
+    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+      strokeStyle: '#FF0000',
+      lineWidth: 6
+    });
+
+    if (developableArea?.features?.[0]) {
+      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
+        strokeStyle: '#02d1b8',
+        lineWidth: 12,
+        dashArray: [20, 10]
+      });
+    }
+
+    // Add legend
+    const legendHeight = 200;
+    const legendWidth = 400;
+    const padding = 20;
+    const legendX = canvas.width - legendWidth - padding;
+    const legendY = canvas.height - legendHeight - padding;
+
+    // Draw legend background with border
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.strokeStyle = '#002664';
+    ctx.lineWidth = 2;
+    ctx.fillRect(legendX, legendY, legendWidth, legendHeight);
+    ctx.strokeRect(legendX, legendY, legendWidth, legendHeight);
+
+    // Legend title
+    ctx.font = 'bold 28px Public Sans';
+    ctx.fillStyle = '#002664';
+    ctx.textBaseline = 'top';
+    ctx.fillText('Contaminated Sites', legendX + padding, legendY + padding);
+
+    // Legend items
+    const legendItems = [
+      { color: 'rgba(255, 0, 0, 0.4)', label: 'Contaminated Site' }
+    ];
+
+    ctx.textBaseline = 'middle';
+    ctx.font = '22px Public Sans';
+
+    legendItems.forEach((item, index) => {
+      const y = legendY + padding + 60 + (index * 45);
+      
+      // Draw color box
+      ctx.fillStyle = item.color;
+      ctx.fillRect(legendX + padding, y - 10, 20, 20);
+      ctx.strokeStyle = '#363636';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(legendX + padding, y - 10, 20, 20);
+      
+      // Draw label
+      ctx.fillStyle = '#363636';
+      ctx.fillText(item.label, legendX + padding + 35, y);
+    });
+
+    // Store the screenshot in the feature properties
+    const screenshot = canvas.toDataURL('image/png', 1.0);
+    feature.properties.contaminationMapScreenshot = screenshot;
+
+    return screenshot;
+  } catch (error) {
+    console.error('Failed to capture contamination map:', error);
+    return null;
+  }
+}
+
+export async function captureOpenStreetMap(feature, developableArea = null) {
+  if (!feature) return null;
+  console.log('Starting OpenStreetMap capture...');
+
+  try {
+    const config = {
+      width: 2048,
+      height: 2048,
+      padding: 0.3
+    };
+    
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    
+    // Create base canvas
+    const canvas = createCanvas(config.width, config.height);
+    const ctx = canvas.getContext('2d', { alpha: true });
+
+    try {
+      // Calculate tile coordinates
+      const { bbox } = calculateMercatorParams(centerX, centerY, size);
+      const [minX, minY, maxX, maxY] = bbox.split(',').map(Number);
+      
+      // Convert to lat/lon bounds
+      const zoomLevel = 16; // Adjust this based on the size of your area
+      const tileSize = 256;
+      
+      // Calculate tile coordinates
+      const minTileX = Math.floor((minX + 20037508.34) * (Math.pow(2, zoomLevel)) / (256 * 40075016.68));
+      const maxTileX = Math.floor((maxX + 20037508.34) * (Math.pow(2, zoomLevel)) / (256 * 40075016.68));
+      const minTileY = Math.floor((Math.pow(2, zoomLevel) - 1) - ((maxY + 20037508.34) * (Math.pow(2, zoomLevel)) / (256 * 40075016.68)));
+      const maxTileY = Math.floor((Math.pow(2, zoomLevel) - 1) - ((minY + 20037508.34) * (Math.pow(2, zoomLevel)) / (256 * 40075016.68)));
+
+      // Load and draw tiles
+      for (let x = minTileX; x <= maxTileX; x++) {
+        for (let y = minTileY; y <= maxTileY; y++) {
+          const url = `https://tile.openstreetmap.org/${zoomLevel}/${x}/${y}.png`;
+          try {
+            const tile = await loadImage(url);
+            const tileX = ((x - minTileX) * tileSize);
+            const tileY = ((y - minTileY) * tileSize);
+            drawImage(ctx, tile, tileSize, tileSize, 1.0, tileX, tileY);
+          } catch (tileError) {
+            console.warn(`Failed to load tile at ${x},${y}:`, tileError);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load OpenStreetMap layer:', error);
+    }
+
+    // Draw boundaries
+    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+      strokeStyle: '#FF0000',
+      lineWidth: 6
+    });
+
+    if (developableArea?.features?.[0]) {
+      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
+        strokeStyle: '#02d1b8',
+        lineWidth: 12,
+        dashArray: [20, 10]
+      });
+    }
+
+    return canvas.toDataURL('image/png', 1.0);
+  } catch (error) {
+    console.error('Failed to capture OpenStreetMap:', error);
     return null;
   }
 }

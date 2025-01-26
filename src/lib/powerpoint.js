@@ -12,6 +12,7 @@ import { addServicingSlide } from '../components/pptxApp/slides/servicingSlide';
 import { addUtilisationSlide } from '../components/pptxApp/slides/utilisationSlide';
 import { addAccessSlide } from '../components/pptxApp/slides/accessSlide';
 import { addHazardsSlide } from '../components/pptxApp/slides/hazardsSlide';
+import { addContaminationSlide } from '../components/pptxApp/slides/contaminationSlide';
 
 export async function generateReport(properties, onProgress) {
   try {
@@ -93,6 +94,13 @@ export async function generateReport(properties, onProgress) {
     if (properties.selectedSlides.hazards !== false) {
       await addHazardsSlide(pptx, properties);
       progress = 98;
+      onProgress?.(progress);
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    if (properties.selectedSlides.contamination !== false) {
+      await addContaminationSlide(pptx, properties);
+      progress = 99;
       onProgress?.(progress);
       await new Promise(resolve => setTimeout(resolve, 300));
     }

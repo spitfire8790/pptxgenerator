@@ -16,8 +16,12 @@ import {
   captureSewerMap, 
   capturePowerMap,
   captureGeoscapeMap,
+  captureRoadsMap,
+  captureUDPPrecinctMap,
   captureFloodMap,
-  captureBushfireMap
+  captureBushfireMap,
+  capturePTALMap,
+  captureContaminationMap
 } from './utils/map/services/screenshot';
 import { SCREENSHOT_TYPES } from './utils/map/config/screenshotTypes';
 import SlidePreview from './SlidePreview';
@@ -30,6 +34,7 @@ import { addSecondaryAttributesSlide } from './slides/secondaryAttributesSlide';
 import { addUtilisationSlide } from './slides/utilisationSlide';
 import { addAccessSlide } from './slides/accessSlide';
 import { addHazardsSlide } from './slides/hazardsSlide';
+import { addContaminationSlide } from './slides/contaminationSlide';
 
 const slideOptions = [
   { id: 'cover', label: 'Cover Page', addSlide: addCoverSlide },
@@ -41,7 +46,8 @@ const slideOptions = [
   { id: 'servicing', label: 'Servicing', addSlide: addServicingSlide },
   { id: 'utilisation', label: 'Utilisation and Improvements', addSlide: addUtilisationSlide },
   { id: 'access', label: 'Access', addSlide: addAccessSlide },
-  { id: 'hazards', label: 'Natural Hazards', addSlide: addHazardsSlide }
+  { id: 'hazards', label: 'Natural Hazards', addSlide: addHazardsSlide },
+  { id: 'contamination', label: 'Site Contamination', addSlide: addContaminationSlide }
 ];
 
 const ReportGenerator = ({ selectedFeature }) => {
@@ -59,7 +65,8 @@ const ReportGenerator = ({ selectedFeature }) => {
     servicing: true,
     utilisation: true,
     access: true,
-    hazards: true
+    hazards: true,
+    contamination: true
   });
   const [developableArea, setDevelopableArea] = useState(null);
   const planningMapRef = useRef();
@@ -102,6 +109,10 @@ const ReportGenerator = ({ selectedFeature }) => {
       const { image: geoscapeScreenshot, features: geoscapeFeatures } = await captureGeoscapeMap(selectedFeature, developableArea) || {};
       const floodMapScreenshot = await captureFloodMap(selectedFeature, developableArea);
       const bushfireMapScreenshot = await captureBushfireMap(selectedFeature, developableArea);
+      const roadsScreenshot = await captureRoadsMap(selectedFeature, developableArea);
+      const udpPrecinctsScreenshot = await captureUDPPrecinctMap(selectedFeature, developableArea);
+      const ptalScreenshot = await capturePTALMap(selectedFeature, developableArea);
+      const contaminationMapScreenshot = await captureContaminationMap(selectedFeature, developableArea);
 
       console.log('Aerial Screenshot:', aerialScreenshot ? 'Present' : 'Missing');
       console.log('Snapshot Screenshot:', snapshotScreenshot ? 'Present' : 'Missing');
@@ -115,8 +126,12 @@ const ReportGenerator = ({ selectedFeature }) => {
       console.log('Acid Sulfate Screenshot:', acidSulfateScreenshot ? 'Present' : 'Missing');
       console.log('Water Mains Screenshot:', waterMainsScreenshot ? 'Present' : 'Missing');
       console.log('Geoscape Screenshot:', geoscapeScreenshot ? 'Present' : 'Missing');
+      console.log('Roads Screenshot:', roadsScreenshot ? 'Present' : 'Missing');
+      console.log('UDP Precincts Screenshot:', udpPrecinctsScreenshot ? 'Present' : 'Missing');
+      console.log('PTAL Screenshot:', ptalScreenshot ? 'Present' : 'Missing');
       console.log('Flood Map Screenshot:', floodMapScreenshot ? 'Present' : 'Missing');
       console.log('Bushfire Map Screenshot:', bushfireMapScreenshot ? 'Present' : 'Missing');
+      console.log('Contamination Map Screenshot:', contaminationMapScreenshot ? 'Present' : 'Missing');
 
       setCompletedSteps(prev => [...prev, 'screenshots']);
       setCurrentStep('cover');
@@ -166,10 +181,16 @@ const ReportGenerator = ({ selectedFeature }) => {
         powerFeatures: selectedFeature.properties?.powerFeatures,
         site_suitability__floodFeatures: selectedFeature.properties?.site_suitability__floodFeatures,
         site_suitability__bushfireFeatures: selectedFeature.properties?.site_suitability__bushfireFeatures,
+        site_suitability__contaminationFeatures: selectedFeature.properties?.site_suitability__contaminationFeatures,
         geoscapeScreenshot,
         geoscapeFeatures,
         floodMapScreenshot,
         bushfireMapScreenshot,
+        contaminationMapScreenshot,
+        roadFeatures: selectedFeature.properties?.roadFeatures,
+        udpPrecincts: selectedFeature.properties?.udpPrecincts,
+        ptalScreenshot,
+        ptalValues: selectedFeature.properties?.ptalValues
       };
 
       // Generate the report with progress tracking

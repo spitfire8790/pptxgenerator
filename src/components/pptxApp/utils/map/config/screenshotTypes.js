@@ -13,5 +13,7 @@ export const SCREENSHOT_TYPES = {
   WATER_MAINS: 'waterMains',
   SEWER_MAINS: 'sewerMains',
   POWER: 'power',
-  STREET_VIEW: 'streetView'
+  STREET_VIEW: 'streetView',
+  PTAL: 'ptal',
+  CONTAMINATION: 'contamination'
 };

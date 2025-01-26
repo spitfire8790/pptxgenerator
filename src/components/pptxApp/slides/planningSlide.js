@@ -523,7 +523,7 @@ export async function addPlanningSlide(pptx, properties) {
         ? `The site has a maximum FSR of ${properties.site_suitability__floorspace_ratio}:1.` 
         : 'The site has no FSR specified.';
       const developableAreaFSRText = developableAreaFSR 
-        ? ` The developable area has a FSR of ${developableAreaFSR}:1.` 
+        ? ` The developable area has a maximum FSR of ${developableAreaFSR}:1.` 
         : '';
       
       slide.addText(fsrDescription + developableAreaFSRText, {
@@ -620,7 +620,7 @@ export async function addPlanningSlide(pptx, properties) {
       ? `The site has a maximum HoB of ${properties.site_suitability__height_of_building} metres.` 
       : 'The site has no HoB specified.';
     const developableAreaHoBText = developableAreaHoB 
-      ? ` The developable area has a HoB of ${developableAreaHoB} metres.` 
+      ? ` The developable area has a maximumHoB of ${developableAreaHoB} metres.` 
       : '';
 
     slide.addText(hobDescription + developableAreaHoBText, {
