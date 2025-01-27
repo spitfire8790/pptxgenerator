@@ -33,7 +33,16 @@ export function drawBoundary(ctx, coordinates, centerX, centerY, size, canvasSiz
     return;
   }
 
+  const { scale = 1, offsetX = 0, offsetY = 0 } = style;
 
+  // Save current context state
+  ctx.save();
+
+  // Apply transformations if provided
+  if (scale !== 1 || offsetX !== 0 || offsetY !== 0) {
+    ctx.translate(offsetX, offsetY);
+    ctx.scale(scale, scale);
+  }
 
   // Set up line styling with defaults
   ctx.strokeStyle = style.strokeStyle || '#FF0000';
@@ -88,6 +97,9 @@ export function drawBoundary(ctx, coordinates, centerX, centerY, size, canvasSiz
   
   // Reset dash pattern
   ctx.setLineDash([]);
+
+  // Restore context state
+  ctx.restore();
 }
 
 export function drawPolyline(ctx, coordinates, centerX, centerY, size, canvasSize, style = {}, isWebMercator = false) {

@@ -1335,6 +1335,7 @@ const scoringCriteria = {
         // First check if developable area intersects with any contamination features
         let intersectionFound = false;
         let minDistance = Infinity;
+        let intersectingFeatures = [];
 
         features.forEach((feature, index) => {
           if (!feature.geometry) return;
@@ -1351,6 +1352,7 @@ const scoringCriteria = {
                 if (intersects) {
                   intersectionFound = true;
                   minDistance = 0;
+                  intersectingFeatures.push({...feature, intersects: true});
                   console.log('Found intersection - setting minDistance to 0');
                   return;
                 }
@@ -1384,6 +1386,7 @@ const scoringCriteria = {
               if (intersects) {
                 intersectionFound = true;
                 minDistance = 0;
+                intersectingFeatures.push({...feature, intersects: true});
                 console.log('Found intersection - setting minDistance to 0');
                 return;
               }
@@ -1427,26 +1430,152 @@ const scoringCriteria = {
           console.log(`Distance ${minDistance.toFixed(2)}m is beyond 20m - setting score to 3`);
         }
 
-        console.log('\nFinal result:', { score, minDistance: minDistance.toFixed(2) });
-        return { score, minDistance };
+        console.log('\nFinal result:', { score, minDistance: minDistance.toFixed(2), intersectingFeatures });
+        return { score, minDistance, features: intersectingFeatures };
       } catch (error) {
         console.error('Error calculating contamination score:', error);
         console.error('Error stack:', error.stack);
-        return { score: 0, minDistance: Infinity };
+        return { score: 0, minDistance: Infinity, features: [] };
       }
     },
     getScoreDescription: (scoreObj) => {
-      const { score, minDistance } = scoreObj;
+      const { score, minDistance, features = [] } = scoreObj;
       
       switch (score) {
         case 3:
           return "Site is not on the EPA Contaminated Land Register";
-        case 2:
-          return `Site is within ${minDistance.toFixed(0)}m of a contaminated site`;
-        case 1:
-          return "Site is on the EPA Contaminated Land Register";
+        case 2: {
+          // Get the closest feature's site name
+          const siteName = features?.[0]?.properties?.SiteName || 'Unnamed site';
+          return `Site is within ${minDistance.toFixed(0)}m of a contaminated site (${siteName})`;
+        }
+        case 1: {
+          // Get the intersecting feature's site name
+          const intersectingFeature = features?.find(f => f.intersects);
+          const siteName = intersectingFeature?.properties?.SiteName || 'Unnamed site';
+          return `Site is on the EPA Contaminated Land Register (${siteName})`;
+        }
         default:
           return "Contamination risk not assessed";
+      }
+    },
+    getScoreColor: (score) => {
+      return scoreColors[score] || scoreColors[0];
+    }
+  },
+  tec: {
+    calculateScore: (tecFeatures, developableArea) => {
+      console.log('=== TEC Score Calculation Start ===');
+      console.log('Input validation:');
+      console.log('tecFeatures:', tecFeatures);
+      console.log('developableArea:', developableArea);
+
+      if (!developableArea?.[0] || !developableArea[0].geometry) {
+        console.log('No developable area provided - returning score 0');
+        return { score: 0, coverage: 0, features: [] };
+      }
+
+      // If no TEC features, return highest score
+      if (!tecFeatures?.features?.length) {
+        console.log('No TEC features found - returning score 3');
+        return { score: 3, coverage: 0, features: [] };
+      }
+
+      try {
+        // Calculate developable area - ensure we have a valid polygon
+        const developableCoords = developableArea[0].geometry.coordinates;
+        console.log('Developable coordinates:', developableCoords);
+        
+        // Create a valid GeoJSON polygon - ensure coordinates are properly wrapped
+        const developablePolygon = {
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'Polygon',
+            coordinates: developableCoords
+          }
+        };
+        const totalArea = turf.area(developablePolygon);
+        console.log('Total developable area:', totalArea, 'square meters');
+
+        // Calculate total area of TEC features
+        let tecArea = 0;
+        const relevantFeatures = [];
+        console.log('Processing TEC features...');
+        
+        tecFeatures.features.forEach((feature, index) => {
+          console.log(`\nProcessing feature ${index + 1}:`, feature);
+          if (feature.geometry?.type === 'Polygon' || feature.geometry?.type === 'MultiPolygon') {
+            try {
+              let featurePolygon = feature;
+              console.log(`Feature ${index + 1} area before intersection:`, turf.area(featurePolygon), 'square meters');
+              
+              // First check if the feature is within or intersects the developable area
+              const containsFeature = turf.booleanContains(developablePolygon, featurePolygon);
+              
+              if (containsFeature) {
+                // If developable area contains feature, use feature area
+                const featureArea = turf.area(featurePolygon);
+                tecArea += featureArea;
+                relevantFeatures.push(feature);
+                console.log(`Feature ${index + 1} is contained within developable area, using feature area:`, featureArea);
+              } else {
+                console.log(`Feature ${index + 1} is not within developable area`);
+              }
+            } catch (error) {
+              console.error(`Error processing feature ${index + 1}:`, error);
+              console.error('Feature geometry:', feature.geometry);
+            }
+          } else {
+            console.log(`Feature ${index + 1} is not a Polygon/MultiPolygon: ${feature.geometry?.type}`);
+          }
+        });
+
+        console.log('\nTotal TEC feature area:', tecArea, 'square meters');
+
+        // Calculate coverage percentage
+        const coverage = (tecArea / totalArea) * 100;
+        console.log('Coverage percentage:', coverage.toFixed(2) + '%');
+
+        // Determine score based on coverage
+        let score;
+        if (coverage === 0) {
+          score = 3;
+          console.log('No coverage (0%) - Score: 3');
+        } else if (coverage < 50) {
+          score = 2;
+          console.log('Coverage < 50% - Score: 2');
+        } else {
+          score = 1;
+          console.log('Coverage >= 50% - Score: 1');
+        }
+
+        console.log('=== Final Result ===');
+        console.log({ score, coverage: parseFloat(coverage.toFixed(2)), features: relevantFeatures });
+
+        return { 
+          score, 
+          coverage: parseFloat(coverage.toFixed(2)), 
+          features: relevantFeatures 
+        };
+      } catch (error) {
+        console.error('Error calculating TEC score:', error);
+        console.error('Error stack:', error.stack);
+        return { score: 0, coverage: 0, features: [] };
+      }
+    },
+    getScoreDescription: (scoreObj) => {
+      const { score, coverage } = scoreObj;
+      
+      switch (score) {
+        case 3:
+          return "Developable area is not impacted by any Threatened Ecological Communities.";
+        case 2:
+          return `Developable area has limited TEC coverage (${coverage.toFixed(1)}%).`;
+        case 1:
+          return `Developable area has significant TEC coverage (${coverage.toFixed(1)}%).`;
+        default:
+          return "TEC impact not assessed";
       }
     },
     getScoreColor: (score) => {

@@ -11,7 +11,9 @@ const steps = [
   { id: 'geoscape', label: 'Adding Utilisation Data' },
   { id: 'access', label: 'Assessing Site Access' },
   { id: 'hazards', label: 'Assessing Natural Hazards' },
+  { id: 'environmental', label: 'Assessing Environmental Factors' },
   { id: 'contamination', label: 'Checking Site Contamination' },
+  { id: 'scoring', label: 'Generating Scoring Summary' },
   { id: 'finalizing', label: 'Finalising Report' }
 ];
 

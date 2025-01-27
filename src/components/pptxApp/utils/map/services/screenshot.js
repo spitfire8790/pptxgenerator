@@ -2359,7 +2359,7 @@ export async function capturePTALMap(feature, developableArea = null) {
       const ptalConfig = {
         baseUrl: 'https://portal.data.nsw.gov.au/arcgis/rest/services/Hosted/ptal_dec20_gdb__(1)/FeatureServer/0',
         layerId: 0,
-        token: 'TIfzHvP3Q0ognblFDNOYZ_U82HdqCSo7-hZIMRZOzzGIE0qGxSxWoRiYtv4u8SBosoSjjhl9g3D6z4DMfg_rmZ4ArX3aKVAI-CZELBO59MK0wdImL7ahNazBa3ZiQpuWAMTrg2tmC1gYxfhuOpCx9SpiMOSJlDZITjKLN_cKlaJfv0dOgQsg7fBEqqL98l0dCNBR8vERYqp4Cw-cQKlcpHdYgy-FZmp9OmZpUFUmQFRa2VzXdfn537_YRGm_KPKF'
+        token: 'RozDIqRXAcLFLzwkHdKZBxmJVBySOlFCfJeWynAzm3NST2AXabtqEyX7wVZOb9fqw8lsKJKLwdvvtkEN8Vy_9zVYL6qO27bch0LIveTO8bnY1xh34JaLpzCa1GJcVx-WNx1nx6yQ3HTFPLiYY4I1mNaS0ka8flHfbwhv4gOk5K9ZZb5Wrb2brJEmRebq_NH8wul9ZONEYw1YIzDCVz3lobIPwyx1rMyvzDBXBcuVqsLpAw6iYgCn09TDqjVRijm7'
       };
 
       // Color mapping for PTAL values
@@ -2452,7 +2452,7 @@ export async function capturePTALMap(feature, developableArea = null) {
     ctx.font = 'bold 28px Public Sans';
     ctx.fillStyle = '#002664';
     ctx.textBaseline = 'top';
-    ctx.fillText('Public Transport Access Level', legendX + padding, legendY + padding);
+    ctx.fillText('PTAL', legendX + padding, legendY + padding);
 
     // Legend items
     const legendItems = [
@@ -2587,13 +2587,13 @@ export async function captureContaminationMap(feature, developableArea = null) {
         
         // Store both the features and developableArea for scoring
         if (feature.properties) {
-          feature.properties.contaminatedLandFeatures = convertedFeatures;
+          feature.properties.site_suitability__contaminationFeatures = convertedFeatures;
           if (developableArea) {
             feature.properties.developableArea = developableArea;
           }
         } else {
           feature.properties = { 
-            contaminatedLandFeatures: convertedFeatures,
+            site_suitability__contaminationFeatures: convertedFeatures,
             ...(developableArea && { developableArea })
           };
         }
@@ -2641,19 +2641,27 @@ export async function captureContaminationMap(feature, developableArea = null) {
       console.warn('Failed to load contamination layer:', error);
     }
 
-    // Draw boundaries
-    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-      strokeStyle: '#FF0000',
-      lineWidth: 6
-    });
-
+    // Draw boundaries - Draw these AFTER all other layers for visibility
+    console.log('Drawing boundaries...');
+    
+    // Draw developable area first (underneath property boundary)
     if (developableArea?.features?.[0]) {
+      console.log('Drawing developable area boundary...', developableArea.features[0].geometry.coordinates[0]);
       drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
         strokeStyle: '#02d1b8',
         lineWidth: 12,
         dashArray: [20, 10]
       });
+    } else {
+      console.log('No developable area to draw');
     }
+
+    // Draw property boundary on top
+    console.log('Drawing property boundary...', feature.geometry.coordinates[0]);
+    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+      strokeStyle: '#FF0000',
+      lineWidth: 6
+    });
 
     // Add legend
     const legendHeight = 200;
@@ -2709,9 +2717,287 @@ export async function captureContaminationMap(feature, developableArea = null) {
   }
 }
 
+// Helper functions for tile coordinate calculation
+function lon2tile(lon, zoom) {
+  if (lon < -180 || lon > 180) {
+    console.warn('Invalid longitude:', lon);
+    lon = Math.max(-180, Math.min(180, lon));
+  }
+  return Math.floor((lon + 180) / 360 * Math.pow(2, zoom));
+}
+
+function lat2tile(lat, zoom) {
+  if (lat < -85.0511 || lat > 85.0511) {
+    console.warn('Invalid latitude:', lat);
+    lat = Math.max(-85.0511, Math.min(85.0511, lat));
+  }
+  return Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));
+}
+
+// Convert Web Mercator coordinates to WGS84
+function mercatorToWGS84(mercatorX, mercatorY) {
+  const lon = (mercatorX / 20037508.34) * 180;
+  const lat = (Math.atan(Math.exp((mercatorY / 20037508.34) * Math.PI)) * 360 / Math.PI) - 90;
+  return [lon, lat];
+}
+
 export async function captureOpenStreetMap(feature, developableArea = null) {
+  if (!feature) {
+    console.log('No feature provided for OpenStreetMap capture');
+    return null;
+  }
+  console.log('Starting OpenStreetMap capture...', { feature, developableArea });
+
+  try {
+    const config = {
+      width: 2048,
+      height: 2048,
+      padding: 0.3,
+      zoomLevel: 17 // Increased zoom level for better detail
+    };
+    
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    console.log('Calculated bounds:', { centerX, centerY, size });
+    
+    // Create base canvas
+    const canvas = createCanvas(config.width, config.height);
+    const ctx = canvas.getContext('2d', { alpha: true });
+    ctx.fillStyle = '#FFFFFF'; // Add white background
+    ctx.fillRect(0, 0, config.width, config.height);
+    console.log('Created canvas with dimensions:', { width: config.width, height: config.height });
+
+    try {
+      // Calculate tile coordinates
+      const { bbox } = calculateMercatorParams(centerX, centerY, size);
+      console.log('Mercator bbox:', bbox);
+      
+      const [minX, minY, maxX, maxY] = bbox.split(',').map(Number);
+      console.log('Parsed bbox coordinates:', { minX, minY, maxX, maxY });
+      
+      // Convert Mercator coordinates to WGS84
+      const [minLon, minLat] = mercatorToWGS84(minX, minY);
+      const [maxLon, maxLat] = mercatorToWGS84(maxX, maxY);
+      console.log('WGS84 coordinates:', { minLon, minLat, maxLon, maxLat });
+      
+      // Calculate tile coordinates with adjusted zoom level
+      const tileSize = 256;
+      
+      // Convert bbox to tile coordinates using WGS84 coordinates
+      const minTileX = lon2tile(minLon, config.zoomLevel);
+      const maxTileX = lon2tile(maxLon, config.zoomLevel);
+      const minTileY = lat2tile(maxLat, config.zoomLevel); // Note: maxLat for minTileY
+      const maxTileY = lat2tile(minLat, config.zoomLevel); // Note: minLat for maxTileY
+
+      // Calculate the total number of tiles and canvas position adjustments
+      const tilesX = maxTileX - minTileX + 1;
+      const tilesY = maxTileY - minTileY + 1;
+      const totalWidth = tilesX * tileSize;
+      const totalHeight = tilesY * tileSize;
+      
+      // Calculate scaling to fit all tiles within canvas
+      const scale = Math.min(config.width / totalWidth, config.height / totalHeight);
+      const offsetX = (config.width - totalWidth * scale) / 2;
+      const offsetY = (config.height - totalHeight * scale) / 2;
+
+      console.log('Tile calculations:', {
+        minTileX, maxTileX, minTileY, maxTileY,
+        tilesX, tilesY, scale, offsetX, offsetY
+      });
+
+      // Load and draw tiles
+      let loadedTiles = 0;
+      const totalTiles = tilesX * tilesY;
+      console.log(`Starting to load ${totalTiles} tiles...`);
+
+      // Scale context for all drawings
+      ctx.save();
+      ctx.translate(offsetX, offsetY);
+      ctx.scale(scale, scale);
+
+      const maxRetries = 3;
+      for (let x = minTileX; x <= maxTileX; x++) {
+        for (let y = minTileY; y <= maxTileY; y++) {
+          const url = `https://tile.openstreetmap.org/${config.zoomLevel}/${x}/${y}.png`;
+          console.log(`Loading tile at ${url}`);
+          
+          let retryCount = 0;
+          while (retryCount < maxRetries) {
+            try {
+              const tile = await loadImage(url);
+              const tileX = (x - minTileX) * tileSize;
+              const tileY = (y - minTileY) * tileSize;
+              
+              ctx.drawImage(tile, tileX, tileY, tileSize, tileSize);
+              loadedTiles++;
+              console.log(`Successfully loaded and drew tile ${loadedTiles}/${totalTiles}`);
+              break;
+            } catch (tileError) {
+              retryCount++;
+              if (retryCount === maxRetries) {
+                console.error(`Failed to load tile at ${x},${y} after ${maxRetries} attempts:`, tileError);
+              } else {
+                console.warn(`Retry ${retryCount}/${maxRetries} for tile at ${x},${y}`);
+                await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s between retries
+              }
+            }
+          }
+        }
+      }
+
+      ctx.restore();
+      
+      console.log(`Finished loading tiles. Successfully loaded ${loadedTiles}/${totalTiles} tiles`);
+
+      // Draw boundaries with adjusted scale
+      console.log('Drawing property boundary...');
+      drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+        strokeStyle: '#FF0000',
+        lineWidth: 3,
+        scale,
+        offsetX,
+        offsetY
+      });
+
+      if (developableArea?.features?.[0]) {
+        console.log('Drawing developable area boundary...');
+        drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
+          strokeStyle: '#02d1b8',
+          lineWidth: 6,
+          dashArray: [10, 5],
+          scale,
+          offsetX,
+          offsetY
+        });
+      }
+
+      console.log('Converting canvas to data URL...');
+      const dataUrl = canvas.toDataURL('image/png', 1.0);
+      console.log('Successfully generated OpenStreetMap image');
+      return dataUrl;
+    } catch (error) {
+      console.error('Failed to load OpenStreetMap layer:', error);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack
+      });
+      return null;
+    }
+  } catch (error) {
+    console.error('Failed to capture OpenStreetMap:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack
+    });
+    return null;
+  }
+}
+
+export async function captureTECMap(feature, developableArea = null) {
+  if (!feature) {
+    console.log('No feature provided for TEC map capture');
+    return null;
+  }
+  console.log('Starting TEC map capture...', { feature, developableArea });
+
+  try {
+    const config = {
+      width: 2048,
+      height: 2048,
+      padding: 0.3
+    };
+    
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    console.log('Calculated bounds:', { centerX, centerY, size });
+    
+    // Create base canvas
+    const canvas = createCanvas(config.width, config.height);
+    const ctx = canvas.getContext('2d', { alpha: true });
+    ctx.fillStyle = '#FFFFFF'; // Add white background
+    ctx.fillRect(0, 0, config.width, config.height);
+    console.log('Created canvas with dimensions:', { width: config.width, height: config.height });
+
+    try {
+      // 1. Aerial basemap
+      const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];
+      const aerialUrl = await proxyRequest(`${aerialConfig.url}?${new URLSearchParams({
+        service: 'WMS',
+        version: '1.3.0',
+        request: 'GetMap',
+        format: 'image/png',
+        transparent: 'true',
+        layers: aerialConfig.layers,
+        width: config.width,
+        height: config.height,
+        crs: 'EPSG:4283',
+        bbox: `${centerY - size/2},${centerX - size/2},${centerY + size/2},${centerX + size/2}`,
+        styles: ''
+      })}`);
+      const aerialLayer = await loadImage(aerialUrl);
+      drawImage(ctx, aerialLayer, canvas.width, canvas.height, 1);
+      console.log('Added aerial basemap');
+    } catch (error) {
+      console.warn('Failed to load aerial basemap:', error);
+    }
+
+    try {
+      // 2. TEC layer
+      const tecConfig = {
+        url: 'https://mapprod1.environment.nsw.gov.au/arcgis/rest/services/EDP/TECs_GreaterSydney/MapServer',
+        layerId: 0,
+        size: 2048,
+        padding: 0.2
+      };
+      const tecUrl = await proxyRequest(`${tecConfig.url}/export?${new URLSearchParams({
+        f: 'image',
+        format: 'png32',
+        transparent: 'true',
+        size: `${tecConfig.size},${tecConfig.size}`,
+        bbox: `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`,
+        bboxSR: 4283,
+        imageSR: 4283,
+        layers: `show:${tecConfig.layerId}`,
+        dpi: 96
+      })}`);
+      const tecLayer = await loadImage(tecUrl);
+      drawImage(ctx, tecLayer, canvas.width, canvas.height, 0.7);
+      console.log('Added TEC layer');
+    } catch (error) {
+      console.warn('Failed to load TEC layer:', error);
+    }
+
+    // Draw boundary lines
+    if (feature.geometry) {
+      drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+        strokeStyle: '#FF0000',
+        lineWidth: 3
+      });
+      console.log('Added site boundary');
+    }
+
+      // Draw developable area if provided
+      if (developableArea?.[0]?.geometry?.coordinates) {
+        drawBoundary(ctx, developableArea[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
+          strokeStyle: '#00FFFF',
+          lineWidth: 2,
+          lineDash: [10, 10]
+        });
+        console.log('Added developable area boundary');
+      }
+
+    // Convert canvas to base64 image
+    const screenshot = canvas.toDataURL('image/png');
+    console.log('Generated TEC map screenshot');
+
+    return screenshot;
+  } catch (error) {
+    console.error('Failed to capture TEC map:', error);
+    return null;
+  }
+}
+
+export async function captureBiodiversityMap(feature, developableArea = null) {
   if (!feature) return null;
-  console.log('Starting OpenStreetMap capture...');
+  console.log('Starting biodiversity map capture...');
 
   try {
     const config = {
@@ -2727,36 +3013,72 @@ export async function captureOpenStreetMap(feature, developableArea = null) {
     const ctx = canvas.getContext('2d', { alpha: true });
 
     try {
-      // Calculate tile coordinates
+      // 1. Aerial imagery (base)
+      console.log('Loading aerial base layer...');
+      const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];
       const { bbox } = calculateMercatorParams(centerX, centerY, size);
-      const [minX, minY, maxX, maxY] = bbox.split(',').map(Number);
       
-      // Convert to lat/lon bounds
-      const zoomLevel = 16; // Adjust this based on the size of your area
-      const tileSize = 256;
-      
-      // Calculate tile coordinates
-      const minTileX = Math.floor((minX + 20037508.34) * (Math.pow(2, zoomLevel)) / (256 * 40075016.68));
-      const maxTileX = Math.floor((maxX + 20037508.34) * (Math.pow(2, zoomLevel)) / (256 * 40075016.68));
-      const minTileY = Math.floor((Math.pow(2, zoomLevel) - 1) - ((maxY + 20037508.34) * (Math.pow(2, zoomLevel)) / (256 * 40075016.68)));
-      const maxTileY = Math.floor((Math.pow(2, zoomLevel) - 1) - ((minY + 20037508.34) * (Math.pow(2, zoomLevel)) / (256 * 40075016.68)));
+      const params = new URLSearchParams({
+        SERVICE: 'WMS',
+        VERSION: '1.3.0',
+        REQUEST: 'GetMap',
+        BBOX: bbox,
+        CRS: 'EPSG:3857',
+        WIDTH: config.width,
+        HEIGHT: config.height,
+        LAYERS: aerialConfig.layers,
+        STYLES: '',
+        FORMAT: 'image/png',
+        DPI: 300,
+        MAP_RESOLUTION: 300,
+        FORMAT_OPTIONS: 'dpi:300'
+      });
 
-      // Load and draw tiles
-      for (let x = minTileX; x <= maxTileX; x++) {
-        for (let y = minTileY; y <= maxTileY; y++) {
-          const url = `https://tile.openstreetmap.org/${zoomLevel}/${x}/${y}.png`;
-          try {
-            const tile = await loadImage(url);
-            const tileX = ((x - minTileX) * tileSize);
-            const tileY = ((y - minTileY) * tileSize);
-            drawImage(ctx, tile, tileSize, tileSize, 1.0, tileX, tileY);
-          } catch (tileError) {
-            console.warn(`Failed to load tile at ${x},${y}:`, tileError);
-          }
-        }
-      }
+      const url = `${aerialConfig.url}?${params.toString()}`;
+      const baseMap = await loadImage(url);
+      drawImage(ctx, baseMap, canvas.width, canvas.height, 0.7);
     } catch (error) {
-      console.error('Failed to load OpenStreetMap layer:', error);
+      console.error('Failed to load aerial layer:', error);
+    }
+
+    try {
+      // 2. Biodiversity Values layer
+      console.log('Loading biodiversity layer...');
+      const biodiversityConfig = {
+        url: 'https://www.lmbc.nsw.gov.au/arcgis/rest/services/BV/BiodiversityValues/MapServer',
+        layerId: 0,
+        size: 2048,
+        padding: 0.2
+      };
+
+      // Get the biodiversity features
+      const { bbox: mercatorBbox } = calculateMercatorParams(centerX, centerY, size);
+      const params = new URLSearchParams({
+        f: 'image',
+        format: 'png32',
+        transparent: 'true',
+        size: `${biodiversityConfig.size},${biodiversityConfig.size}`,
+        bbox: mercatorBbox,
+        bboxSR: 3857,
+        imageSR: 3857,
+        layers: `show:${biodiversityConfig.layerId}`,
+        dpi: 96
+      });
+
+      const url = `${biodiversityConfig.url}/export?${params.toString()}`;
+      console.log('Requesting biodiversity layer through proxy...', url);
+      
+      const proxyUrl = await proxyRequest(url);
+      if (!proxyUrl) {
+        throw new Error('Failed to get proxy URL for biodiversity layer');
+      }
+      
+      console.log('Loading biodiversity image from proxy URL...');
+      const biodiversityLayer = await loadImage(proxyUrl);
+      console.log('Biodiversity layer loaded successfully');
+      drawImage(ctx, biodiversityLayer, canvas.width, canvas.height, 0.8);
+    } catch (error) {
+      console.warn('Failed to load biodiversity layer:', error);
     }
 
     // Draw boundaries
@@ -2773,9 +3095,52 @@ export async function captureOpenStreetMap(feature, developableArea = null) {
       });
     }
 
+    // Add legend
+    const legendHeight = 240;
+    const legendWidth = 400;
+    const padding = 20;
+    const legendX = canvas.width - legendWidth - padding;
+    const legendY = canvas.height - legendHeight - padding;
+
+    // Draw legend background with border
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.strokeStyle = '#002664';
+    ctx.lineWidth = 2;
+    ctx.fillRect(legendX, legendY, legendWidth, legendHeight);
+    ctx.strokeRect(legendX, legendY, legendWidth, legendHeight);
+
+    // Legend title
+    ctx.font = 'bold 28px Public Sans';
+    ctx.fillStyle = '#002664';
+    ctx.textBaseline = 'top';
+    ctx.fillText('Biodiversity Values', legendX + padding, legendY + padding);
+
+    // Legend items
+    const legendItems = [
+      { color: '#FF0000', label: 'Biodiversity Value Area' }
+    ];
+
+    ctx.textBaseline = 'middle';
+    ctx.font = '22px Public Sans';
+
+    legendItems.forEach((item, index) => {
+      const y = legendY + padding + 60 + (index * 45);
+      
+      // Draw color box
+      ctx.fillStyle = item.color;
+      ctx.fillRect(legendX + padding, y - 10, 20, 20);
+      ctx.strokeStyle = '#363636';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(legendX + padding, y - 10, 20, 20);
+      
+      // Draw label
+      ctx.fillStyle = '#363636';
+      ctx.fillText(item.label, legendX + padding + 35, y);
+    });
+
     return canvas.toDataURL('image/png', 1.0);
   } catch (error) {
-    console.error('Failed to capture OpenStreetMap:', error);
+    console.error('Failed to capture biodiversity map:', error);
     return null;
   }
 }

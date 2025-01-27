@@ -1,6 +1,5 @@
 import { convertCmValues } from '../utils/units';
 import scoringCriteria from './scoringLogic';
-import { captureContaminationMap, captureOpenStreetMap } from '../utils/map/services/screenshot';
 
 const styles = {
   title: {
@@ -110,21 +109,10 @@ const styles = {
     color: '002664',
     fontFace: 'Public Sans',
     align: 'left'
-  },
-  scoreText: {
-    x: '5%',
-    y: '85%',
-    w: '90%',
-    h: '6%',
-    fontSize: 8,
-    color: '363636',
-    fontFace: 'Public Sans',
-    align: 'left',
-    valign: 'middle'
   }
 };
 
-export async function addContaminationSlide(pptx, properties) {
+export async function addEnviroSlide(pptx, properties) {
   const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
 
   try {
@@ -132,7 +120,7 @@ export async function addContaminationSlide(pptx, properties) {
     slide.addText([
       { text: properties.site__address, options: { color: styles.title.color } },
       { text: ' ', options: { breakLine: true } },
-      { text: 'Site Contamination', options: { color: styles.subtitle.color } }
+      { text: 'Environmental', options: { color: styles.subtitle.color } }
     ], convertCmValues({
       ...styles.title,
       color: undefined
@@ -153,9 +141,9 @@ export async function addContaminationSlide(pptx, properties) {
     // Add footer elements
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.footerLine));
     slide.addText('Property and Development NSW', convertCmValues(styles.footer));
-    slide.addText('11', convertCmValues(styles.pageNumber));
+    slide.addText('8', convertCmValues(styles.pageNumber));
 
-    // Add left map container (Contaminated Sites Register)
+    // Add left map container (TEC)
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
       x: '5%',
       y: '18%',
@@ -174,31 +162,23 @@ export async function addContaminationSlide(pptx, properties) {
       fill: '002664'  
     }));
 
-    // Then add the rotated text on top with correct positioning
-    slide.addText('Contaminated Sites Register', convertCmValues({
-      x: '-22.5%',    // Negative x to account for rotation
-      y: '45%',     // Centered vertically
-      w: '61%',     // Original height becomes width when rotated
-      h: '6%',      // Original width becomes height when rotated
+    // Add rotated text for TEC
+    slide.addText('Threatened Ecological Communities', convertCmValues({
+      x: '-22.5%',
+      y: '45%',
+      w: '61%',
+      h: '6%',
       color: 'FFFFFF',
       fontSize: 14,
       fontFace: 'Public Sans',
       align: 'center',
       valign: 'middle',
-      rotate: 270    // Use rotate instead of transform
+      rotate: 270
     }));
 
-    // Capture and add contamination map
-    try {
-      const feature = {
-        geometry: {
-          coordinates: [properties.site__geometry]
-        },
-        properties: properties
-      };
-      const mapScreenshot = await captureContaminationMap(feature, properties.developableArea);
-      
-      if (mapScreenshot) {
+    // Add TEC map
+    if (properties.tecMapScreenshot) {
+      try {
         const imageOptions = convertCmValues({
           x: '11%',
           y: '18%',
@@ -212,17 +192,17 @@ export async function addContaminationSlide(pptx, properties) {
         });
 
         slide.addImage({
-          data: mapScreenshot,
+          data: properties.tecMapScreenshot,
           ...imageOptions
         });
 
-        console.log('Successfully added contamination map');    
-      } else {
-        throw new Error('Map screenshot capture returned null');
+        console.log('Successfully added TEC map');    
+      } catch (error) {
+        console.error('Error adding TEC map:', error);
       }
-    } catch (error) {
-      console.error('Error capturing/adding contamination map:', error);
-      slide.addText('Contamination map unavailable', convertCmValues({
+    } else {
+      console.warn('No TEC map screenshot available');
+      slide.addText('TEC map unavailable', convertCmValues({
         x: '5%',
         y: '24%',
         w: '40%',
@@ -234,49 +214,39 @@ export async function addContaminationSlide(pptx, properties) {
       }));
     }
 
-    // Add debug logging
-    console.log('Checking contamination data:', {
-      hasDevArea: !!properties.developableArea,
-      hasContamFeatures: !!properties.site_suitability__contaminationFeatures,
-      contamFeatures: properties.site_suitability__contaminationFeatures
-    });
+    // Calculate TEC score
+    let tecScore = 0;
+    let tecText = 'TEC data unavailable.';
 
-    // Calculate contamination score
-    let contaminationScore = 0;
-    let contaminationText = 'Contamination data unavailable.';
-
-    if (properties.developableArea && properties.site_suitability__contaminationFeatures) {
+    if (properties.developableArea && properties.site_suitability__tecFeatures) {
       try {
-        console.log('=== Starting Contamination Score Calculation ===');
+        console.log('=== Starting TEC Score Calculation ===');
         console.log('Developable area geometry:', JSON.stringify(properties.developableArea[0].geometry));
-        console.log('Number of contamination features:', 
-          properties.site_suitability__contaminationFeatures.length);
+        console.log(`Processing TEC features...`);
         
-        const result = scoringCriteria.contamination.calculateScore(
-          properties.site_suitability__contaminationFeatures, 
-          properties.developableArea
-        );
+        const result = scoringCriteria.tec.calculateScore(properties.site_suitability__tecFeatures, properties.developableArea);
         console.log('\nScore Calculation Result:');
         console.log('- Score:', result.score);
-        console.log('- Description:', scoringCriteria.contamination.getScoreDescription(result));
-        console.log('=== End Contamination Score Calculation ===\n');
+        console.log('- Coverage:', result.coverage ? `${result.coverage.toFixed(2)}%` : 'N/A');
+        console.log('- Description:', scoringCriteria.tec.getScoreDescription(result));
+        console.log('=== End TEC Score Calculation ===\n');
         
-        contaminationScore = result.score;
-        contaminationText = scoringCriteria.contamination.getScoreDescription(result);
+        tecScore = result.score;
+        tecText = scoringCriteria.tec.getScoreDescription(result);
       } catch (error) {
-        console.error('Error calculating contamination score:', error);
+        console.error('Error calculating TEC score:', error);
         console.error('Error details:', {
           message: error.message,
           stack: error.stack,
           developableArea: properties.developableArea ? 'exists' : 'missing',
-          contaminationFeatures: properties.site_suitability__contaminationFeatures ? 'exists' : 'missing'
+          tecFeatures: properties.site_suitability__tecFeatures ? 'exists' : 'missing'
         });
-        contaminationText = 'Error calculating contamination risk.';
+        tecText = 'Error calculating TEC impact.';
       }
     } else {
-      console.log('Missing required data for contamination score:', {
+      console.log('Missing required data for TEC score:', {
         developableArea: properties.developableArea ? 'exists' : 'missing',
-        contaminationFeatures: properties.site_suitability__contaminationFeatures ? 'exists' : 'missing'
+        tecFeatures: properties.site_suitability__tecFeatures ? 'exists' : 'missing'
       });
     }
 
@@ -286,12 +256,12 @@ export async function addContaminationSlide(pptx, properties) {
       y: '80%',
       w: '40%',
       h: '12%',
-      fill: scoringCriteria.contamination.getScoreColor(contaminationScore).replace('#', ''),
+      fill: scoringCriteria.tec.getScoreColor(tecScore).replace('#', ''),
       line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
     }));
 
     // Add description text
-    slide.addText(contaminationText, convertCmValues({
+    slide.addText(tecText, convertCmValues({
       x: '5%',
       y: '80%',
       w: '40%',
@@ -305,7 +275,7 @@ export async function addContaminationSlide(pptx, properties) {
     }));
 
     // Add score text
-    slide.addText(`Score: ${contaminationScore}/3`, convertCmValues({
+    slide.addText(`Score: ${tecScore}/3`, convertCmValues({
       x: '5%',
       y: '86%',
       w: '40%',
@@ -327,7 +297,7 @@ export async function addContaminationSlide(pptx, properties) {
     }));
 
     // Add source text
-    slide.addText('Source: EPA Contaminated Land Register. Note that absence of being on the register does not mean the site is free from contamination.', convertCmValues({
+    slide.addText('Source: NSW Department of Planning, Housing and Infrastructure, 2025', convertCmValues({
       x: '5%',
       y: '88%',
       w: '40%',
@@ -340,7 +310,7 @@ export async function addContaminationSlide(pptx, properties) {
       wrap: true
     }));
 
-    // Right side - Usage and Potential Site Remediation
+    // Right side - Biodiversity
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
       x: '50%',
       y: '18%',
@@ -360,30 +330,22 @@ export async function addContaminationSlide(pptx, properties) {
     }));
 
     // Add rotated text for right side
-    slide.addText('Usage and Potential Site Remediation', convertCmValues({
-      x: '22.5%',     // Adjusted x position for right side
-      y: '45%',     // Centered vertically
-      w: '61%',     // Original height becomes width when rotated
-      h: '6%',      // Original width becomes height when rotated
+    slide.addText('Biodiversity', convertCmValues({
+      x: '22.5%',
+      y: '45%',
+      w: '61%',
+      h: '6%',
       color: 'FFFFFF',
       fontSize: 14,
       fontFace: 'Public Sans',
       align: 'center',
       valign: 'middle',
-      rotate: 270    // Use rotate instead of transform
+      rotate: 270
     }));
 
-    // Add OpenStreetMap view
-    try {
-      const feature = {
-        geometry: {
-          coordinates: [properties.site__geometry]
-        },
-        properties: properties
-      };
-      const mapScreenshot = await captureOpenStreetMap(feature, properties.developableArea);
-      
-      if (mapScreenshot) {
+    // Add biodiversity map
+    if (properties.biodiversityMapScreenshot) {
+      try {
         const imageOptions = convertCmValues({
           x: '56%',
           y: '18%',
@@ -397,17 +359,17 @@ export async function addContaminationSlide(pptx, properties) {
         });
 
         slide.addImage({
-          data: mapScreenshot,
+          data: properties.biodiversityMapScreenshot,
           ...imageOptions
         });
 
-        console.log('Successfully added OpenStreetMap view');    
-      } else {
-        throw new Error('Map screenshot capture returned null');
+        console.log('Successfully added biodiversity map');    
+      } catch (error) {
+        console.error('Error adding biodiversity map:', error);
       }
-    } catch (error) {
-      console.error('Error capturing/adding OpenStreetMap view:', error);
-      slide.addText('Map unavailable', convertCmValues({
+    } else {
+      console.warn('No biodiversity map screenshot available');
+      slide.addText('Biodiversity map unavailable', convertCmValues({
         x: '50%',
         y: '24%',
         w: '40%',
@@ -419,18 +381,19 @@ export async function addContaminationSlide(pptx, properties) {
       }));
     }
 
-    // Add description box
+    // Add biodiversity description box
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
       x: '50%',
       y: '80%',
       w: '40%',
       h: '12%',
-      fill: 'FFFFFF',
+      fill: 'F0F6FF',
       line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
     }));
 
-    // Add description text
-    slide.addText('The site may require remediation works depending on the extent and type of contamination present. Further investigation and a detailed site assessment would be required to determine the full scope of any necessary remediation.', convertCmValues({
+    // Add biodiversity description text
+    const biodiversityText = properties.biodiversityImpact || 'Biodiversity impact not assessed.';
+    slide.addText(biodiversityText, convertCmValues({
       x: '50%',
       y: '80%',
       w: '40%',
@@ -453,7 +416,7 @@ export async function addContaminationSlide(pptx, properties) {
     }));
 
     // Add source text
-    slide.addText('Source: OpenStreetMap Contributors', convertCmValues({
+    slide.addText('Source: NSW Biodiversity Values Map, 2023', convertCmValues({
       x: '50%',
       y: '88%',
       w: '40%',
@@ -468,8 +431,8 @@ export async function addContaminationSlide(pptx, properties) {
 
     return slide;
   } catch (error) {
-    console.error('Error generating contamination slide:', error);
-    slide.addText('Error generating contamination slide: ' + error.message, {
+    console.error('Error generating environmental slide:', error);
+    slide.addText('Error generating environmental slide: ' + error.message, {
       x: '10%',
       y: '45%',
       w: '80%',

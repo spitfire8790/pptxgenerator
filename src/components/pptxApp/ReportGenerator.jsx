@@ -5,6 +5,7 @@ import { addPropertySnapshotSlide } from './slides/propertySnapshotSlide';
 import { addPlanningSlide } from './slides/planningSlide';
 import { addPlanningSlide2 } from './slides/planningSlide2';
 import { addServicingSlide } from './slides/servicingSlide';
+import { createScoringSlide } from './slides/scoringSlide';
 import { 
   captureMapScreenshot, 
   capturePrimarySiteAttributesMap, 
@@ -21,7 +22,9 @@ import {
   captureFloodMap,
   captureBushfireMap,
   capturePTALMap,
-  captureContaminationMap
+  captureContaminationMap,
+  captureTECMap,
+  captureBiodiversityMap
 } from './utils/map/services/screenshot';
 import { SCREENSHOT_TYPES } from './utils/map/config/screenshotTypes';
 import SlidePreview from './SlidePreview';
@@ -35,6 +38,7 @@ import { addUtilisationSlide } from './slides/utilisationSlide';
 import { addAccessSlide } from './slides/accessSlide';
 import { addHazardsSlide } from './slides/hazardsSlide';
 import { addContaminationSlide } from './slides/contaminationSlide';
+import { addEnviroSlide } from './slides/enviroSlide';
 
 const slideOptions = [
   { id: 'cover', label: 'Cover Page', addSlide: addCoverSlide },
@@ -47,7 +51,9 @@ const slideOptions = [
   { id: 'utilisation', label: 'Utilisation and Improvements', addSlide: addUtilisationSlide },
   { id: 'access', label: 'Access', addSlide: addAccessSlide },
   { id: 'hazards', label: 'Natural Hazards', addSlide: addHazardsSlide },
-  { id: 'contamination', label: 'Site Contamination', addSlide: addContaminationSlide }
+  { id: 'environmental', label: 'Environmental', addSlide: addEnviroSlide },
+  { id: 'contamination', label: 'Site Contamination', addSlide: addContaminationSlide },
+  { id: 'scoring', label: 'Scoring', addSlide: createScoringSlide }
 ];
 
 const ReportGenerator = ({ selectedFeature }) => {
@@ -66,7 +72,9 @@ const ReportGenerator = ({ selectedFeature }) => {
     utilisation: true,
     access: true,
     hazards: true,
-    contamination: true
+    environmental: true,
+    contamination: true,
+    scoring: true
   });
   const [developableArea, setDevelopableArea] = useState(null);
   const planningMapRef = useRef();
@@ -113,6 +121,8 @@ const ReportGenerator = ({ selectedFeature }) => {
       const udpPrecinctsScreenshot = await captureUDPPrecinctMap(selectedFeature, developableArea);
       const ptalScreenshot = await capturePTALMap(selectedFeature, developableArea);
       const contaminationMapScreenshot = await captureContaminationMap(selectedFeature, developableArea);
+      const tecMapScreenshot = await captureTECMap(selectedFeature, developableArea);
+      const biodiversityMapScreenshot = await captureBiodiversityMap(selectedFeature, developableArea);
 
       console.log('Aerial Screenshot:', aerialScreenshot ? 'Present' : 'Missing');
       console.log('Snapshot Screenshot:', snapshotScreenshot ? 'Present' : 'Missing');
@@ -132,6 +142,8 @@ const ReportGenerator = ({ selectedFeature }) => {
       console.log('Flood Map Screenshot:', floodMapScreenshot ? 'Present' : 'Missing');
       console.log('Bushfire Map Screenshot:', bushfireMapScreenshot ? 'Present' : 'Missing');
       console.log('Contamination Map Screenshot:', contaminationMapScreenshot ? 'Present' : 'Missing');
+      console.log('TEC Map Screenshot:', tecMapScreenshot ? 'Present' : 'Missing');
+      console.log('Biodiversity Map Screenshot:', biodiversityMapScreenshot ? 'Present' : 'Missing');
 
       setCompletedSteps(prev => [...prev, 'screenshots']);
       setCurrentStep('cover');
@@ -190,7 +202,10 @@ const ReportGenerator = ({ selectedFeature }) => {
         roadFeatures: selectedFeature.properties?.roadFeatures,
         udpPrecincts: selectedFeature.properties?.udpPrecincts,
         ptalScreenshot,
-        ptalValues: selectedFeature.properties?.ptalValues
+        ptalValues: selectedFeature.properties?.ptalValues,
+        tecMapScreenshot,
+        biodiversityMapScreenshot,
+        site_suitability__tecFeatures: selectedFeature.properties?.site_suitability__tecFeatures
       };
 
       // Generate the report with progress tracking

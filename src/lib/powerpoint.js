@@ -13,6 +13,8 @@ import { addUtilisationSlide } from '../components/pptxApp/slides/utilisationSli
 import { addAccessSlide } from '../components/pptxApp/slides/accessSlide';
 import { addHazardsSlide } from '../components/pptxApp/slides/hazardsSlide';
 import { addContaminationSlide } from '../components/pptxApp/slides/contaminationSlide';
+import { addEnviroSlide } from '../components/pptxApp/slides/enviroSlide';
+import { createScoringSlide } from '../components/pptxApp/slides/scoringSlide';
 
 export async function generateReport(properties, onProgress) {
   try {
@@ -98,9 +100,24 @@ export async function generateReport(properties, onProgress) {
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 
+    if (properties.selectedSlides.environmental !== false) {
+      await addEnviroSlide(pptx, properties);
+      progress = 99;
+      onProgress?.(progress);
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
     if (properties.selectedSlides.contamination !== false) {
       await addContaminationSlide(pptx, properties);
-      progress = 99;
+      progress = 99.5;
+      onProgress?.(progress);
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    // Add scoring slide last
+    if (properties.selectedSlides.scoring !== false) {
+      await createScoringSlide(pptx, properties, properties.developableArea);
+      progress = 100;
       onProgress?.(progress);
       await new Promise(resolve => setTimeout(resolve, 300));
     }
