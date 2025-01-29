@@ -1,5 +1,6 @@
 import { convertCmValues } from '../utils/units';
 import scoringCriteria from './scoringLogic';
+import * as turf from '@turf/turf';
 
 const styles = {
   title: {
@@ -218,13 +219,23 @@ export async function addEnviroSlide(pptx, properties) {
     let tecScore = 0;
     let tecText = 'TEC data unavailable.';
 
-    if (properties.developableArea && properties.site_suitability__tecFeatures) {
+    console.log('=== TEC Scoring in Environmental Slide ===');
+    console.log('Properties available:', Object.keys(properties));
+    console.log('Developable area:', properties.developableArea);
+    console.log('TEC features:', properties.site_suitability__tecFeatures);
+
+    // Check if we have the required data
+    if (properties.developableArea) {
+      // Even if we have no TEC features, we can still score it (as no impact)
       try {
         console.log('=== Starting TEC Score Calculation ===');
         console.log('Developable area geometry:', JSON.stringify(properties.developableArea[0].geometry));
-        console.log(`Processing TEC features...`);
         
-        const result = scoringCriteria.tec.calculateScore(properties.site_suitability__tecFeatures, properties.developableArea);
+        // Ensure we have a features array, even if empty
+        const tecFeatures = properties.site_suitability__tecFeatures || { type: 'FeatureCollection', features: [] };
+        console.log(`Processing TEC features:`, tecFeatures);
+        
+        const result = scoringCriteria.tec.calculateScore(tecFeatures, properties.developableArea);
         console.log('\nScore Calculation Result:');
         console.log('- Score:', result.score);
         console.log('- Coverage:', result.coverage ? `${result.coverage.toFixed(2)}%` : 'N/A');
@@ -363,7 +374,7 @@ export async function addEnviroSlide(pptx, properties) {
           ...imageOptions
         });
 
-        console.log('Successfully added biodiversity map');    
+        console.log('Successfully added biodiversity map');
       } catch (error) {
         console.error('Error adding biodiversity map:', error);
       }
@@ -381,18 +392,83 @@ export async function addEnviroSlide(pptx, properties) {
       }));
     }
 
-    // Add biodiversity description box
-    slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
-      x: '50%',
-      y: '80%',
-      w: '40%',
-      h: '12%',
-      fill: 'F0F6FF',
-      line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
-    }));
+    // Calculate biodiversity overlap text
+    let biodiversityText = 'Biodiversity impact not assessed.';
+    
+    if (properties.developableArea && properties.site_suitability__biodiversityFeatures) {
+      try {
+        const bioFeatures = properties.site_suitability__biodiversityFeatures;
+        const developableArea = properties.developableArea;
+
+        if (bioFeatures?.features?.length > 0) {
+          // Create a turf polygon from developable area
+          const developablePolygon = {
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'Polygon',
+              coordinates: developableArea[0].geometry.coordinates
+            }
+          };
+          const totalArea = turf.area(developablePolygon);
+
+          // Calculate overlap area
+          let overlapArea = 0;
+          console.log('Processing biodiversity features...');
+          
+          bioFeatures.features.forEach((feature, index) => {
+            if (feature.geometry?.type === 'Polygon' || feature.geometry?.type === 'MultiPolygon') {
+              try {
+                let featurePolygon = feature;
+                console.log(`Feature ${index + 1} area:`, turf.area(featurePolygon), 'square meters');
+                
+                // Check both containment and intersection
+                const containsFeature = turf.booleanContains(developablePolygon, featurePolygon);
+                const intersectsFeature = turf.booleanIntersects(developablePolygon, featurePolygon);
+                
+                if (containsFeature) {
+                  // If developable area contains feature, use entire feature area
+                  const featureArea = turf.area(featurePolygon);
+                  overlapArea += featureArea;
+                  console.log(`Feature ${index + 1} is contained within developable area:`, featureArea);
+                } else if (intersectsFeature) {
+                  // If features intersect, calculate the intersection area
+                  try {
+                    const intersection = turf.intersect(developablePolygon, featurePolygon);
+                    if (intersection) {
+                      const intersectionArea = turf.area(intersection);
+                      overlapArea += intersectionArea;
+                      console.log(`Feature ${index + 1} intersects developable area:`, intersectionArea);
+                    }
+                  } catch (intersectError) {
+                    console.error(`Error calculating intersection for feature ${index + 1}:`, intersectError);
+                  }
+                } else {
+                  console.log(`Feature ${index + 1} does not overlap with developable area`);
+                }
+              } catch (error) {
+                console.error('Error processing biodiversity feature:', error);
+              }
+            }
+          });
+
+          // Calculate percentage and format text
+          const coverage = (overlapArea / totalArea) * 100;
+          console.log('Biodiversity overlap:', { overlapArea, totalArea, coverage });
+          
+          biodiversityText = coverage > 0 
+            ? `${Math.round(coverage)}% of developable area overlaps with biodiversity values.`
+            : 'Developable area has no overlap with biodiversity values.';
+        } else {
+          biodiversityText = 'No biodiversity values identified in the area.';
+        }
+      } catch (error) {
+        console.error('Error calculating biodiversity overlap:', error);
+        biodiversityText = 'Error calculating biodiversity impact.';
+      }
+    }
 
     // Add biodiversity description text
-    const biodiversityText = properties.biodiversityImpact || 'Biodiversity impact not assessed.';
     slide.addText(biodiversityText, convertCmValues({
       x: '50%',
       y: '80%',

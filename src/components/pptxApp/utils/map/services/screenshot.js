@@ -2359,7 +2359,7 @@ export async function capturePTALMap(feature, developableArea = null) {
       const ptalConfig = {
         baseUrl: 'https://portal.data.nsw.gov.au/arcgis/rest/services/Hosted/ptal_dec20_gdb__(1)/FeatureServer/0',
         layerId: 0,
-        token: 'RozDIqRXAcLFLzwkHdKZBxmJVBySOlFCfJeWynAzm3NST2AXabtqEyX7wVZOb9fqw8lsKJKLwdvvtkEN8Vy_9zVYL6qO27bch0LIveTO8bnY1xh34JaLpzCa1GJcVx-WNx1nx6yQ3HTFPLiYY4I1mNaS0ka8flHfbwhv4gOk5K9ZZb5Wrb2brJEmRebq_NH8wul9ZONEYw1YIzDCVz3lobIPwyx1rMyvzDBXBcuVqsLpAw6iYgCn09TDqjVRijm7'
+        token: 'xWNDkDr5ADOR-2a456m7Rjp_AZd4HW9xL6HFKx__ei0_gVDkhiOS6sT-4DZLIME3J6L3NlJ0yH-2oxaIYvqXyFM6hxwuo70XGZ-eSkmPbYWX0R8esq-VtCI3GEjVii3ZUlvjyyEuurxlnMSqxbTVPWFbQmJ6_oK__7Ug92PgzgmGVL6csBuVFoDosJpLkZE_lQzl2LdQoNwDFL50Zi52rLYpuNjbcOQm7HFYUVG1-BpKICYZiQn36Ith8LtqG2M1'
       };
 
       // Color mapping for PTAL values
@@ -2652,8 +2652,6 @@ export async function captureContaminationMap(feature, developableArea = null) {
         lineWidth: 12,
         dashArray: [20, 10]
       });
-    } else {
-      console.log('No developable area to draw');
     }
 
     // Draw property boundary on top
@@ -2752,8 +2750,7 @@ export async function captureOpenStreetMap(feature, developableArea = null) {
     const config = {
       width: 2048,
       height: 2048,
-      padding: 0.3,
-      zoomLevel: 17 // Increased zoom level for better detail
+      padding: 0.4  // Increased padding to ensure proper scaling
     };
     
     const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
@@ -2762,9 +2759,8 @@ export async function captureOpenStreetMap(feature, developableArea = null) {
     // Create base canvas
     const canvas = createCanvas(config.width, config.height);
     const ctx = canvas.getContext('2d', { alpha: true });
-    ctx.fillStyle = '#FFFFFF'; // Add white background
+    ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, config.width, config.height);
-    console.log('Created canvas with dimensions:', { width: config.width, height: config.height });
 
     try {
       // Calculate tile coordinates
@@ -2779,23 +2775,32 @@ export async function captureOpenStreetMap(feature, developableArea = null) {
       const [maxLon, maxLat] = mercatorToWGS84(maxX, maxY);
       console.log('WGS84 coordinates:', { minLon, minLat, maxLon, maxLat });
       
-      // Calculate tile coordinates with adjusted zoom level
-      const tileSize = 256;
+      // Calculate zoom level based on bounding box size
+      const latSpan = Math.abs(maxLat - minLat);
+      const lonSpan = Math.max(Math.abs(maxLon - minLon), 0.0001);
+      const maxSpan = Math.max(latSpan, lonSpan);
+      const zoomLevel = Math.min(19, Math.floor(Math.log2(360 / maxSpan)) + 1);
+      console.log('Calculated zoom level:', zoomLevel);
       
-      // Convert bbox to tile coordinates using WGS84 coordinates
-      const minTileX = lon2tile(minLon, config.zoomLevel);
-      const maxTileX = lon2tile(maxLon, config.zoomLevel);
-      const minTileY = lat2tile(maxLat, config.zoomLevel); // Note: maxLat for minTileY
-      const maxTileY = lat2tile(minLat, config.zoomLevel); // Note: minLat for maxTileY
+      // Calculate tile coordinates
+      const tileSize = 256;
+      const minTileX = lon2tile(minLon, zoomLevel);
+      const maxTileX = lon2tile(maxLon, zoomLevel);
+      const minTileY = lat2tile(maxLat, zoomLevel);
+      const maxTileY = lat2tile(minLat, zoomLevel);
 
-      // Calculate the total number of tiles and canvas position adjustments
+      // Calculate scaling and positioning
       const tilesX = maxTileX - minTileX + 1;
       const tilesY = maxTileY - minTileY + 1;
       const totalWidth = tilesX * tileSize;
       const totalHeight = tilesY * tileSize;
       
-      // Calculate scaling to fit all tiles within canvas
-      const scale = Math.min(config.width / totalWidth, config.height / totalHeight);
+      // Adjust scale to account for padding
+      const scale = Math.min(
+        (config.width * 0.8) / totalWidth,
+        (config.height * 0.8) / totalHeight
+      );
+      
       const offsetX = (config.width - totalWidth * scale) / 2;
       const offsetY = (config.height - totalHeight * scale) / 2;
 
@@ -2805,11 +2810,6 @@ export async function captureOpenStreetMap(feature, developableArea = null) {
       });
 
       // Load and draw tiles
-      let loadedTiles = 0;
-      const totalTiles = tilesX * tilesY;
-      console.log(`Starting to load ${totalTiles} tiles...`);
-
-      // Scale context for all drawings
       ctx.save();
       ctx.translate(offsetX, offsetY);
       ctx.scale(scale, scale);
@@ -2817,8 +2817,7 @@ export async function captureOpenStreetMap(feature, developableArea = null) {
       const maxRetries = 3;
       for (let x = minTileX; x <= maxTileX; x++) {
         for (let y = minTileY; y <= maxTileY; y++) {
-          const url = `https://tile.openstreetmap.org/${config.zoomLevel}/${x}/${y}.png`;
-          console.log(`Loading tile at ${url}`);
+          const url = `https://tile.openstreetmap.org/${zoomLevel}/${x}/${y}.png`;
           
           let retryCount = 0;
           while (retryCount < maxRetries) {
@@ -2826,18 +2825,14 @@ export async function captureOpenStreetMap(feature, developableArea = null) {
               const tile = await loadImage(url);
               const tileX = (x - minTileX) * tileSize;
               const tileY = (y - minTileY) * tileSize;
-              
               ctx.drawImage(tile, tileX, tileY, tileSize, tileSize);
-              loadedTiles++;
-              console.log(`Successfully loaded and drew tile ${loadedTiles}/${totalTiles}`);
               break;
             } catch (tileError) {
               retryCount++;
               if (retryCount === maxRetries) {
                 console.error(`Failed to load tile at ${x},${y} after ${maxRetries} attempts:`, tileError);
               } else {
-                console.warn(`Retry ${retryCount}/${maxRetries} for tile at ${x},${y}`);
-                await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s between retries
+                await new Promise(resolve => setTimeout(resolve, 1000));
               }
             }
           }
@@ -2845,35 +2840,57 @@ export async function captureOpenStreetMap(feature, developableArea = null) {
       }
 
       ctx.restore();
-      
-      console.log(`Finished loading tiles. Successfully loaded ${loadedTiles}/${totalTiles} tiles`);
 
-      // Draw boundaries with adjusted scale
-      console.log('Drawing property boundary...');
-      drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-        strokeStyle: '#FF0000',
-        lineWidth: 3,
-        scale,
-        offsetX,
-        offsetY
-      });
+      // Calculate transformation functions for coordinates
+      const transformCoord = (coord) => {
+        const [lon, lat] = coord;
+        // Scale coordinates to fit within the map bounds
+        const x = (lon - minLon) / (maxLon - minLon) * totalWidth * scale + offsetX;
+        const y = (1 - (lat - minLat) / (maxLat - minLat)) * totalHeight * scale + offsetY;
+        return [x, y];
+      };
 
-      if (developableArea?.features?.[0]) {
+      // Calculate line widths based on scale
+      const baseLineWidth = Math.max(2, 6 / scale);
+      const devAreaLineWidth = Math.max(4, 12 / scale);
+
+      // Draw developable area first (if exists)
+      if (developableArea?.features?.[0]?.geometry?.coordinates?.[0]) {
         console.log('Drawing developable area boundary...');
-        drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
-          strokeStyle: '#02d1b8',
-          lineWidth: 6,
-          dashArray: [10, 5],
-          scale,
-          offsetX,
-          offsetY
+        ctx.beginPath();
+        ctx.strokeStyle = '#02d1b8';
+        ctx.lineWidth = devAreaLineWidth;
+        ctx.setLineDash([20 / scale, 10 / scale]);
+        
+        const coords = developableArea.features[0].geometry.coordinates[0];
+        coords.forEach((coord, i) => {
+          const [x, y] = transformCoord(coord);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
         });
+        
+        ctx.closePath();
+        ctx.stroke();
+        ctx.setLineDash([]); // Reset dash pattern
       }
 
-      console.log('Converting canvas to data URL...');
-      const dataUrl = canvas.toDataURL('image/png', 1.0);
-      console.log('Successfully generated OpenStreetMap image');
-      return dataUrl;
+      // Draw property boundary
+      console.log('Drawing property boundary...');
+      ctx.beginPath();
+      ctx.strokeStyle = '#FF0000';
+      ctx.lineWidth = baseLineWidth;
+      
+      const coords = feature.geometry.coordinates[0];
+      coords.forEach((coord, i) => {
+        const [x, y] = transformCoord(coord);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      
+      ctx.closePath();
+      ctx.stroke();
+
+      return canvas.toDataURL('image/png', 1.0);
     } catch (error) {
       console.error('Failed to load OpenStreetMap layer:', error);
       console.error('Error details:', {
@@ -2912,32 +2929,37 @@ export async function captureTECMap(feature, developableArea = null) {
     // Create base canvas
     const canvas = createCanvas(config.width, config.height);
     const ctx = canvas.getContext('2d', { alpha: true });
-    ctx.fillStyle = '#FFFFFF'; // Add white background
-    ctx.fillRect(0, 0, config.width, config.height);
-    console.log('Created canvas with dimensions:', { width: config.width, height: config.height });
-
+    
     try {
-      // 1. Aerial basemap
+      // 1. Aerial imagery (base)
+      console.log('Loading aerial base layer...');
       const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];
-      const aerialUrl = await proxyRequest(`${aerialConfig.url}?${new URLSearchParams({
-        service: 'WMS',
-        version: '1.3.0',
-        request: 'GetMap',
-        format: 'image/png',
-        transparent: 'true',
-        layers: aerialConfig.layers,
-        width: config.width,
-        height: config.height,
-        crs: 'EPSG:4283',
-        bbox: `${centerY - size/2},${centerX - size/2},${centerY + size/2},${centerX + size/2}`,
-        styles: ''
-      })}`);
-      const aerialLayer = await loadImage(aerialUrl);
-      drawImage(ctx, aerialLayer, canvas.width, canvas.height, 1);
-      console.log('Added aerial basemap');
+      const { bbox } = calculateMercatorParams(centerX, centerY, size);
+      
+      const params = new URLSearchParams({
+        SERVICE: 'WMS',
+        VERSION: '1.3.0',
+        REQUEST: 'GetMap',
+        BBOX: bbox,
+        CRS: 'EPSG:3857',
+        WIDTH: config.width,
+        HEIGHT: config.height,
+        LAYERS: aerialConfig.layers,
+        STYLES: '',
+        FORMAT: 'image/png',
+        DPI: 300,
+        MAP_RESOLUTION: 300,
+        FORMAT_OPTIONS: 'dpi:300'
+      });
+
+      const url = `${aerialConfig.url}?${params.toString()}`;
+      const baseMap = await loadImage(url);
+      drawImage(ctx, baseMap, canvas.width, canvas.height, 0.7);
     } catch (error) {
-      console.warn('Failed to load aerial basemap:', error);
+      console.error('Failed to load aerial layer:', error);
     }
+
+    let tecFeatures = [];
 
     try {
       // 2. TEC layer
@@ -2945,9 +2967,50 @@ export async function captureTECMap(feature, developableArea = null) {
         url: 'https://mapprod1.environment.nsw.gov.au/arcgis/rest/services/EDP/TECs_GreaterSydney/MapServer',
         layerId: 0,
         size: 2048,
-        padding: 0.2
+        padding: 0.3
       };
-      const tecUrl = await proxyRequest(`${tecConfig.url}/export?${new URLSearchParams({
+
+      // First get the features
+      const { bbox } = calculateMercatorParams(centerX, centerY, size);
+      const queryParams = new URLSearchParams({
+        where: '1=1',
+        geometry: bbox,
+        geometryType: 'esriGeometryEnvelope',
+        inSR: 3857,
+        spatialRel: 'esriSpatialRelIntersects',
+        outFields: '*',
+        returnGeometry: true,
+        f: 'geojson'
+      });
+
+      const queryUrl = `${tecConfig.url}/${tecConfig.layerId}/query?${queryParams.toString()}`;
+      console.log('Querying TEC features from:', queryUrl);
+      const tecResponse = await proxyRequest(queryUrl);
+      console.log('TEC Response:', tecResponse);
+      
+      if (tecResponse?.features?.length > 0) {
+        tecFeatures = tecResponse.features;
+        // Store both the features and response
+        if (!feature.properties) {
+          feature.properties = {};
+        }
+        feature.properties.site_suitability__tecFeatures = tecResponse;
+        feature.properties.tecFeatures = tecFeatures;
+        console.log('Stored TEC features:', tecFeatures.length);
+        console.log('First TEC feature:', tecFeatures[0]);
+      } else {
+        console.log('No TEC features found in response');
+        // Initialize empty features array to indicate we checked but found none
+        if (!feature.properties) {
+          feature.properties = {};
+        }
+        feature.properties.site_suitability__tecFeatures = { type: 'FeatureCollection', features: [] };
+        feature.properties.tecFeatures = [];
+        console.log('Initialized empty TEC features');
+      }
+
+      // Then get the image
+      const params = new URLSearchParams({
         f: 'image',
         format: 'png32',
         transparent: 'true',
@@ -2957,10 +3020,20 @@ export async function captureTECMap(feature, developableArea = null) {
         imageSR: 4283,
         layers: `show:${tecConfig.layerId}`,
         dpi: 96
-      })}`);
-      const tecLayer = await loadImage(tecUrl);
+      });
+
+      const url = `${tecConfig.url}/export?${params.toString()}`;
+      console.log('Requesting TEC layer through proxy...', url);
+      
+      const proxyUrl = await proxyRequest(url);
+      if (!proxyUrl) {
+        throw new Error('Failed to get proxy URL for TEC layer');
+      }
+
+      console.log('Loading TEC image from proxy URL...');
+      const tecLayer = await loadImage(proxyUrl);
+      console.log('TEC layer loaded successfully');
       drawImage(ctx, tecLayer, canvas.width, canvas.height, 0.7);
-      console.log('Added TEC layer');
     } catch (error) {
       console.warn('Failed to load TEC layer:', error);
     }
@@ -2969,26 +3042,21 @@ export async function captureTECMap(feature, developableArea = null) {
     if (feature.geometry) {
       drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
         strokeStyle: '#FF0000',
-        lineWidth: 3
+        lineWidth: 6
       });
       console.log('Added site boundary');
     }
 
-      // Draw developable area if provided
-      if (developableArea?.[0]?.geometry?.coordinates) {
-        drawBoundary(ctx, developableArea[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
-          strokeStyle: '#00FFFF',
-          lineWidth: 2,
-          lineDash: [10, 10]
-        });
-        console.log('Added developable area boundary');
-      }
-
-    // Convert canvas to base64 image
-    const screenshot = canvas.toDataURL('image/png');
-    console.log('Generated TEC map screenshot');
-
-    return screenshot;
+    // Draw developable area if provided
+    if (developableArea?.features?.[0]) {
+      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
+        strokeStyle: '#02d1b8',
+        lineWidth: 12,
+        dashArray: [20, 10]
+      });
+      console.log('Added developable area boundary');
+    }
+    return canvas.toDataURL('image/png', 1.0);
   } catch (error) {
     console.error('Failed to capture TEC map:', error);
     return null;
@@ -3007,6 +3075,7 @@ export async function captureBiodiversityMap(feature, developableArea = null) {
     };
     
     const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    console.log('Calculated bounds:', { centerX, centerY, size });
     
     // Create base canvas
     const canvas = createCanvas(config.width, config.height);
@@ -3037,6 +3106,7 @@ export async function captureBiodiversityMap(feature, developableArea = null) {
       const url = `${aerialConfig.url}?${params.toString()}`;
       const baseMap = await loadImage(url);
       drawImage(ctx, baseMap, canvas.width, canvas.height, 0.7);
+      console.log('Aerial base layer loaded successfully');
     } catch (error) {
       console.error('Failed to load aerial layer:', error);
     }
@@ -3048,11 +3118,36 @@ export async function captureBiodiversityMap(feature, developableArea = null) {
         url: 'https://www.lmbc.nsw.gov.au/arcgis/rest/services/BV/BiodiversityValues/MapServer',
         layerId: 0,
         size: 2048,
-        padding: 0.2
+        padding: 0.3
       };
 
-      // Get the biodiversity features
+      // First get the features for scoring
       const { bbox: mercatorBbox } = calculateMercatorParams(centerX, centerY, size);
+      const queryParams = new URLSearchParams({
+        where: '1=1',
+        geometry: mercatorBbox,
+        geometryType: 'esriGeometryEnvelope',
+        inSR: 3857,
+        spatialRel: 'esriSpatialRelIntersects',
+        outFields: '*',
+        returnGeometry: true,
+        f: 'geojson'
+      });
+
+      const queryUrl = `${biodiversityConfig.url}/${biodiversityConfig.layerId}/query?${queryParams.toString()}`;
+      console.log('Querying biodiversity features from:', queryUrl);
+      const bioResponse = await proxyRequest(queryUrl);
+      console.log('Biodiversity Response:', bioResponse);
+      
+      if (bioResponse?.features?.length > 0) {
+        if (!feature.properties) {
+          feature.properties = {};
+        }
+        feature.properties.site_suitability__biodiversityFeatures = bioResponse;
+        console.log('Stored biodiversity features:', bioResponse.features.length);
+      }
+
+      // Then get the image
       const params = new URLSearchParams({
         f: 'image',
         format: 'png32',
@@ -3079,13 +3174,17 @@ export async function captureBiodiversityMap(feature, developableArea = null) {
       drawImage(ctx, biodiversityLayer, canvas.width, canvas.height, 0.8);
     } catch (error) {
       console.warn('Failed to load biodiversity layer:', error);
+      console.error('Error details:', error);
     }
 
     // Draw boundaries
-    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-      strokeStyle: '#FF0000',
-      lineWidth: 6
-    });
+    if (feature.geometry) {
+      drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+        strokeStyle: '#FF0000',
+        lineWidth: 6
+      });
+      console.log('Added site boundary');
+    }
 
     if (developableArea?.features?.[0]) {
       drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
@@ -3093,50 +3192,8 @@ export async function captureBiodiversityMap(feature, developableArea = null) {
         lineWidth: 12,
         dashArray: [20, 10]
       });
+      console.log('Added developable area boundary');
     }
-
-    // Add legend
-    const legendHeight = 240;
-    const legendWidth = 400;
-    const padding = 20;
-    const legendX = canvas.width - legendWidth - padding;
-    const legendY = canvas.height - legendHeight - padding;
-
-    // Draw legend background with border
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-    ctx.strokeStyle = '#002664';
-    ctx.lineWidth = 2;
-    ctx.fillRect(legendX, legendY, legendWidth, legendHeight);
-    ctx.strokeRect(legendX, legendY, legendWidth, legendHeight);
-
-    // Legend title
-    ctx.font = 'bold 28px Public Sans';
-    ctx.fillStyle = '#002664';
-    ctx.textBaseline = 'top';
-    ctx.fillText('Biodiversity Values', legendX + padding, legendY + padding);
-
-    // Legend items
-    const legendItems = [
-      { color: '#FF0000', label: 'Biodiversity Value Area' }
-    ];
-
-    ctx.textBaseline = 'middle';
-    ctx.font = '22px Public Sans';
-
-    legendItems.forEach((item, index) => {
-      const y = legendY + padding + 60 + (index * 45);
-      
-      // Draw color box
-      ctx.fillStyle = item.color;
-      ctx.fillRect(legendX + padding, y - 10, 20, 20);
-      ctx.strokeStyle = '#363636';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(legendX + padding, y - 10, 20, 20);
-      
-      // Draw label
-      ctx.fillStyle = '#363636';
-      ctx.fillText(item.label, legendX + padding + 35, y);
-    });
 
     return canvas.toDataURL('image/png', 1.0);
   } catch (error) {

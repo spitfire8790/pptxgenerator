@@ -1467,17 +1467,17 @@ const scoringCriteria = {
     calculateScore: (tecFeatures, developableArea) => {
       console.log('=== TEC Score Calculation Start ===');
       console.log('Input validation:');
-      console.log('tecFeatures:', tecFeatures);
-      console.log('developableArea:', developableArea);
+      console.log('tecFeatures:', JSON.stringify(tecFeatures));
+      console.log('developableArea:', JSON.stringify(developableArea));
 
       if (!developableArea?.[0] || !developableArea[0].geometry) {
         console.log('No developable area provided - returning score 0');
         return { score: 0, coverage: 0, features: [] };
       }
 
-      // If no TEC features, return highest score
+      // If no TEC features or empty feature collection, return highest score
       if (!tecFeatures?.features?.length) {
-        console.log('No TEC features found - returning score 3');
+        console.log('No TEC features found - returning score 3 (no impact)');
         return { score: 3, coverage: 0, features: [] };
       }
 
@@ -1495,6 +1495,13 @@ const scoringCriteria = {
             coordinates: developableCoords
           }
         };
+
+        // Validate developable polygon
+        if (!turf.booleanValid(developablePolygon)) {
+          console.error('Invalid developable polygon geometry');
+          return { score: 0, coverage: 0, features: [] };
+        }
+
         const totalArea = turf.area(developablePolygon);
         console.log('Total developable area:', totalArea, 'square meters');
 
@@ -1505,29 +1512,78 @@ const scoringCriteria = {
         
         tecFeatures.features.forEach((feature, index) => {
           console.log(`\nProcessing feature ${index + 1}:`, feature);
-          if (feature.geometry?.type === 'Polygon' || feature.geometry?.type === 'MultiPolygon') {
-            try {
-              let featurePolygon = feature;
-              console.log(`Feature ${index + 1} area before intersection:`, turf.area(featurePolygon), 'square meters');
-              
-              // First check if the feature is within or intersects the developable area
-              const containsFeature = turf.booleanContains(developablePolygon, featurePolygon);
-              
-              if (containsFeature) {
-                // If developable area contains feature, use feature area
-                const featureArea = turf.area(featurePolygon);
-                tecArea += featureArea;
-                relevantFeatures.push(feature);
-                console.log(`Feature ${index + 1} is contained within developable area, using feature area:`, featureArea);
-              } else {
-                console.log(`Feature ${index + 1} is not within developable area`);
+          
+          if (!feature.geometry) {
+            console.log(`Feature ${index + 1} has no geometry`);
+            return;
+          }
+
+          try {
+            // Function to clean coordinates (remove Z and M values)
+            const cleanCoordinates = coords => {
+              if (Array.isArray(coords[0])) {
+                return coords.map(cleanCoordinates);
               }
-            } catch (error) {
-              console.error(`Error processing feature ${index + 1}:`, error);
-              console.error('Feature geometry:', feature.geometry);
+              return [coords[0], coords[1]]; // Keep only X and Y
+            };
+
+            // Convert MultiPolygon to Feature if necessary
+            if (feature.geometry.type === 'MultiPolygon') {
+              // Handle each polygon in the MultiPolygon separately
+              feature.geometry.coordinates.forEach(polygonCoords => {
+                const cleanedCoords = cleanCoordinates(polygonCoords);
+                const singlePolygon = turf.polygon(cleanedCoords);
+                
+                if (!turf.booleanValid(singlePolygon)) {
+                  console.log(`Invalid polygon geometry in MultiPolygon feature ${index + 1}`);
+                  return;
+                }
+                
+                try {
+                  if (turf.booleanIntersects(developablePolygon, singlePolygon)) {
+                    const intersection = turf.intersect(developablePolygon, singlePolygon);
+                    if (intersection) {
+                      const intersectionArea = turf.area(intersection);
+                      tecArea += intersectionArea;
+                      relevantFeatures.push({
+                        ...feature,
+                        intersectionArea
+                      });
+                    }
+                  }
+                } catch (intersectError) {
+                  console.error(`Error processing MultiPolygon part:`, intersectError);
+                }
+              });
+            } else if (feature.geometry.type === 'Polygon') {
+              // Clean the coordinates
+              const cleanedCoords = cleanCoordinates(feature.geometry.coordinates);
+              const featurePolygon = turf.polygon(cleanedCoords);
+
+              // Ensure the polygon is valid
+              if (!turf.booleanValid(featurePolygon)) {
+                console.log(`Invalid polygon geometry in feature ${index + 1}`);
+                return;
+              }
+
+              // Check intersection
+              if (turf.booleanIntersects(developablePolygon, featurePolygon)) {
+                const intersection = turf.intersect(developablePolygon, featurePolygon);
+                if (intersection) {
+                  const intersectionArea = turf.area(intersection);
+                  tecArea += intersectionArea;
+                  relevantFeatures.push({
+                    ...feature,
+                    intersectionArea
+                  });
+                }
+              }
+            } else {
+              console.log(`Unsupported geometry type: ${feature.geometry.type}`);
             }
-          } else {
-            console.log(`Feature ${index + 1} is not a Polygon/MultiPolygon: ${feature.geometry?.type}`);
+          } catch (error) {
+            console.error(`Error processing feature ${index + 1}:`, error);
+            console.error('Feature geometry:', feature.geometry);
           }
         });
 
