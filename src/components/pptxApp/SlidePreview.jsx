@@ -1,6 +1,19 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 const SlidePreview = ({ selectedFeature, screenshot }) => {
+  const [imageError, setImageError] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
+
+  const handleImageLoad = () => {
+    setImageLoading(false);
+    setImageError(false);
+  };
+
+  const handleImageError = () => {
+    setImageLoading(false);
+    setImageError(true);
+  };
+
   return (
     <div className="slide-preview-container mb-4">
       <h3 className="text-lg font-semibold mb-2">Preview</h3>
@@ -11,7 +24,17 @@ const SlidePreview = ({ selectedFeature, screenshot }) => {
           {/* Left side container */}
           <div className="absolute left-0 top-0 w-1/2 h-full" style={{ backgroundColor: '#002664' }}>
             {screenshot && (
-              <div className="w-full h-full">
+              <div className="w-full h-full relative">
+                {imageLoading && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+                  </div>
+                )}
+                {imageError && (
+                  <div className="absolute inset-0 flex items-center justify-center text-white text-sm">
+                    Failed to load image
+                  </div>
+                )}
                 <img 
                   src={screenshot} 
                   alt="Property"
@@ -20,8 +43,11 @@ const SlidePreview = ({ selectedFeature, screenshot }) => {
                     objectFit: 'cover',
                     objectPosition: 'top',
                     maxWidth: '100%',
-                    maxHeight: '100%'
+                    maxHeight: '100%',
+                    display: imageError ? 'none' : 'block'
                   }}
+                  onLoad={handleImageLoad}
+                  onError={handleImageError}
                 />
               </div>
             )}

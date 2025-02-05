@@ -40,15 +40,14 @@ export async function captureMapScreenshot(feature, type = SCREENSHOT_TYPES.SNAP
     drawImage(ctx, mainImage, canvas.width, canvas.height, config.layerId ? 0.7 : 1.0);
 
     if (developableArea?.features?.[0]) {
-      // Remove console.log
-      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.size || config.width, {
+      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width || config.size, {
         strokeStyle: '#02d1b8',
         lineWidth: 12,
         dashArray: [20, 10]
       });
     }
 
-    if (drawBoundaryLine) {
+    if (drawBoundaryLine && feature.geometry?.coordinates?.[0]) {
       drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width || config.size, {
         strokeStyle: '#FF0000',
         lineWidth: 6
@@ -949,7 +948,7 @@ export async function capturePowerMap(feature, developableArea = null) {
         geometry: mercatorBbox,
         geometryType: 'esriGeometryEnvelope',
         inSR: 3857,
-        outSR: 3857,  // Request coordinates in GDA94
+        outSR: 4283,  // Request coordinates in GDA94
         spatialRel: 'esriSpatialRelIntersects',
         outFields: '*',
         returnGeometry: true,

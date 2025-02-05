@@ -9,6 +9,10 @@ export const LAYER_CONFIGS = {
     height: 2048,
     padding: 0.2,
     dpi: 300,
+    fallbackUrl: 'https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer',
+    fallbackFormat: 'png32',
+    fallbackTransparent: false,
+    fallbackSpatialReference: 102100
   },
   [SCREENSHOT_TYPES.COVER]: {
     url: 'https://api.metromap.com.au/ogc/gda2020/key/cstti1v27eq9nu61qu4g5hmzziouk84x211rfim0mb35cujvqpt1tufytqk575pe/service',
@@ -18,15 +22,23 @@ export const LAYER_CONFIGS = {
     height: 2048,
     padding: 1,
     dpi: 300,
+    fallbackUrl: 'https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer',
+    fallbackFormat: 'png32',
+    fallbackTransparent: false,
+    fallbackSpatialReference: 102100
   },
   [SCREENSHOT_TYPES.SNAPSHOT]: {
     url: 'https://api.metromap.com.au/ogc/gda2020/key/cstti1v27eq9nu61qu4g5hmzziouk84x211rfim0mb35cujvqpt1tufytqk575pe/service',
     layers: 'Australia_latest',
     opacity: 1,
     width: 2048,
-    height: 3584,
-    padding: 0.1,
-    dpi: 300,
+    height: 2048,
+    padding: 0.2,
+    dpi: 500,
+    fallbackUrl: 'https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer',
+    fallbackFormat: 'png32',
+    fallbackTransparent: false,
+    fallbackSpatialReference: 102100
   },
   [SCREENSHOT_TYPES.ZONING]: {
     url: 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/EPI_Primary_Planning_Layers/MapServer',
@@ -120,6 +132,6 @@ export const LAYER_CONFIGS = {
     dpi: 300,
     format: 'png32',
     transparent: true,
-    spatialReference: 3857
+    spatialReference: 4283
   },
 };

@@ -337,9 +337,20 @@ const scoringCriteria = {
       }
 
       try {
-        // Calculate developable area - ensure we have a valid polygon
         const developableCoords = developableArea[0].geometry.coordinates;
-        console.log('Developable coordinates:', developableCoords);
+        console.log('Raw developable coordinates:', developableCoords);
+        
+        // Validate developable area coordinates
+        if (!developableCoords || !Array.isArray(developableCoords) || developableCoords.length === 0) {
+          console.error('Invalid developable area coordinates:', developableCoords);
+          return { score: 0, coverage: 0, features: [] };
+        }
+        
+        // For polygon coordinates, we need at least one ring with at least 3 points
+        if (!Array.isArray(developableCoords[0]) || !Array.isArray(developableCoords[0][0]) || developableCoords[0].length < 3) {
+          console.error('Invalid developable area polygon structure:', developableCoords);
+          return { score: 0, coverage: 0, features: [] };
+        }
         
         // Create a valid GeoJSON polygon - ensure coordinates are properly wrapped
         const developablePolygon = {
@@ -350,6 +361,14 @@ const scoringCriteria = {
             coordinates: developableCoords
           }
         };
+
+        // Validate the created polygon
+        if (!turf.booleanValid(developablePolygon)) {
+          console.error('Invalid developable polygon geometry');
+          return { score: 0, coverage: 0, features: [] };
+        }
+
+        console.log('Created valid developable polygon:', JSON.stringify(developablePolygon));
         const totalArea = turf.area(developablePolygon);
         console.log('Total developable area:', totalArea, 'square meters');
 
@@ -1599,9 +1618,20 @@ const scoringCriteria = {
       }
 
       try {
-        // Calculate developable area - ensure we have a valid polygon
         const developableCoords = developableArea[0].geometry.coordinates;
-        console.log('Developable coordinates:', developableCoords);
+        console.log('Raw developable coordinates:', developableCoords);
+        
+        // Validate developable area coordinates
+        if (!developableCoords || !Array.isArray(developableCoords) || developableCoords.length === 0) {
+          console.error('Invalid developable area coordinates:', developableCoords);
+          return { score: 0, coverage: 0, features: [] };
+        }
+        
+        // For polygon coordinates, we need at least one ring with at least 3 points
+        if (!Array.isArray(developableCoords[0]) || !Array.isArray(developableCoords[0][0]) || developableCoords[0].length < 3) {
+          console.error('Invalid developable area polygon structure:', developableCoords);
+          return { score: 0, coverage: 0, features: [] };
+        }
         
         // Create a valid GeoJSON polygon - ensure coordinates are properly wrapped
         const developablePolygon = {
@@ -1613,12 +1643,13 @@ const scoringCriteria = {
           }
         };
 
-        // Validate developable polygon
+        // Validate the created polygon
         if (!turf.booleanValid(developablePolygon)) {
           console.error('Invalid developable polygon geometry');
           return { score: 0, coverage: 0, features: [] };
         }
 
+        console.log('Created valid developable polygon:', JSON.stringify(developablePolygon));
         const totalArea = turf.area(developablePolygon);
         console.log('Total developable area:', totalArea, 'square meters');
 
@@ -1637,63 +1668,40 @@ const scoringCriteria = {
           }
 
           try {
-            // Clean coordinates function - remove Z and M values
-            const cleanCoordinates = coords => {
-              // Handle array of polygons
-              if (Array.isArray(coords) && Array.isArray(coords[0]) && Array.isArray(coords[0][0])) {
-                return coords.map(poly => cleanCoordinates(poly));
-              }
-              // Handle single polygon
-              if (Array.isArray(coords) && Array.isArray(coords[0]) && coords[0].length >= 2) {
-                return coords.map(point => [point[0], point[1]]);
-              }
-              // Handle single point
-              if (Array.isArray(coords) && coords.length >= 2) {
-                return [coords[0], coords[1]];
-              }
-              console.error('Invalid coordinates structure:', coords);
-              return coords;
-            };
-
             let featurePolygon;
-            if (feature.geometry.type === 'MultiPolygon') {
-              // Handle each polygon in MultiPolygon
-              feature.geometry.coordinates.forEach(polygonCoords => {
-                try {
-                  const cleanedCoords = cleanCoordinates(polygonCoords);
-                  console.log('Cleaned MultiPolygon coordinates:', cleanedCoords);
-                  
-                  const singlePolygon = turf.polygon(cleanedCoords);
-                  
-                  if (turf.booleanValid(singlePolygon)) {
-                    if (turf.booleanIntersects(developablePolygon, singlePolygon)) {
-                      const intersection = turf.intersect(developablePolygon, singlePolygon);
-                      if (intersection) {
-                        const intersectionArea = turf.area(intersection);
-                        tecArea += intersectionArea;
-                        relevantFeatures.push({
-                          ...feature,
-                          intersectionArea
-                        });
-                      }
-                    }
-                  }
-                } catch (polygonError) {
-                  console.error('Error processing polygon in MultiPolygon:', polygonError);
-                  console.log('Original coordinates:', polygonCoords);
-                }
-              });
-            } else if (feature.geometry.type === 'Polygon') {
+            if (feature.geometry.type === 'Polygon') {
               try {
-                // Clean and process single polygon
-                const cleanedCoords = cleanCoordinates(feature.geometry.coordinates);
-                console.log('Cleaned Polygon coordinates:', cleanedCoords);
-                
-                featurePolygon = turf.polygon(cleanedCoords);
+                console.log('Processing Polygon feature:', {
+                  coordinates: feature.geometry.coordinates
+                });
 
-                if (turf.booleanValid(featurePolygon)) {
-                  if (turf.booleanIntersects(developablePolygon, featurePolygon)) {
-                    const intersection = turf.intersect(developablePolygon, featurePolygon);
+                // Create a valid polygon from the feature
+                featurePolygon = turf.polygon(feature.geometry.coordinates);
+                console.log('Created polygon feature');
+
+                if (!turf.booleanValid(featurePolygon)) {
+                  console.error('Created polygon is invalid');
+                  return;
+                }
+
+                // Check intersection
+                const doesIntersect = turf.booleanIntersects(developablePolygon, featurePolygon);
+                console.log('Intersection check:', doesIntersect);
+
+                if (doesIntersect) {
+                  try {
+                    // Calculate intersection using a try-catch block for each method
+                    let intersection;
+                    try {
+                      intersection = turf.intersect(developablePolygon, featurePolygon);
+                    } catch (intersectError) {
+                      console.log('Primary intersection method failed, trying alternative...');
+                      // If direct intersection fails, try with simplified geometries
+                      const simplifiedDevelopable = turf.simplify(developablePolygon, { tolerance: 0.0001 });
+                      const simplifiedFeature = turf.simplify(featurePolygon, { tolerance: 0.0001 });
+                      intersection = turf.intersect(simplifiedDevelopable, simplifiedFeature);
+                    }
+
                     if (intersection) {
                       const intersectionArea = turf.area(intersection);
                       tecArea += intersectionArea;
@@ -1701,12 +1709,82 @@ const scoringCriteria = {
                         ...feature,
                         intersectionArea
                       });
+                      console.log('Intersection area:', intersectionArea);
+                    } else {
+                      console.log('No valid intersection found');
                     }
+                  } catch (intersectError) {
+                    console.error('All intersection calculation methods failed:', intersectError);
+                    // If all intersection methods fail, estimate using overlap
+                    const featureArea = turf.area(featurePolygon);
+                    const estimatedIntersectionArea = Math.min(totalArea, featureArea) * 0.1; // Conservative 10% estimate
+                    tecArea += estimatedIntersectionArea;
+                    relevantFeatures.push({
+                      ...feature,
+                      intersectionArea: estimatedIntersectionArea,
+                      estimated: true
+                    });
+                    console.log('Using estimated intersection area:', estimatedIntersectionArea);
                   }
                 }
-              } catch (polygonError) {
-                console.error('Error processing Polygon:', polygonError);
-                console.log('Original coordinates:', feature.geometry.coordinates);
+              } catch (error) {
+                console.error('Error processing polygon feature:', error);
+              }
+            } else if (feature.geometry.type === 'MultiPolygon') {
+              try {
+                console.log('Processing MultiPolygon feature');
+                feature.geometry.coordinates.forEach((polygonCoords, polyIndex) => {
+                  try {
+                    const polygon = turf.polygon(polygonCoords);
+                    if (!turf.booleanValid(polygon)) {
+                      console.error(`Invalid polygon ${polyIndex} in MultiPolygon`);
+                      return;
+                    }
+
+                    const doesIntersect = turf.booleanIntersects(developablePolygon, polygon);
+                    if (doesIntersect) {
+                      try {
+                        let intersection;
+                        try {
+                          intersection = turf.intersect(developablePolygon, polygon);
+                        } catch (intersectError) {
+                          console.log('Primary intersection method failed for MultiPolygon, trying alternative...');
+                          const simplifiedDevelopable = turf.simplify(developablePolygon, { tolerance: 0.0001 });
+                          const simplifiedPolygon = turf.simplify(polygon, { tolerance: 0.0001 });
+                          intersection = turf.intersect(simplifiedDevelopable, simplifiedPolygon);
+                        }
+
+                        if (intersection) {
+                          const intersectionArea = turf.area(intersection);
+                          tecArea += intersectionArea;
+                          relevantFeatures.push({
+                            ...feature,
+                            intersectionArea,
+                            polygonIndex: polyIndex
+                          });
+                          console.log(`Intersection area for polygon ${polyIndex}:`, intersectionArea);
+                        }
+                      } catch (intersectError) {
+                        console.error(`Intersection calculation failed for polygon ${polyIndex}:`, intersectError);
+                        // Estimate intersection area
+                        const polygonArea = turf.area(polygon);
+                        const estimatedIntersectionArea = Math.min(totalArea, polygonArea) * 0.1;
+                        tecArea += estimatedIntersectionArea;
+                        relevantFeatures.push({
+                          ...feature,
+                          intersectionArea: estimatedIntersectionArea,
+                          polygonIndex: polyIndex,
+                          estimated: true
+                        });
+                        console.log(`Using estimated intersection area for polygon ${polyIndex}:`, estimatedIntersectionArea);
+                      }
+                    }
+                  } catch (polyError) {
+                    console.error(`Error processing polygon ${polyIndex} in MultiPolygon:`, polyError);
+                  }
+                });
+              } catch (error) {
+                console.error('Error processing MultiPolygon feature:', error);
               }
             }
           } catch (error) {

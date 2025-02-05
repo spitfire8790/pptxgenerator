@@ -27,6 +27,7 @@ import {
   captureBiodiversityMap,
   captureHistoricalImagery
 } from './utils/map/services/screenshot';
+import { clearServiceCache } from './utils/map/services/wmsService';
 import { SCREENSHOT_TYPES } from './utils/map/config/screenshotTypes';
 import SlidePreview from './SlidePreview';
 import PlanningMapView from './PlanningMapView';
@@ -98,6 +99,9 @@ const ReportGenerator = ({ selectedFeature }) => {
     setCurrentStep('screenshots');
     setCompletedSteps([]);
     
+    // Clear the service cache at the start of report generation
+    clearServiceCache();
+    
     try {
       const screenshots = {};
       
@@ -165,7 +169,9 @@ const ReportGenerator = ({ selectedFeature }) => {
       
       if (selectedSlides.environmental) {
         screenshots.tecMapScreenshot = await captureTECMap(selectedFeature, developableArea);
+        screenshots.tecFeatures = screenshots.tecMapScreenshot?.features;
         screenshots.biodiversityMapScreenshot = await captureBiodiversityMap(selectedFeature, developableArea);
+        screenshots.biodiversityFeatures = screenshots.biodiversityMapScreenshot?.features;
       }
       
       if (selectedSlides.contamination) {
@@ -260,6 +266,9 @@ const ReportGenerator = ({ selectedFeature }) => {
 
   const handleScreenshotCapture = async () => {
     if (selectedFeature) {
+      // Clear the service cache before capturing preview screenshots
+      clearServiceCache();
+      
       // For cover slide, use COVER type without boundary
       const coverScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.COVER, false);
       // For other slides, keep boundary and use AERIAL type
