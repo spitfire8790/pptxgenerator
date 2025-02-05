@@ -906,30 +906,7 @@ export async function capturePowerMap(feature, developableArea = null) {
             powerResponse.features.forEach((feature, index) => {
               console.log(`Drawing Giraffe power feature ${index + 1}...`);
 
-              // Function to transform coordinates
-              const transformCoordinates = (geometry, sourceCrs, targetCrs) => {
-                if (geometry.type === 'Point') {
-                  const [x, y] = geometry.coordinates;
-                  const [newX, newY] = proj4(sourceCrs, targetCrs, [x, y]);
-                  return [newX, newY];
-                } else if (geometry.type === 'LineString') {
-                  return geometry.coordinates.map(([x, y]) => {
-                    const [newX, newY] = proj4(sourceCrs, targetCrs, [x, y]);
-                    return [newX, newY];
-                  });
-                } else if (geometry.type === 'Polygon') {
-                  return geometry.coordinates.map(ring => ring.map(([x, y]) => {
-                    const [newX, newY] = proj4(sourceCrs, targetCrs, [x, y]);
-                    return [newX, newY];
-                  }));
-                }
-                return geometry.coordinates; // Handle other geometry types as needed
-              };
-
-              // Transform the geometry to WGS84 (EPSG:4326)
-              const transformedCoordinates = transformCoordinates(feature.geometry, webMercator, wgs84);
-
-              if (transformedCoordinates) {
+              if (feature.geometry?.coordinates) {
                 drawBoundary(ctx, transformedCoordinates, centerX, centerY, size, config.width, {
                   strokeStyle: '#FFBD33',
                   lineWidth: 8
@@ -1003,7 +980,7 @@ export async function capturePowerMap(feature, developableArea = null) {
         geometry: mercatorBbox,
         geometryType: 'esriGeometryEnvelope',
         inSR: 3857,
-        outSR: 7856,  // Changed to match the service's native CRS
+        outSR: 4283,  
         spatialRel: 'esriSpatialRelIntersects',
         outFields: '*',
         returnGeometry: true,
@@ -1022,34 +999,24 @@ export async function capturePowerMap(feature, developableArea = null) {
         lookupResponse.features.forEach((feature, index) => {
           console.log(`Drawing LookUpNLive power feature ${index + 1}...`);
 
-          // Function to transform coordinates
-          const transformCoordinates = (geometry, sourceCrs, targetCrs) => {
-            if (geometry.type === 'Point') {
-              const [x, y] = geometry.coordinates;
-              const [newX, newY] = proj4(sourceCrs, targetCrs, [x, y]);
-              return [newX, newY];
-            } else if (geometry.type === 'LineString') {
-              return geometry.coordinates.map(([x, y]) => {
-                const [newX, newY] = proj4(sourceCrs, targetCrs, [x, y]);
-                return [newX, newY];
-              });
-            } else if (geometry.type === 'Polygon') {
-              return geometry.coordinates.map(ring => ring.map(([x, y]) => {
-                const [newX, newY] = proj4(sourceCrs, targetCrs, [x, y]);
-                return [newX, newY];
-              }));
-            }
-            return geometry.coordinates; // Handle other geometry types as needed
-          };
-
-          // Transform the geometry to WGS84 (EPSG:4326)
-          const transformedCoordinates = transformCoordinates(feature.geometry, mga56, wgs84);
-
-          drawBoundary(ctx, transformedCoordinates, centerX, centerY, size, config.width, {
-            strokeStyle: '#FFBD33',
-            lineWidth: 8,
-            lineDash: [15, 10]
-          });
+          // Handle different geometry types
+          let coordinates;
+          if (feature.geometry.type === 'MultiLineString') {
+            feature.geometry.coordinates.forEach(lineString => {
+              const style = {
+                strokeStyle: '#FFBD33',
+                lineWidth: 8
+              };
+              drawBoundary(ctx, lineString, centerX, centerY, size, config.width, style);
+            });
+          } else {
+            // Single LineString
+            const style = {
+              strokeStyle: '#FFBD33',
+              lineWidth: 8
+            };
+            drawBoundary(ctx, feature.geometry.coordinates, centerX, centerY, size, config.width, style);
+          }
         });
       }
 
@@ -2464,7 +2431,7 @@ export async function capturePTALMap(feature, developableArea = null) {
       const ptalConfig = {
         baseUrl: 'https://portal.data.nsw.gov.au/arcgis/rest/services/Hosted/ptal_dec20_gdb__(1)/FeatureServer/0',
         layerId: 0,
-        token: '5sH3McUOrpjQCwQ5FucapyZVFpCylG8gROSGm5ZQDSLykMkwetzn35ztXrPbmBCxx6iLSEdtXJpGibR1izFBShkXE3Z7HzU3wulLNd-1NWbfEP-tQzvevg0SS16-ELdXkOUpJnedsZKBT0sh8csOp_dJ-it-FOyG58EWDxRK_QxTPdUDN165GPYdTQusV6hrs4zVJcApeRDWIPNpVpgrKjYUy6y8eRvUw0FDnEQHOYXXCRStCtk9QwNYuJ4qH3qh'
+        token: 'deNXgeGpKVAQ-PGbcnPGYg_Bo4iEBU2AJmcO7kT1ivN7HTuqcMc5imtDG6MTBtyU36kJhrdVm37nZMS8yLUMBJ7yUICRIhIEeAnRGGoySQ6vPBLWhb7-C-CR4f0_kL9dr8mmx0f15No03QuzdjXwa2g5TkAz9QIa41nxZR3soMjS85RCcZayZMroCqgopcaYRmGFb5GjGJNF_6u9kqgMCAlY7XQPhazKZIpjBk2iZfzHGb-BAd9jZtVVfOcheq1j'
       };
 
       // Color mapping for PTAL values
