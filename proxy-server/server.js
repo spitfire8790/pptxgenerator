@@ -15,15 +15,29 @@ app.use(express.json({ limit: '50mb' }));
 
 // Helper function to handle proxy requests
 async function handleProxyRequest(req, res) {
-  const { url, method, headers, body } = req.body;
-
-  console.log('Proxy request received for URL:', url);
-  console.log('Request method:', method);
-  console.log('Request headers:', headers);
-
   try {
+    const { url, method, headers, body } = req.body;
+
+    if (!url) {
+      console.error('No URL provided in request body');
+      return res.status(400).json({ error: 'No URL provided' });
+    }
+
+    console.log('Proxy request received:', {
+      url,
+      method,
+      headers,
+      bodyLength: body ? JSON.stringify(body).length : 0
+    });
+
     // Validate URL
-    const targetUrl = new URL(url);
+    let targetUrl;
+    try {
+      targetUrl = new URL(url);
+    } catch (error) {
+      console.error('Invalid URL:', url, error);
+      return res.status(400).json({ error: 'Invalid URL provided' });
+    }
     
     // Add additional headers for ArcGIS requests
     const requestHeaders = {
@@ -34,6 +48,8 @@ async function handleProxyRequest(req, res) {
       'Connection': 'keep-alive',
       'Referer': targetUrl.origin,
     };
+
+    console.log('Sending request to target URL with headers:', requestHeaders);
 
     const response = await fetch(url, {
       method: method || 'GET',
@@ -50,7 +66,11 @@ async function handleProxyRequest(req, res) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('External service error:', errorText);
+      console.error('External service error:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorText
+      });
       return res.status(response.status).json({
         error: 'External service error',
         status: response.status,
@@ -61,22 +81,34 @@ async function handleProxyRequest(req, res) {
 
     // Forward the response
     const contentType = response.headers.get('content-type');
-    res.set('Content-Type', contentType);
+    res.set('Content-Type', contentType || 'application/octet-stream');
 
-    if (contentType?.includes('image')) {
-      const buffer = await response.buffer();
-      res.send(buffer);
-    } else {
-      const text = await response.text();
-      res.send(text);
+    try {
+      if (contentType?.includes('image')) {
+        const buffer = await response.buffer();
+        res.send(buffer);
+      } else {
+        const text = await response.text();
+        res.send(text);
+      }
+    } catch (error) {
+      console.error('Error processing response:', error);
+      res.status(500).json({ 
+        error: 'Error processing response',
+        message: error.message
+      });
     }
   } catch (error) {
-    console.error('Detailed proxy error:', error);
+    console.error('Detailed proxy error:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code
+    });
     res.status(500).json({ 
       error: 'Proxy request failed',
       message: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
-      url: url
+      code: error.code,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 }
@@ -91,6 +123,12 @@ if (process.env.NODE_ENV !== 'production') {
 
 // Vercel serverless function handler
 export default async function handler(req, res) {
+  console.log('Received request:', {
+    method: req.method,
+    url: req.url,
+    headers: req.headers
+  });
+
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
