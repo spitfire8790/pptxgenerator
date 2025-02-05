@@ -1,21 +1,20 @@
 import express from 'express';
 import cors from 'cors';
 import fetch from 'node-fetch';
-import { createServer } from 'http';
 
 const app = express();
 
 // CORS configuration
 app.use(cors({
-  origin: '*', // Allow all origins for now - update this to your Vercel app URL in production
+  origin: '*',
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json({ limit: '50mb' }));
 
-// Proxy endpoint
-app.post('/api/proxy', async (req, res) => {
+// Helper function to handle proxy requests
+async function handleProxyRequest(req, res) {
   const { url, method, headers, body } = req.body;
 
   console.log('Proxy request received for URL:', url);
@@ -80,23 +79,26 @@ app.post('/api/proxy', async (req, res) => {
       url: url
     });
   }
-});
+}
 
-const PORT = process.env.PROXY_PORT || 3000;
-
-// Export the Express app as a handler function
-export default async function handler(req, res) {
-  await new Promise((resolve, reject) => {
-    createServer(app)
-      .listen(PORT)
-      .on('listening', () => {
-        console.log(`Proxy server running on port ${PORT}`);
-        resolve();
-      })
-      .on('error', (err) => {
-        reject(err);
-      });
+// For local development
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PROXY_PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`Proxy server running on port ${PORT}`);
   });
+}
 
-  return app(req, res);
+// Vercel serverless function handler
+export default async function handler(req, res) {
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
+  if (req.method === 'POST') {
+    return handleProxyRequest(req, res);
+  }
+
+  res.status(405).json({ error: 'Method not allowed' });
 }
