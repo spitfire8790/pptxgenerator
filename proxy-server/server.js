@@ -1,12 +1,13 @@
 import express from 'express';
 import cors from 'cors';
 import fetch from 'node-fetch';
+import { createServer } from 'http';
 
 const app = express();
 
 // CORS configuration
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: '*', // Allow all origins for now - update this to your Vercel app URL in production
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
@@ -82,6 +83,20 @@ app.post('/api/proxy', async (req, res) => {
 });
 
 const PORT = process.env.PROXY_PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Proxy server running on port ${PORT}`);
-}); 
+
+// Export the Express app as a handler function
+export default async function handler(req, res) {
+  await new Promise((resolve, reject) => {
+    createServer(app)
+      .listen(PORT)
+      .on('listening', () => {
+        console.log(`Proxy server running on port ${PORT}`);
+        resolve();
+      })
+      .on('error', (err) => {
+        reject(err);
+      });
+  });
+
+  return app(req, res);
+}

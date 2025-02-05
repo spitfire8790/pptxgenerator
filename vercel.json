@@ -8,9 +8,17 @@
         "distDir": "dist",
         "buildCommand": "npm run build"
       }
+    },
+    {
+      "src": "proxy-server/server.js",
+      "use": "@vercel/node"
     }
   ],
   "routes": [
+    {
+      "src": "/api/proxy",
+      "dest": "proxy-server/server.js"
+    },
     {
       "src": "/api/eplanning/(.*)",
       "dest": "https://api.apps1.nsw.gov.au/eplanning/$1"
