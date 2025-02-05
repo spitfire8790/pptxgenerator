@@ -2,6 +2,10 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
+const PROXY_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://pptxgenerator-jws.vercel.app'
+  : 'http://localhost:3000'
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
@@ -72,9 +76,9 @@ export default defineConfig({
         }
       },
       '/api/proxy': {
-        target: 'http://localhost:3000',
+        target: PROXY_URL,
         changeOrigin: true,
-        secure: false,
+        secure: true,
         configure: (proxy, _options) => {
           proxy.on('error', (err, _req, _res) => {
             console.log('Spatial proxy error:', err);
