@@ -1,30 +1,38 @@
 import React from 'react';
 
-const steps = [
+const stepDefinitions = [
   { id: 'screenshots', label: 'Capturing Screenshots' },
   { id: 'cover', label: 'Creating Cover Page' },
   { id: 'snapshot', label: 'Building Property Snapshot' },
   { id: 'primaryAttributes', label: 'Adding Primary Attributes' },
   { id: 'secondaryAttributes', label: 'Adding Secondary Attributes' },
   { id: 'planning', label: 'Generating Planning Details' },
+  { id: 'planningTwo', label: 'Adding Heritage & Acid Sulfate Soils' },
   { id: 'servicing', label: 'Checking Site Servicing' },
-  { id: 'geoscape', label: 'Adding Utilisation Data' },
+  { id: 'utilisation', label: 'Adding Utilisation Data' },
   { id: 'access', label: 'Assessing Site Access' },
   { id: 'hazards', label: 'Assessing Natural Hazards' },
   { id: 'environmental', label: 'Assessing Environmental Factors' },
   { id: 'contamination', label: 'Checking Site Contamination' },
   { id: 'scoring', label: 'Generating Scoring Summary' },
-  { id: 'finalizing', label: 'Finalising Report' }
+  { id: 'finalising', label: 'Finalising Report' }
 ];
 
-const GenerationProgress = ({ currentStep, completedSteps }) => {
+const GenerationProgress = ({ currentStep, completedSteps, progress, selectedSlides }) => {
+  // Filter steps based on selected slides
+  const steps = [
+    stepDefinitions[0], // Always include screenshots step
+    ...stepDefinitions.slice(1, -1).filter(step => selectedSlides?.[step.id]),
+    stepDefinitions[stepDefinitions.length - 1] // Always include finalising step
+  ];
+
   return (
     <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
       <div className="text-lg font-semibold text-gray-700 mb-4">
         Generating Report...
       </div>
       
-      {steps.map((step, index) => {
+      {steps.map(step => {
         const isActive = currentStep === step.id;
         const isCompleted = completedSteps.includes(step.id);
         

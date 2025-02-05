@@ -243,18 +243,26 @@ export function addPropertySnapshotSlide(pptx, properties) {
 
   // Add aerial image if it exists
   if (properties.snapshotScreenshot) {
+    console.log('[PropertySnapshotSlide] Rendering snapshot image');
+    console.log('[PropertySnapshotSlide] Screenshot data length:', 
+      typeof properties.snapshotScreenshot === 'string' 
+        ? properties.snapshotScreenshot.length 
+        : 'Not a string');
+
     // First add white background rectangle
-    slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
+    const bgRect = {
       x: '56%',
       y: '20%',
       w: '39%',
       h: '70%',
       fill: 'FFFFFF',
       line: { color: '002664', width: 1.5 }
-    }));
+    };
+    console.log('[PropertySnapshotSlide] Background rectangle dimensions:', bgRect);
+    slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(bgRect));
 
     // Then add the image with 'contain' sizing
-    slide.addImage({
+    const imageConfig = {
       data: properties.snapshotScreenshot,
       ...convertCmValues({
         x: '56%',
@@ -267,7 +275,21 @@ export function addPropertySnapshotSlide(pptx, properties) {
           valign: 'middle'
         }
       })
+    };
+    console.log('[PropertySnapshotSlide] Image configuration:', {
+      ...imageConfig,
+      data: imageConfig.data ? 'Data present' : 'No data'
     });
+    
+    try {
+      slide.addImage(imageConfig);
+      console.log('[PropertySnapshotSlide] Image added successfully');
+    } catch (error) {
+      console.error('[PropertySnapshotSlide] Error adding image:', error);
+      throw error;
+    }
+  } else {
+    console.log('[PropertySnapshotSlide] No snapshot image provided');
   }
 
   // Add footer line and text

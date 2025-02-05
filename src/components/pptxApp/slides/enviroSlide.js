@@ -222,20 +222,23 @@ export async function addEnviroSlide(pptx, properties) {
     console.log('=== TEC Scoring in Environmental Slide ===');
     console.log('Properties available:', Object.keys(properties));
     console.log('Developable area:', properties.developableArea);
-    console.log('TEC features:', properties.site_suitability__tecFeatures);
+    console.log('Raw TEC features:', properties.site_suitability__tecFeatures);
 
     // Check if we have the required data
     if (properties.developableArea) {
-      // Even if we have no TEC features, we can still score it (as no impact)
       try {
         console.log('=== Starting TEC Score Calculation ===');
         console.log('Developable area geometry:', JSON.stringify(properties.developableArea[0].geometry));
         
-        // Ensure we have a features array, even if empty
-        const tecFeatures = properties.site_suitability__tecFeatures || { type: 'FeatureCollection', features: [] };
-        console.log(`Processing TEC features:`, tecFeatures);
+        // Ensure we have a valid FeatureCollection structure
+        const tecFeatureCollection = {
+          type: 'FeatureCollection',
+          features: properties.site_suitability__tecFeatures?.features || []
+        };
         
-        const result = scoringCriteria.tec.calculateScore(tecFeatures, properties.developableArea);
+        console.log('Constructed TEC FeatureCollection:', tecFeatureCollection);
+        
+        const result = scoringCriteria.tec.calculateScore(tecFeatureCollection, properties.developableArea);
         console.log('\nScore Calculation Result:');
         console.log('- Score:', result.score);
         console.log('- Coverage:', result.coverage ? `${result.coverage.toFixed(2)}%` : 'N/A');
@@ -392,8 +395,9 @@ export async function addEnviroSlide(pptx, properties) {
       }));
     }
 
-    // Calculate biodiversity overlap text
+    // Calculate biodiversity overlap text (improved accuracy)
     let biodiversityText = 'Biodiversity impact not assessed.';
+    let coverage = 0;
     
     if (properties.developableArea && properties.site_suitability__biodiversityFeatures) {
       try {
@@ -401,66 +405,99 @@ export async function addEnviroSlide(pptx, properties) {
         const developableArea = properties.developableArea;
 
         if (bioFeatures?.features?.length > 0) {
-          // Create a turf polygon from developable area
-          const developablePolygon = {
-            type: 'Feature',
-            properties: {},
-            geometry: {
+          try {
+            // Create a GDA94 polygon from developable area coordinates (already in GDA94)
+            const developablePolygon = turf.feature({
               type: 'Polygon',
-              coordinates: developableArea[0].geometry.coordinates
-            }
-          };
-          const totalArea = turf.area(developablePolygon);
+              coordinates: [developableArea[0].geometry.coordinates[0]]
+            });
 
-          // Calculate overlap area
-          let overlapArea = 0;
-          console.log('Processing biodiversity features...');
-          
-          bioFeatures.features.forEach((feature, index) => {
-            if (feature.geometry?.type === 'Polygon' || feature.geometry?.type === 'MultiPolygon') {
+            // Calculate overlap area with improved accuracy
+            let overlapArea = 0;
+            console.log('Processing biodiversity features with improved accuracy...');
+            
+            bioFeatures.features.forEach((feature, index) => {
               try {
-                let featurePolygon = feature;
-                console.log(`Feature ${index + 1} area:`, turf.area(featurePolygon), 'square meters');
-                
-                // Check both containment and intersection
-                const containsFeature = turf.booleanContains(developablePolygon, featurePolygon);
-                const intersectsFeature = turf.booleanIntersects(developablePolygon, featurePolygon);
-                
-                if (containsFeature) {
-                  // If developable area contains feature, use entire feature area
-                  const featureArea = turf.area(featurePolygon);
-                  overlapArea += featureArea;
-                  console.log(`Feature ${index + 1} is contained within developable area:`, featureArea);
-                } else if (intersectsFeature) {
-                  // If features intersect, calculate the intersection area
-                  try {
-                    const intersection = turf.intersect(developablePolygon, featurePolygon);
-                    if (intersection) {
-                      const intersectionArea = turf.area(intersection);
-                      overlapArea += intersectionArea;
-                      console.log(`Feature ${index + 1} intersects developable area:`, intersectionArea);
-                    }
-                  } catch (intersectError) {
-                    console.error(`Error calculating intersection for feature ${index + 1}:`, intersectError);
+                if (!feature.geometry) {
+                  console.log(`Feature ${index + 1} has no geometry`);
+                  return;
+                }
+
+                // Create a turf feature from the biodiversity feature (already in GDA94)
+                const bioFeature = turf.feature(feature.geometry);
+
+                // Log coordinates for debugging
+                console.log(`Feature ${index + 1} coordinates:`, feature.geometry.coordinates);
+                console.log(`Developable area coordinates:`, developableArea[0].geometry.coordinates[0]);
+
+                try {
+                  if (!turf.booleanValid(bioFeature)) {
+                    console.log(`Invalid biodiversity feature ${index + 1}`);
+                    return;
                   }
-                } else {
-                  console.log(`Feature ${index + 1} does not overlap with developable area`);
+
+                  // Check for intersection
+                  const doesIntersect = turf.booleanIntersects(developablePolygon, bioFeature);
+                  if (doesIntersect) {
+                    try {
+                      // Convert to square meters using turf.area
+                      const intersection = turf.intersect(developablePolygon, bioFeature);
+                      if (intersection) {
+                        const intersectionArea = turf.area(intersection);
+                        overlapArea += intersectionArea;
+                        console.log(`Feature ${index + 1} intersection area:`, intersectionArea);
+                      }
+                    } catch (intersectError) {
+                      console.log(`Error calculating intersection for feature ${index + 1}:`, intersectError);
+                      console.log('Intersection error details:', intersectError);
+                      console.log('Developable polygon:', developablePolygon.geometry);
+                      console.log('Bio feature:', bioFeature.geometry);
+                    }
+                  } else {
+                    console.log(`No intersection found for feature ${index + 1}`);
+                    console.log('Developable polygon bounds:', turf.bbox(developablePolygon));
+                    console.log('Bio feature bounds:', turf.bbox(bioFeature));
+                  }
+                } catch (error) {
+                  console.log(`Error processing feature ${index + 1}:`, error);
+                  console.log('Processing error details:', error);
                 }
               } catch (error) {
-                console.error('Error processing biodiversity feature:', error);
+                console.error(`Error processing biodiversity feature ${index + 1}:`, error);
+                console.log('Feature processing error details:', error);
               }
-            }
-          });
+            });
 
-          // Calculate percentage and format text
-          const coverage = (overlapArea / totalArea) * 100;
-          console.log('Biodiversity overlap:', { overlapArea, totalArea, coverage });
-          
-          biodiversityText = coverage > 0 
-            ? `${Math.round(coverage)}% of developable area overlaps with biodiversity values.`
-            : 'Developable area has no overlap with biodiversity values.';
+            // Calculate total area in square meters
+            const totalArea = turf.area(developablePolygon);
+
+            // Calculate percentage and format text with more detail
+            coverage = (overlapArea / totalArea) * 100;
+            console.log('Biodiversity overlap details:', {
+              overlapArea,
+              totalArea,
+              coverage,
+              numFeatures: bioFeatures.features.length,
+              coordSystem: 'GDA94 (EPSG:4283)'
+            });
+            
+            if (coverage > 0) {
+              biodiversityText = `${Math.round(coverage)}% of the developable area overlaps with mapped biodiversity values. Further assessment under the Biodiversity Conservation Act 2016 may be required.`;
+            } else {
+              biodiversityText = 'The developable area has no overlap with mapped biodiversity values.';
+            }
+          } catch (error) {
+            console.error('Error calculating biodiversity overlap:', error);
+            console.error('Error details:', {
+              message: error.message,
+              stack: error.stack,
+              developableArea: developableArea ? 'exists' : 'missing',
+              bioFeatures: bioFeatures ? 'exists' : 'missing'
+            });
+            biodiversityText = 'Error calculating biodiversity impact.';
+          }
         } else {
-          biodiversityText = 'No biodiversity values identified in the area.';
+          biodiversityText = 'No biodiversity values have been identified in the area.';
         }
       } catch (error) {
         console.error('Error calculating biodiversity overlap:', error);
@@ -468,7 +505,17 @@ export async function addEnviroSlide(pptx, properties) {
       }
     }
 
-    // Add biodiversity description text
+    // Add biodiversity description box with matching formatting
+    slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
+      x: '50%',
+      y: '80%',
+      w: '40%',
+      h: '12%',
+      fill: coverage > 0 ? 'FFE5E5' : 'E2EFD9',  // Red tint if overlap exists, green if no overlap
+      line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
+    }));
+
+    // Add description text with improved formatting
     slide.addText(biodiversityText, convertCmValues({
       x: '50%',
       y: '80%',

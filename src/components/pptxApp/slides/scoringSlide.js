@@ -33,28 +33,36 @@ export async function createScoringSlide(pres, feature, developableArea) {
     color: 'FF0000'
   });
 
+  // Helper function to extract score value
+  const getScoreValue = (scoreResult) => {
+    if (scoreResult === null || scoreResult === undefined) return 0;
+    if (typeof scoreResult === 'number') return scoreResult;
+    if (typeof scoreResult === 'object' && 'score' in scoreResult) return scoreResult.score;
+    return 0;
+  };
+
   // Calculate scores using existing scoring criteria
   const scores = {
-    developableArea: scoringCriteria.developableArea.calculateScore(feature.properties?.developableAreaSize),
-    siteContour: scoringCriteria.contours.calculateScore(feature.properties?.elevationChange),
-    siteRegularity: scoringCriteria.siteRegularity.calculateScore(feature),
-    zoning: scoringCriteria.planning.calculateScore(feature.properties?.zones, feature.properties?.fsr, feature.properties?.hob),
-    heritage: scoringCriteria.heritage.calculateScore(feature.properties?.heritageData),
-    acidSulphateSoil: scoringCriteria.acidSulfateSoils.calculateScore(feature.properties?.soilsData),
-    servicing: scoringCriteria.servicing.calculateScore(
-      scoringCriteria.water.calculateScore(feature.properties?.waterFeatures, developableArea).score,
-      scoringCriteria.sewer.calculateScore(feature.properties?.sewerFeatures, developableArea).score,
-      scoringCriteria.power.calculateScore(feature.properties?.powerFeatures, developableArea).score
-    ),
-    access: scoringCriteria.roads.calculateScore(feature.properties?.roadFeatures, developableArea).score,
-    proximityToStrategicCentre: scoringCriteria.udpPrecincts.calculateScore(feature.properties?.udpPrecincts, developableArea).score,
-    ptal: scoringCriteria.ptal.calculateScore(feature.properties?.ptalValues),
-    builtForm: scoringCriteria.geoscape.calculateScore(feature.properties?.geoscapeFeatures, developableArea).score,
-    floodRisk: scoringCriteria.flood.calculateScore(feature.properties?.site_suitability__floodFeatures, developableArea).score,
-    bushfireRisk: scoringCriteria.bushfire.calculateScore(feature.properties?.site_suitability__bushfireFeatures, developableArea).score,
-    contaminatedSites: scoringCriteria.contamination.calculateScore(feature.properties?.site_suitability__contaminationFeatures, developableArea).score,
+    developableArea: getScoreValue(scoringCriteria.developableArea.calculateScore(feature.properties?.developableAreaSize)),
+    siteContour: getScoreValue(scoringCriteria.contours.calculateScore(feature.properties?.elevationChange)),
+    siteRegularity: getScoreValue(scoringCriteria.siteRegularity.calculateScore(feature)),
+    zoning: getScoreValue(scoringCriteria.planning.calculateScore(feature.properties?.zones, feature.properties?.fsr, feature.properties?.hob)),
+    heritage: getScoreValue(scoringCriteria.heritage.calculateScore(feature.properties?.heritageData)),
+    acidSulphateSoil: getScoreValue(scoringCriteria.acidSulfateSoils.calculateScore(feature.properties?.soilsData)),
+    servicing: getScoreValue(scoringCriteria.servicing.calculateScore(
+      getScoreValue(scoringCriteria.water.calculateScore(feature.properties?.waterFeatures, developableArea)),
+      getScoreValue(scoringCriteria.sewer.calculateScore(feature.properties?.sewerFeatures, developableArea)),
+      getScoreValue(scoringCriteria.power.calculateScore(feature.properties?.powerFeatures, developableArea))
+    )),
+    access: getScoreValue(scoringCriteria.roads.calculateScore(feature.properties?.roadFeatures, developableArea)),
+    proximityToStrategicCentre: getScoreValue(scoringCriteria.udpPrecincts.calculateScore(feature.properties?.udpPrecincts, developableArea)),
+    ptal: getScoreValue(scoringCriteria.ptal.calculateScore(feature.properties?.ptalValues)),
+    builtForm: getScoreValue(scoringCriteria.geoscape.calculateScore(feature.properties?.geoscapeFeatures, developableArea)),
+    floodRisk: getScoreValue(scoringCriteria.flood.calculateScore(feature.properties?.site_suitability__floodFeatures, developableArea)),
+    bushfireRisk: getScoreValue(scoringCriteria.bushfire.calculateScore(feature.properties?.site_suitability__bushfireFeatures, developableArea)),
+    contaminatedSites: getScoreValue(scoringCriteria.contamination.calculateScore(feature.properties?.site_suitability__contaminationFeatures, developableArea)),
     siteRemediation: 2, // This appears to be a fixed score in the example
-    tec: scoringCriteria.tec.calculateScore(feature.properties?.tecFeatures, developableArea).score
+    tec: getScoreValue(scoringCriteria.tec.calculateScore(feature.properties?.tecFeatures, developableArea))
   };
 
   // Create scoring table

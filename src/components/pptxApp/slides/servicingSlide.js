@@ -133,9 +133,9 @@ export async function addServicingSlide(pptx, propertyData) {
       }
 
       // Power section
-      if (propertyData.powerScreenshot?.image) {
+      if (propertyData.powerScreenshot) {
         slide.addImage({
-          data: propertyData.powerScreenshot.image,
+          data: propertyData.powerScreenshot,
           ...convertCmValues({
             x: '67%',
             y: '24%',

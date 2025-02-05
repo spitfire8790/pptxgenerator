@@ -65,7 +65,7 @@ export async function generateReport(properties, onProgress) {
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 
-    if (properties.selectedSlides.planning2 !== false) {
+    if (properties.selectedSlides.planningTwo !== false) {
       await addPlanningSlide2(pptx, properties);
       progress = 95;
       onProgress?.(progress);

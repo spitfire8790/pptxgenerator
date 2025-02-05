@@ -24,7 +24,8 @@ import {
   capturePTALMap,
   captureContaminationMap,
   captureTECMap,
-  captureBiodiversityMap
+  captureBiodiversityMap,
+  captureHistoricalImagery
 } from './utils/map/services/screenshot';
 import { SCREENSHOT_TYPES } from './utils/map/config/screenshotTypes';
 import SlidePreview from './SlidePreview';
@@ -98,52 +99,83 @@ const ReportGenerator = ({ selectedFeature }) => {
     setCompletedSteps([]);
     
     try {
-      // Capture screenshots
-      await planningMapRef.current?.captureScreenshots();
-      const aerialScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.AERIAL);
-      const coverScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.COVER);
-      const snapshotScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.SNAPSHOT);
-      const zoningScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.ZONING, true, developableArea);
-      const fsrScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.FSR, true, developableArea);
-      const hobScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.HOB, true, developableArea);
-      const compositeMapScreenshot = await capturePrimarySiteAttributesMap(selectedFeature, developableArea);
-      const contourScreenshot = await captureContourMap(selectedFeature, developableArea);
-      const regularityScreenshot = await captureRegularityMap(selectedFeature, developableArea);
-      const heritageScreenshot = await captureHeritageMap(selectedFeature, developableArea);
-      const acidSulfateScreenshot = await captureAcidSulfateMap(selectedFeature, developableArea);
-      const { image: waterMainsScreenshot } = await captureWaterMainsMap(selectedFeature, developableArea) || {};
-      const { image: sewerScreenshot } = await captureSewerMap(selectedFeature, developableArea) || {};
-      const powerScreenshot = await capturePowerMap(selectedFeature, developableArea);
-      const { image: geoscapeScreenshot, features: geoscapeFeatures } = await captureGeoscapeMap(selectedFeature, developableArea) || {};
-      const floodMapScreenshot = await captureFloodMap(selectedFeature, developableArea);
-      const bushfireMapScreenshot = await captureBushfireMap(selectedFeature, developableArea);
-      const roadsScreenshot = await captureRoadsMap(selectedFeature, developableArea);
-      const udpPrecinctsScreenshot = await captureUDPPrecinctMap(selectedFeature, developableArea);
-      const ptalScreenshot = await capturePTALMap(selectedFeature, developableArea);
-      const contaminationMapScreenshot = await captureContaminationMap(selectedFeature, developableArea);
-      const tecMapScreenshot = await captureTECMap(selectedFeature, developableArea);
-      const biodiversityMapScreenshot = await captureBiodiversityMap(selectedFeature, developableArea);
-
-      console.log('Aerial Screenshot:', aerialScreenshot ? 'Present' : 'Missing');
-      console.log('Snapshot Screenshot:', snapshotScreenshot ? 'Present' : 'Missing');
-      console.log('Zoning Screenshot:', zoningScreenshot ? 'Present' : 'Missing');
-      console.log('FSR Screenshot:', fsrScreenshot ? 'Present' : 'Missing');
-      console.log('HOB Screenshot:', hobScreenshot ? 'Present' : 'Missing');
-      console.log('Composite Map Screenshot:', compositeMapScreenshot ? 'Present' : 'Missing');
-      console.log('Contour Screenshot:', contourScreenshot ? 'Present' : 'Missing');
-      console.log('Regularity Screenshot:', regularityScreenshot ? 'Present' : 'Missing');
-      console.log('Heritage Screenshot:', heritageScreenshot ? 'Present' : 'Missing');
-      console.log('Acid Sulfate Screenshot:', acidSulfateScreenshot ? 'Present' : 'Missing');
-      console.log('Water Mains Screenshot:', waterMainsScreenshot ? 'Present' : 'Missing');
-      console.log('Geoscape Screenshot:', geoscapeScreenshot ? 'Present' : 'Missing');
-      console.log('Roads Screenshot:', roadsScreenshot ? 'Present' : 'Missing');
-      console.log('UDP Precincts Screenshot:', udpPrecinctsScreenshot ? 'Present' : 'Missing');
-      console.log('PTAL Screenshot:', ptalScreenshot ? 'Present' : 'Missing');
-      console.log('Flood Map Screenshot:', floodMapScreenshot ? 'Present' : 'Missing');
-      console.log('Bushfire Map Screenshot:', bushfireMapScreenshot ? 'Present' : 'Missing');
-      console.log('Contamination Map Screenshot:', contaminationMapScreenshot ? 'Present' : 'Missing');
-      console.log('TEC Map Screenshot:', tecMapScreenshot ? 'Present' : 'Missing');
-      console.log('Biodiversity Map Screenshot:', biodiversityMapScreenshot ? 'Present' : 'Missing');
+      const screenshots = {};
+      
+      // Only capture screenshots for selected slides
+      if (selectedSlides.cover) {
+        screenshots.coverScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.COVER);
+      }
+      
+      if (selectedSlides.snapshot) {
+        screenshots.aerialScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.AERIAL);
+        screenshots.snapshotScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.SNAPSHOT);
+      }
+      
+      if (selectedSlides.planning) {
+        await planningMapRef.current?.captureScreenshots();
+        screenshots.zoningScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.ZONING, true, developableArea);
+        screenshots.fsrScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.FSR, true, developableArea);
+        screenshots.hobScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.HOB, true, developableArea);
+      }
+      
+      if (selectedSlides.primaryAttributes) {
+        screenshots.compositeMapScreenshot = await capturePrimarySiteAttributesMap(selectedFeature, developableArea);
+      }
+      
+      if (selectedSlides.secondaryAttributes) {
+        screenshots.contourScreenshot = await captureContourMap(selectedFeature, developableArea);
+        screenshots.regularityScreenshot = await captureRegularityMap(selectedFeature, developableArea);
+      }
+      
+      if (selectedSlides.planningTwo) {
+        screenshots.heritageScreenshot = await captureHeritageMap(selectedFeature, developableArea);
+        screenshots.acidSulfateSoilsScreenshot = await captureAcidSulfateMap(selectedFeature, developableArea);
+      }
+      
+      if (selectedSlides.servicing) {
+        const waterMains = await captureWaterMainsMap(selectedFeature, developableArea);
+        screenshots.waterMainsScreenshot = waterMains?.image;
+        screenshots.waterFeatures = waterMains?.features;
+        
+        const sewer = await captureSewerMap(selectedFeature, developableArea);
+        screenshots.sewerScreenshot = sewer?.image;
+        screenshots.sewerFeatures = sewer?.features;
+        
+        const power = await capturePowerMap(selectedFeature, developableArea);
+        screenshots.powerScreenshot = power?.image;
+        screenshots.powerFeatures = power?.features;
+      }
+      
+      if (selectedSlides.utilisation) {
+        const geoscape = await captureGeoscapeMap(selectedFeature, developableArea);
+        screenshots.geoscapeScreenshot = geoscape?.image;
+        screenshots.geoscapeFeatures = geoscape?.features;
+      }
+      
+      if (selectedSlides.access) {
+        screenshots.roadsScreenshot = await captureRoadsMap(selectedFeature, developableArea);
+        screenshots.udpPrecinctsScreenshot = await captureUDPPrecinctMap(selectedFeature, developableArea);
+        screenshots.ptalScreenshot = await capturePTALMap(selectedFeature, developableArea);
+      }
+      
+      if (selectedSlides.hazards) {
+        screenshots.floodMapScreenshot = await captureFloodMap(selectedFeature, developableArea);
+        screenshots.bushfireMapScreenshot = await captureBushfireMap(selectedFeature, developableArea);
+      }
+      
+      if (selectedSlides.environmental) {
+        screenshots.tecMapScreenshot = await captureTECMap(selectedFeature, developableArea);
+        screenshots.biodiversityMapScreenshot = await captureBiodiversityMap(selectedFeature, developableArea);
+      }
+      
+      if (selectedSlides.contamination) {
+        const contaminationResult = await captureContaminationMap(selectedFeature, developableArea);
+        screenshots.contaminationMapScreenshot = contaminationResult?.image;
+        screenshots.contaminationFeatures = contaminationResult?.features;
+        
+        // Add historical imagery
+        screenshots.historicalImagery = await captureHistoricalImagery(selectedFeature);
+      }
 
       setCompletedSteps(prev => [...prev, 'screenshots']);
       setCurrentStep('cover');
@@ -156,87 +188,63 @@ const ReportGenerator = ({ selectedFeature }) => {
 
       const propertyData = {
         ...selectedFeature.properties.copiedFrom,
-        site__address: selectedFeature.properties.copiedFrom.site__address,
-        site__area: selectedFeature.properties.copiedFrom.site__area,
-        site__area_sqm: selectedFeature.properties.copiedFrom.site__area_sqm,
-        site__council: selectedFeature.properties.copiedFrom.site__council,
-        site__description: selectedFeature.properties.copiedFrom.site__description,
-        site__lot_dp: selectedFeature.properties.copiedFrom.site__lot_dp,
-        site__ownership: selectedFeature.properties.copiedFrom.site__ownership,
-        site__portfolio: selectedFeature.properties.copiedFrom.site__portfolio,
-        site__region: selectedFeature.properties.copiedFrom.site__region,
-        site_suitability__principal_zone_identifier: selectedFeature.properties.copiedFrom.site_suitability__principal_zone_identifier,
-        site_suitability__floorspace_ratio: selectedFeature.properties.copiedFrom.site_suitability__floorspace_ratio,
-        site_suitability__height_of_building: selectedFeature.properties.copiedFrom.site_suitability__height_of_building,
-        site_suitability__landzone: selectedFeature.properties.copiedFrom.site_suitability__landzone,
         reportDate,
         selectedSlides,
         site__geometry: selectedFeature.geometry.coordinates[0],
-        screenshot: coverScreenshot,
-        snapshotScreenshot: aerialScreenshot,
-        zoningScreenshot: zoningScreenshot,
-        fsrScreenshot: fsrScreenshot,
-        hobScreenshot: hobScreenshot,
         developableArea: developableArea?.features || null,
-        compositeMapScreenshot,
         scores: {},
-        contourScreenshot,
-        regularityScreenshot,
-        heritageScreenshot,
-        acidSulfateSoilsScreenshot: acidSulfateScreenshot,
-        acidSulfateScreenshot,
-        waterMainsScreenshot,
-        sewerScreenshot,
-        powerScreenshot,
-        waterFeatures: selectedFeature.properties?.waterFeatures,
-        sewerFeatures: selectedFeature.properties?.sewerFeatures,
-        powerFeatures: selectedFeature.properties?.powerFeatures,
-        site_suitability__floodFeatures: selectedFeature.properties?.site_suitability__floodFeatures,
-        site_suitability__bushfireFeatures: selectedFeature.properties?.site_suitability__bushfireFeatures,
-        site_suitability__contaminationFeatures: selectedFeature.properties?.site_suitability__contaminationFeatures,
-        geoscapeScreenshot,
-        geoscapeFeatures,
-        floodMapScreenshot,
-        bushfireMapScreenshot,
-        contaminationMapScreenshot,
-        roadFeatures: selectedFeature.properties?.roadFeatures,
-        udpPrecincts: selectedFeature.properties?.udpPrecincts,
-        ptalScreenshot,
-        ptalValues: selectedFeature.properties?.ptalValues,
-        tecMapScreenshot,
-        biodiversityMapScreenshot,
-        site_suitability__tecFeatures: selectedFeature.properties?.site_suitability__tecFeatures
+        screenshot: screenshots.coverScreenshot,
+        ...screenshots,
+        // Include any features stored during screenshot capture
+        ...Object.fromEntries(
+          Object.entries(selectedFeature.properties || {})
+            .filter(([key]) => key.startsWith('site_suitability__') || 
+                             key === 'roadFeatures' || 
+                             key === 'udpPrecincts' || 
+                             key === 'ptalValues' ||
+                             key === 'contaminationFeatures')
+        )
       };
 
       // Generate the report with progress tracking
       await generateReport(propertyData, (progress) => {
-        if (progress <= 12) {
-          setCurrentStep('cover');
-        } else if (progress <= 24) {
-          setCompletedSteps(prev => [...new Set([...prev, 'cover'])]);
-          setCurrentStep('snapshot');
-        } else if (progress <= 36) {
-          setCompletedSteps(prev => [...new Set([...prev, 'cover', 'snapshot'])]);
-          setCurrentStep('primaryAttributes');
-        } else if (progress <= 48) {
-          setCompletedSteps(prev => [...new Set([...prev, 'cover', 'snapshot', 'primaryAttributes'])]);
-          setCurrentStep('secondaryAttributes');
-        } else if (progress <= 60) {
-          setCompletedSteps(prev => [...new Set([...prev, 'cover', 'snapshot', 'primaryAttributes', 'secondaryAttributes'])]);
-          setCurrentStep('planning');
-        } else if (progress <= 72) {
-          setCompletedSteps(prev => [...new Set([...prev, 'cover', 'snapshot', 'primaryAttributes', 'secondaryAttributes', 'planning'])]);
-          setCurrentStep('planningTwo');
-        } else if (progress <= 84) {
-          setCompletedSteps(prev => [...new Set([...prev, 'cover', 'snapshot', 'primaryAttributes', 'secondaryAttributes', 'planning', 'planningTwo'])]);
-          setCurrentStep('servicing');
-        } else if (progress <= 96) {
-          setCompletedSteps(prev => [...new Set([...prev, 'cover', 'snapshot', 'primaryAttributes', 'secondaryAttributes', 'planning', 'planningTwo', 'servicing'])]);
-          setCurrentStep('utilisation');
-        } else {
-          setCompletedSteps(prev => [...new Set([...prev, 'cover', 'snapshot', 'primaryAttributes', 'secondaryAttributes', 'planning', 'planningTwo', 'servicing', 'utilisation'])]);
-          setCurrentStep('finalising');
-        }
+        setProgress(progress);
+        
+        // Create an array of selected slide steps in order
+        const selectedSteps = [
+          ...(selectedSlides.cover ? ['cover'] : []),
+          ...(selectedSlides.snapshot ? ['snapshot'] : []),
+          ...(selectedSlides.primaryAttributes ? ['primaryAttributes'] : []),
+          ...(selectedSlides.secondaryAttributes ? ['secondaryAttributes'] : []),
+          ...(selectedSlides.planning ? ['planning'] : []),
+          ...(selectedSlides.planningTwo ? ['planningTwo'] : []),
+          ...(selectedSlides.servicing ? ['servicing'] : []),
+          ...(selectedSlides.utilisation ? ['utilisation'] : []),
+          ...(selectedSlides.access ? ['access'] : []),
+          ...(selectedSlides.hazards ? ['hazards'] : []),
+          ...(selectedSlides.environmental ? ['environmental'] : []),
+          ...(selectedSlides.contamination ? ['contamination'] : []),
+          ...(selectedSlides.scoring ? ['scoring'] : [])
+        ];
+
+        if (selectedSteps.length === 0) return;
+
+        // Calculate which step we're on based on progress
+        const stepIndex = Math.min(
+          Math.floor((progress / 100) * selectedSteps.length),
+          selectedSteps.length - 1
+        );
+
+        // Set current step
+        setCurrentStep(selectedSteps[stepIndex]);
+
+        // Add all previous steps to completed steps
+        setCompletedSteps(prev => [
+          ...new Set([
+            ...prev,
+            ...selectedSteps.slice(0, stepIndex)
+          ])
+        ]);
       });
 
       setCompletedSteps(prev => [...prev, 'finalising']);
@@ -348,6 +356,23 @@ const ReportGenerator = ({ selectedFeature }) => {
 
           <div className="space-y-4">
             <div className="space-y-2">
+              <label className="flex items-center space-x-2 pb-2 border-b border-gray-200">
+                <input
+                  type="checkbox"
+                  checked={Object.values(selectedSlides).every(Boolean)}
+                  onChange={(e) => {
+                    const value = e.target.checked;
+                    setSelectedSlides(
+                      Object.keys(selectedSlides).reduce((acc, key) => ({
+                        ...acc,
+                        [key]: value
+                      }), {})
+                    );
+                  }}
+                  className="w-4 h-4 text-blue-600 rounded"
+                />
+                <span className="font-medium">{Object.values(selectedSlides).every(Boolean) ? 'Deselect All' : 'Select All'}</span>
+              </label>
               {slideOptions.map(option => (
                 <label key={option.id} className="flex items-center space-x-2">
                   <input
@@ -380,6 +405,7 @@ const ReportGenerator = ({ selectedFeature }) => {
                 currentStep={currentStep}
                 completedSteps={completedSteps}
                 progress={progress}
+                selectedSlides={selectedSlides}
               />
             )}
 

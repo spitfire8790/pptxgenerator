@@ -111,5 +111,15 @@ export const LAYER_CONFIGS = {
     size: 2048,
     padding: 0.2,
     dpi: 300
-  }
+  },
+  [SCREENSHOT_TYPES.TEC]: {
+    url: 'https://mapprod1.environment.nsw.gov.au/arcgis/rest/services/EDP/TECs_GreaterSydney/MapServer',
+    layerId: 0,
+    size: 2048,
+    padding: 0.3,
+    dpi: 300,
+    format: 'png32',
+    transparent: true,
+    spatialReference: 3857
+  },
 };

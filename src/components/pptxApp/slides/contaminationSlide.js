@@ -1,6 +1,39 @@
 import { convertCmValues } from '../utils/units';
 import scoringCriteria from './scoringLogic';
+import { proxyRequest } from '../utils/services/proxyService';
 import { captureContaminationMap, captureOpenStreetMap } from '../utils/map/services/screenshot';
+
+const makeGeometryRequest = async (url, params) => {
+  try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      const response = await proxyRequest(`${url}?${params}`);
+      clearTimeout(timeoutId);
+
+      if (response.features?.[0]) {
+          return response.features[0].attributes;
+      }
+      return null;
+  } catch (error) {
+      console.error('Error querying geometry data:', error);
+      return null;
+  }
+};
+
+const getContaminationData = async (geometry) => {
+  const url = 'https://maptest2.environment.nsw.gov.au/arcgis/rest/services/EPA/EPACS/MapServer/1';
+  const params = new URLSearchParams({
+    f: 'json',
+    geometryType: 'esriGeometryPolygon',
+    geometry: JSON.stringify(geometry),
+    spatialRel: 'esriSpatialRelIntersects',
+    outFields: 'SiteName, Comment',
+    returnGeometry: false
+  });
+
+  return makeGeometryRequest(url,params);
+};
 
 const styles = {
   title: {
@@ -188,18 +221,18 @@ export async function addContaminationSlide(pptx, properties) {
       rotate: 270    // Use rotate instead of transform
     }));
 
-    // Capture and add contamination map
-    try {
-      const feature = {
-        geometry: {
-          coordinates: [properties.site__geometry]
-        },
-        properties: properties
-      };
-      const mapScreenshot = await captureContaminationMap(feature, properties.developableArea);
-      
-      if (mapScreenshot) {
-        const imageOptions = convertCmValues({
+   // Add left map
+   console.log('Contamination screenshot data:', {
+    exists: !!properties.contaminationMapScreenshot,
+    type: properties.contaminationMapScreenshot ? typeof properties.contaminationMapScreenshot : 'undefined',
+    length: properties.contaminationMapScreenshot ? properties.contaminationMapScreenshot.length : 0
+   });
+
+   if (properties.contaminationMapScreenshot) {
+     try {
+       slide.addImage({
+        data: properties.contaminationMapScreenshot,
+        ...convertCmValues({
           x: '11%',
           y: '18%',
           w: '34%',
@@ -209,138 +242,124 @@ export async function addContaminationSlide(pptx, properties) {
             align: 'center',
             valign: 'middle'
           }
-        });
+        })
+      });
+      console.log('Successfully added contamination map image');    
+    } catch (error) {
+      console.error('Error adding contamination screenshot:', error);
+    }
+  } else {
+     console.warn('No contamination screenshot available');
+     // Add placeholder or error message
+     slide.addText('Contamination map unavailable', convertCmValues({
+      x: '5%',
+      y: '24%',
+      w: '40%',
+      h: '50%',
+      fontSize: 12,
+      color: 'FF0000',
+      align: 'center',
+      valign: 'middle'
+   }));
+  }
 
-        slide.addImage({
-          data: mapScreenshot,
-          ...imageOptions
-        });
+  // Add left description box with gap
+  let contaminationText = 'Contamination data unavailable.';
+  let contaminationScore = 0;
 
-        console.log('Successfully added contamination map');    
-      } else {
-        throw new Error('Map screenshot capture returned null');
+  // Use the contamination features that were already captured
+  if (properties.contaminationFeatures?.length > 0) {
+    try {
+      // Calculate contamination score using the new method
+      const scoreResult = scoringCriteria.contamination.calculateScore(
+        properties.contaminationFeatures,
+        properties.developableArea
+      );
+      contaminationScore = scoreResult.score;
+      contaminationText = scoringCriteria.contamination.getScoreDescription(scoreResult);
+          
+      // Add additional contamination information if contamination is found
+      if (contaminationScore === 1) {
+        const feature = properties.contaminationFeatures[0];
+        if (feature.properties?.SiteName) {
+          contaminationText += `\n\nSite Name: ${feature.properties.SiteName}`;
+        }
+        if (feature.properties?.Comment) {
+          contaminationText += `\nComments: ${feature.properties.Comment}`;
+        }
       }
     } catch (error) {
-      console.error('Error capturing/adding contamination map:', error);
-      slide.addText('Contamination map unavailable', convertCmValues({
-        x: '5%',
-        y: '24%',
-        w: '40%',
-        h: '50%',
-        fontSize: 12,
-        color: 'FF0000',
-        align: 'center',
-        valign: 'middle'
-      }));
+      console.error('Error processing contamination features:', error);
+      contaminationText = 'Error processing contamination data.';
+      contaminationScore = 0;
     }
+  } else {
+    // No contamination features found - site is not on register
+    contaminationScore = 3;
+    contaminationText = scoringCriteria.contamination.getScoreDescription({ score: 3, minDistance: Infinity });
+  }
 
-    // Add debug logging
-    console.log('Checking contamination data:', {
-      hasDevArea: !!properties.developableArea,
-      hasContamFeatures: !!properties.site_suitability__contaminationFeatures,
-      contamFeatures: properties.site_suitability__contaminationFeatures
-    });
+  // Update the box color based on score
+  slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
+    x: '5%',
+    y: '80%',
+    w: '40%',
+    h: '12%',
+    fill: scoringCriteria.contamination.getScoreColor(contaminationScore).replace('#', ''),
+    line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
+  }));
 
-    // Calculate contamination score
-    let contaminationScore = 0;
-    let contaminationText = 'Contamination data unavailable.';
+  // Add description text
+  slide.addText(contaminationText, convertCmValues({
+    x: '5%',
+    y: '80%',
+    w: '40%',
+    h: '8%',
+    fontSize: 7,
+    color: '363636',
+    fontFace: 'Public Sans',
+    align: 'left',
+    valign: 'top',
+    wrap: true
+  }));
 
-    if (properties.developableArea && properties.site_suitability__contaminationFeatures) {
-      try {
-        console.log('=== Starting Contamination Score Calculation ===');
-        console.log('Developable area geometry:', JSON.stringify(properties.developableArea[0].geometry));
-        console.log('Number of contamination features:', 
-          properties.site_suitability__contaminationFeatures.length);
-        
-        const result = scoringCriteria.contamination.calculateScore(
-          properties.site_suitability__contaminationFeatures, 
-          properties.developableArea
-        );
-        console.log('\nScore Calculation Result:');
-        console.log('- Score:', result.score);
-        console.log('- Description:', scoringCriteria.contamination.getScoreDescription(result));
-        console.log('=== End Contamination Score Calculation ===\n');
-        
-        contaminationScore = result.score;
-        contaminationText = scoringCriteria.contamination.getScoreDescription(result);
-      } catch (error) {
-        console.error('Error calculating contamination score:', error);
-        console.error('Error details:', {
-          message: error.message,
-          stack: error.stack,
-          developableArea: properties.developableArea ? 'exists' : 'missing',
-          contaminationFeatures: properties.site_suitability__contaminationFeatures ? 'exists' : 'missing'
-        });
-        contaminationText = 'Error calculating contamination risk.';
-      }
-    } else {
-      console.log('Missing required data for contamination score:', {
-        developableArea: properties.developableArea ? 'exists' : 'missing',
-        contaminationFeatures: properties.site_suitability__contaminationFeatures ? 'exists' : 'missing'
-      });
-    }
+  // Add score text
+  slide.addText(`Score: ${contaminationScore}/3`, convertCmValues({
+    x: '5%',
+    y: '86%',
+    w: '40%',
+    h: '4%',
+    fontSize: 7,
+    color: '363636',
+    fontFace: 'Public Sans',
+    bold: true,
+    align: 'right'
+  }));
 
-    // Update the box color based on score
-    slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
-      x: '5%',
-      y: '80%',
-      w: '40%',
-      h: '12%',
-      fill: scoringCriteria.contamination.getScoreColor(contaminationScore).replace('#', ''),
-      line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
-    }));
+  // Add line
+  slide.addShape(pptx.shapes.LINE, convertCmValues({
+    x: '6%',
+    y: '88.5%',
+    w: '34%',
+    h: 0,
+    line: { color: '8C8C8C', width: 0.4 }
+  }));
 
-    // Add description text
-    slide.addText(contaminationText, convertCmValues({
-      x: '5%',
-      y: '80%',
-      w: '40%',
-      h: '8%',
-      fontSize: 7,
-      color: '363636',
-      fontFace: 'Public Sans',
-      align: 'left',
-      valign: 'top',
-      wrap: true
-    }));
+  // Add source text
+  slide.addText('Source: NSW Environmental Protection Agency (EPA), 2025', convertCmValues({
+    x: '5%',
+    y: '88%',
+    w: '40%',
+    h: '3%',
+    fontSize: 6,
+    color: '363636',
+    fontFace: 'Public Sans Light',
+    italic: true,
+    align: 'left',
+    wrap: true
+  }));
 
-    // Add score text
-    slide.addText(`Score: ${contaminationScore}/3`, convertCmValues({
-      x: '5%',
-      y: '86%',
-      w: '40%',
-      h: '4%',
-      fontSize: 7,
-      color: '363636',
-      fontFace: 'Public Sans',
-      bold: true,
-      align: 'right'
-    }));
-
-    // Add line
-    slide.addShape(pptx.shapes.LINE, convertCmValues({
-      x: '6%',
-      y: '88.5%',
-      w: '34%',
-      h: 0,
-      line: { color: '8C8C8C', width: 0.4 }
-    }));
-
-    // Add source text
-    slide.addText('Source: EPA Contaminated Land Register. Note that absence of being on the register does not mean the site is free from contamination.', convertCmValues({
-      x: '5%',
-      y: '88%',
-      w: '40%',
-      h: '3%',
-      fontSize: 6,
-      color: '363636',
-      fontFace: 'Public Sans Light',
-      italic: true,
-      align: 'left',
-      wrap: true
-    }));
-
-    // Right side - Usage and Potential Site Remediation
+    // Right side - Historical Imagery
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
       x: '50%',
       y: '18%',
@@ -360,7 +379,7 @@ export async function addContaminationSlide(pptx, properties) {
     }));
 
     // Add rotated text for right side
-    slide.addText('Usage and Potential Site Remediation', convertCmValues({
+    slide.addText('Historical Imagery', convertCmValues({
       x: '22.5%',     // Adjusted x position for right side
       y: '45%',     // Centered vertically
       w: '61%',     // Original height becomes width when rotated
@@ -373,41 +392,50 @@ export async function addContaminationSlide(pptx, properties) {
       rotate: 270    // Use rotate instead of transform
     }));
 
-    // Add OpenStreetMap view
-    try {
-      const feature = {
-        geometry: {
-          coordinates: [properties.site__geometry]
-        },
-        properties: properties
-      };
-      const mapScreenshot = await captureOpenStreetMap(feature, properties.developableArea);
-      
-      if (mapScreenshot) {
-        const imageOptions = convertCmValues({
-          x: '56%',
-          y: '18%',
-          w: '34%',
-          h: '61%',
-          sizing: {
-            type: 'contain',
-            align: 'center',
-            valign: 'middle'
-          }
-        });
-
+    // Add historical imagery
+    if (properties.historicalImagery?.[0]) {
+      try {
+        // Add the image with correct dimensions
         slide.addImage({
-          data: mapScreenshot,
-          ...imageOptions
+          data: properties.historicalImagery[0].image,
+          ...convertCmValues({
+            x: '56%',
+            y: '18%',
+            w: '34%',
+            h: '61%',
+            sizing: {
+              type: 'contain',
+              align: 'center',
+              valign: 'middle'
+            }
+          })
         });
 
-        console.log('Successfully added OpenStreetMap view');    
-      } else {
-        throw new Error('Map screenshot capture returned null');
+        // Add year overlay
+        slide.addText(`${properties.historicalImagery[0].year}`, convertCmValues({
+          x: '82%',  // Moved to right side
+          y: '18%',
+          w: '8%',   // Smaller width for the year
+          h: '5%',   // Slightly smaller height
+          fontSize: 18,  // Smaller font size
+          color: 'FFD700',  // Yellow color
+          fontFace: 'Public Sans',
+          bold: true,
+          align: 'right',
+          valign: 'top'
+        }));
+
+      } catch (error) {
+        console.error('Error adding historical imagery:', error);
+        addHistoricalErrorMessage();
       }
-    } catch (error) {
-      console.error('Error capturing/adding OpenStreetMap view:', error);
-      slide.addText('Map unavailable', convertCmValues({
+    } else {
+      console.warn('No historical imagery available');
+      addHistoricalErrorMessage();
+    }
+
+    function addHistoricalErrorMessage() {
+      slide.addText('Historical imagery unavailable', convertCmValues({
         x: '50%',
         y: '24%',
         w: '40%',
@@ -419,18 +447,18 @@ export async function addContaminationSlide(pptx, properties) {
       }));
     }
 
-    // Add description box
+    // Add description box with matching green color
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
       x: '50%',
       y: '80%',
       w: '40%',
       h: '12%',
-      fill: 'FFFFFF',
+      fill: 'E2EFD9',  // Softer green to match contamination side
       line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
     }));
 
     // Add description text
-    slide.addText('The site may require remediation works depending on the extent and type of contamination present. Further investigation and a detailed site assessment would be required to determine the full scope of any necessary remediation.', convertCmValues({
+    slide.addText('Please update commentary and score to reflect any impact on potential contamination observable via the historical images', convertCmValues({
       x: '50%',
       y: '80%',
       w: '40%',
@@ -443,6 +471,19 @@ export async function addContaminationSlide(pptx, properties) {
       wrap: true
     }));
 
+    // Add score text showing 3/3
+    slide.addText('Score: 3/3', convertCmValues({
+      x: '50%',
+      y: '86%',
+      w: '40%',
+      h: '4%',
+      fontSize: 7,
+      color: '363636',
+      fontFace: 'Public Sans',
+      bold: true,
+      align: 'right'
+    }));
+
     // Add line
     slide.addShape(pptx.shapes.LINE, convertCmValues({
       x: '51%',
@@ -452,8 +493,8 @@ export async function addContaminationSlide(pptx, properties) {
       line: { color: '8C8C8C', width: 0.4 }
     }));
 
-    // Add source text
-    slide.addText('Source: OpenStreetMap Contributors', convertCmValues({
+    // Add source text at bottom
+    slide.addText('Source: Metromap', convertCmValues({
       x: '50%',
       y: '88%',
       w: '40%',

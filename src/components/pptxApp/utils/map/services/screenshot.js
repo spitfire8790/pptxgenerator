@@ -7,6 +7,7 @@ import { createCanvas, drawImage, drawBoundary, drawPolyline } from '../utils/ca
 import { proxyRequest } from '../../services/proxyService';
 import { loadImage } from '../utils/image';
 import { giraffeState } from '@gi-nx/iframe-sdk';
+import proj4 from 'proj4';
 
 
 console.log('Aerial config:', LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL]);
@@ -814,10 +815,10 @@ export async function capturePowerMap(feature, developableArea = null) {
       height: 2048,
       padding: 0.2
     };
-    
+
     const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
     let powerFeatures = [];
-    
+
     // Create base canvas
     const canvas = createCanvas(config.width, config.height);
     const ctx = canvas.getContext('2d', { alpha: true });
@@ -827,7 +828,7 @@ export async function capturePowerMap(feature, developableArea = null) {
       console.log('Loading aerial base layer...');
       const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];
       const { bbox } = calculateMercatorParams(centerX, centerY, size);
-      
+
       const params = new URLSearchParams({
         SERVICE: 'WMS',
         VERSION: '1.3.0',
@@ -854,28 +855,33 @@ export async function capturePowerMap(feature, developableArea = null) {
     try {
       // 2. Power infrastructure layers
       console.log('Loading power infrastructure layers...');
-      
+
+      // Define coordinate systems
+      const wgs84 = 'EPSG:4326'; // Standard latitude/longitude
+      const mga56 = '+proj=utm +zone=56 +south=false +ellps=GRS80 +towgs84=-202.33,-154.82,-176.12,0,0,0,0 +units=m +no_defs'; // MGA Zone 56
+      const webMercator = 'EPSG:3857'; // Web Mercator
+
       // Define power config
       const powerConfig = {
         baseUrl: 'https://portal.data.nsw.gov.au/arcgis/rest/services/Hosted/NSW_Electricity_Infrastructure/FeatureServer/0',
         layerId: 19976
       };
-      
+
       // Get the power layer data from Giraffe
       console.log('Fetching project layers from Giraffe...');
       const projectLayers = await giraffeState.get('projectLayers');
       const powerLayer = projectLayers?.find(layer => layer.layer === powerConfig.layerId);
       console.log('Found power layer:', powerLayer);
-      
+
       if (powerLayer) {
         console.log('Processing Giraffe power layer...');
         const { bbox } = calculateMercatorParams(centerX, centerY, size);
         const vectorTileUrl = powerLayer.layer_full?.vector_source?.tiles?.[0];
-        
+
         if (vectorTileUrl) {
           const decodedUrl = decodeURIComponent(vectorTileUrl.split('/featureServer/{z}/{x}/{y}/')?.[1] || '');
           const extractedToken = decodedUrl.split('token=')?.[1]?.split('&')?.[0];
-          
+
           const params = new URLSearchParams({
             where: '1=1',
             geometry: bbox,
@@ -890,7 +896,7 @@ export async function capturePowerMap(feature, developableArea = null) {
 
           const url = `${powerConfig.baseUrl}/query?${params.toString()}`;
           console.log('Final power request URL (with sensitive info removed):', url.replace(extractedToken, 'REDACTED'));
-          
+
           const powerResponse = await proxyRequest(url);
           console.log('Power response:', powerResponse);
 
@@ -900,8 +906,32 @@ export async function capturePowerMap(feature, developableArea = null) {
 
             powerResponse.features.forEach((feature, index) => {
               console.log(`Drawing Giraffe power feature ${index + 1}...`);
-              if (feature.geometry?.coordinates) {
-                drawBoundary(ctx, feature.geometry.coordinates, centerX, centerY, size, config.width, {
+
+              // Function to transform coordinates
+              const transformCoordinates = (geometry, sourceCrs, targetCrs) => {
+                if (geometry.type === 'Point') {
+                  const [x, y] = geometry.coordinates;
+                  const [newX, newY] = proj4(sourceCrs, targetCrs, [x, y]);
+                  return [newX, newY];
+                } else if (geometry.type === 'LineString') {
+                  return geometry.coordinates.map(([x, y]) => {
+                    const [newX, newY] = proj4(sourceCrs, targetCrs, [x, y]);
+                    return [newX, newY];
+                  });
+                } else if (geometry.type === 'Polygon') {
+                  return geometry.coordinates.map(ring => ring.map(([x, y]) => {
+                    const [newX, newY] = proj4(sourceCrs, targetCrs, [x, y]);
+                    return [newX, newY];
+                  }));
+                }
+                return geometry.coordinates; // Handle other geometry types as needed
+              };
+
+              // Transform the geometry to WGS84 (EPSG:4326)
+              const transformedCoordinates = transformCoordinates(feature.geometry, webMercator, wgs84);
+
+              if (transformedCoordinates) {
+                drawBoundary(ctx, transformedCoordinates, centerX, centerY, size, config.width, {
                   strokeStyle: '#FFBD33',
                   lineWidth: 8
                 });
@@ -919,6 +949,7 @@ export async function capturePowerMap(feature, developableArea = null) {
         geometry: mercatorBbox,
         geometryType: 'esriGeometryEnvelope',
         inSR: 3857,
+        outSR: 3857,  // Request coordinates in GDA94
         spatialRel: 'esriSpatialRelIntersects',
         outFields: '*',
         returnGeometry: true,
@@ -936,15 +967,90 @@ export async function capturePowerMap(feature, developableArea = null) {
 
         lualResponse.features.forEach((feature, index) => {
           console.log(`Drawing LUAL power feature ${index + 1}...`);
-          const style = feature.properties.ASSET_TYPE === 'OH' ? {
-            strokeStyle: '#FFBD33',
-            lineWidth: 8
-          } : {
+          
+          // Handle different geometry types
+          let coordinates;
+          if (feature.geometry.type === 'MultiLineString') {
+            feature.geometry.coordinates.forEach(lineString => {
+              const style = feature.properties.ASSET_TYPE === 'OH' ? {
+                strokeStyle: '#FFBD33',
+                lineWidth: 8
+              } : {
+                strokeStyle: '#FFBD33',
+                lineWidth: 8,
+                lineDash: [15, 10]
+              };
+              drawBoundary(ctx, lineString, centerX, centerY, size, config.width, style);
+            });
+          } else {
+            // Single LineString
+            const style = feature.properties.ASSET_TYPE === 'OH' ? {
+              strokeStyle: '#FFBD33',
+              lineWidth: 8
+            } : {
+              strokeStyle: '#FFBD33',
+              lineWidth: 8,
+              lineDash: [15, 10]
+            };
+            drawBoundary(ctx, feature.geometry.coordinates, centerX, centerY, size, config.width, style);
+          }
+        });
+      }
+
+      // Add LookUpNLive power infrastructure layer
+      console.log('Loading LookUpNLive power infrastructure layer...');
+      const lookupParams = new URLSearchParams({
+        where: '1=1',
+        geometry: mercatorBbox,
+        geometryType: 'esriGeometryEnvelope',
+        inSR: 3857,
+        outSR: 7856,  // Changed to match the service's native CRS
+        spatialRel: 'esriSpatialRelIntersects',
+        outFields: '*',
+        returnGeometry: true,
+        f: 'geojson'
+      });
+
+      const lookupUrl = `https://services.arcgis.com/Gbs1D7TkFBVkx0Nz/ArcGIS/rest/services/LookUpNLive/FeatureServer/2/query?${lookupParams.toString()}`;
+      console.log('LookUpNLive request URL:', lookupUrl);
+      const lookupResponse = await proxyRequest(lookupUrl);
+      console.log('LookUpNLive response:', lookupResponse);
+
+      if (lookupResponse.features?.length > 0) {
+        console.log(`Drawing ${lookupResponse.features.length} LookUpNLive power features...`);
+        powerFeatures = powerFeatures.concat(lookupResponse.features);
+
+        lookupResponse.features.forEach((feature, index) => {
+          console.log(`Drawing LookUpNLive power feature ${index + 1}...`);
+
+          // Function to transform coordinates
+          const transformCoordinates = (geometry, sourceCrs, targetCrs) => {
+            if (geometry.type === 'Point') {
+              const [x, y] = geometry.coordinates;
+              const [newX, newY] = proj4(sourceCrs, targetCrs, [x, y]);
+              return [newX, newY];
+            } else if (geometry.type === 'LineString') {
+              return geometry.coordinates.map(([x, y]) => {
+                const [newX, newY] = proj4(sourceCrs, targetCrs, [x, y]);
+                return [newX, newY];
+              });
+            } else if (geometry.type === 'Polygon') {
+              return geometry.coordinates.map(ring => ring.map(([x, y]) => {
+                const [newX, newY] = proj4(sourceCrs, targetCrs, [x, y]);
+                return [newX, newY];
+              }));
+            }
+            return geometry.coordinates; // Handle other geometry types as needed
+          };
+
+          // Transform the geometry to WGS84 (EPSG:4326)
+          const transformedCoordinates = transformCoordinates(feature.geometry, mga56, wgs84);
+
+          drawBoundary(ctx, transformedCoordinates, centerX, centerY, size, config.width, {
             strokeStyle: '#FFBD33',
             lineWidth: 8,
             lineDash: [15, 10]
-          };
-          drawBoundary(ctx, feature.geometry.coordinates, centerX, centerY, size, config.width, style);
+          });
         });
       }
 
@@ -2359,7 +2465,7 @@ export async function capturePTALMap(feature, developableArea = null) {
       const ptalConfig = {
         baseUrl: 'https://portal.data.nsw.gov.au/arcgis/rest/services/Hosted/ptal_dec20_gdb__(1)/FeatureServer/0',
         layerId: 0,
-        token: 'xWNDkDr5ADOR-2a456m7Rjp_AZd4HW9xL6HFKx__ei0_gVDkhiOS6sT-4DZLIME3J6L3NlJ0yH-2oxaIYvqXyFM6hxwuo70XGZ-eSkmPbYWX0R8esq-VtCI3GEjVii3ZUlvjyyEuurxlnMSqxbTVPWFbQmJ6_oK__7Ug92PgzgmGVL6csBuVFoDosJpLkZE_lQzl2LdQoNwDFL50Zi52rLYpuNjbcOQm7HFYUVG1-BpKICYZiQn36Ith8LtqG2M1'
+        token: '5sH3McUOrpjQCwQ5FucapyZVFpCylG8gROSGm5ZQDSLykMkwetzn35ztXrPbmBCxx6iLSEdtXJpGibR1izFBShkXE3Z7HzU3wulLNd-1NWbfEP-tQzvevg0SS16-ELdXkOUpJnedsZKBT0sh8csOp_dJ-it-FOyG58EWDxRK_QxTPdUDN165GPYdTQusV6hrs4zVJcApeRDWIPNpVpgrKjYUy6y8eRvUw0FDnEQHOYXXCRStCtk9QwNYuJ4qH3qh'
       };
 
       // Color mapping for PTAL values
@@ -2500,8 +2606,8 @@ export async function captureContaminationMap(feature, developableArea = null) {
       padding: 0.3
     };
     
-    // Pass developableArea to calculateBounds
     const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    let contaminationFeatures = [];
     
     // Create base canvas
     const canvas = createCanvas(config.width, config.height);
@@ -2519,8 +2625,8 @@ export async function captureContaminationMap(feature, developableArea = null) {
         REQUEST: 'GetMap',
         BBOX: bbox,
         CRS: 'EPSG:3857',
-        WIDTH: config.width,
-        HEIGHT: config.height,
+        WIDTH: aerialConfig.width || aerialConfig.size,
+        HEIGHT: aerialConfig.height || aerialConfig.size,
         LAYERS: aerialConfig.layers,
         STYLES: '',
         FORMAT: 'image/png',
@@ -2546,83 +2652,45 @@ export async function captureContaminationMap(feature, developableArea = null) {
         padding: 0.3
       };
 
-      // Get the contamination features
+      // First get the features
       const { bbox } = calculateMercatorParams(centerX, centerY, size);
       const queryParams = new URLSearchParams({
-        f: 'json',
+        where: '1=1',
         geometry: bbox,
         geometryType: 'esriGeometryEnvelope',
-        spatialRel: 'esriSpatialRelIntersects',
-        outFields: 'SiteName',
-        returnGeometry: true,
         inSR: 3857,
-        outSR: 3857
+        spatialRel: 'esriSpatialRelIntersects',
+        outFields: '*',
+        returnGeometry: true,
+        f: 'geojson'
       });
 
       const queryUrl = `${contaminationConfig.url}/${contaminationConfig.layerId}/query?${queryParams.toString()}`;
+      console.log('Querying contamination features from:', queryUrl);
       const contaminationResponse = await proxyRequest(queryUrl);
+      console.log('Contamination Response:', contaminationResponse);
       
       if (contaminationResponse?.features?.length > 0) {
-        console.log(`Drawing ${contaminationResponse.features.length} contamination features...`);
-        
-        // Convert features from Web Mercator to WGS84
-        const convertedFeatures = contaminationResponse.features.map(feature => {
-          const rings = feature.geometry.rings.map(ring => 
-            ring.map(coord => {
-              // Convert from Web Mercator to WGS84
-              const lon = (coord[0] * 180) / 20037508.34;
-              const lat = (Math.atan(Math.exp(coord[1] * Math.PI / 20037508.34)) * 360 / Math.PI) - 90;
-              return [lon, lat];
-            })
-          );
-
-          return {
-            ...feature,
-            geometry: {
-              type: 'Polygon',
-              coordinates: rings
-            }
-          };
-        });
-        
-        // Store both the features and developableArea for scoring
-        if (feature.properties) {
-          feature.properties.site_suitability__contaminationFeatures = convertedFeatures;
-          if (developableArea) {
-            feature.properties.developableArea = developableArea;
-          }
-        } else {
-          feature.properties = { 
-            site_suitability__contaminationFeatures: convertedFeatures,
-            ...(developableArea && { developableArea })
-          };
+        contaminationFeatures = contaminationResponse.features;
+        // Store the features in the feature object
+        if (!feature.properties) {
+          feature.properties = {};
         }
-        
-        contaminationResponse.features.forEach((contaminationFeature, index) => {
-          console.log(`Drawing contamination feature ${index + 1}...`);
-          if (contaminationFeature.geometry?.coordinates) {
-            drawBoundary(ctx, contaminationFeature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-              fill: true,
-              strokeStyle: 'rgba(255, 0, 0, 0.8)',
-              fillStyle: 'rgba(255, 0, 0, 0.4)',
-              lineWidth: 2
-            });
-          }
-        });
+        feature.properties.site_suitability__contaminationFeatures = contaminationResponse;
+        console.log('Stored contamination features:', contaminationFeatures.length);
       }
 
-      // Then get the image layer for additional visual elements
-      const { bbox: mercatorBbox } = calculateMercatorParams(centerX, centerY, size);
+      // Then get the image
       const params = new URLSearchParams({
         f: 'image',
         format: 'png32',
         transparent: 'true',
         size: `${contaminationConfig.size},${contaminationConfig.size}`,
-        bbox: mercatorBbox,
-        bboxSR: 3857,
-        imageSR: 3857,
+        bbox: `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`,
+        bboxSR: 4283,
+        imageSR: 4283,
         layers: `show:${contaminationConfig.layerId}`,
-        dpi: 96
+        dpi: 300
       });
 
       const url = `${contaminationConfig.url}/export?${params.toString()}`;
@@ -2641,12 +2709,13 @@ export async function captureContaminationMap(feature, developableArea = null) {
       console.warn('Failed to load contamination layer:', error);
     }
 
-    // Draw boundaries - Draw these AFTER all other layers for visibility
-    console.log('Drawing boundaries...');
-    
-    // Draw developable area first (underneath property boundary)
+    // Draw boundaries
+    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+      strokeStyle: '#FF0000',
+      lineWidth: 6
+    });
+
     if (developableArea?.features?.[0]) {
-      console.log('Drawing developable area boundary...', developableArea.features[0].geometry.coordinates[0]);
       drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
         strokeStyle: '#02d1b8',
         lineWidth: 12,
@@ -2654,107 +2723,37 @@ export async function captureContaminationMap(feature, developableArea = null) {
       });
     }
 
-    // Draw property boundary on top
-    console.log('Drawing property boundary...', feature.geometry.coordinates[0]);
-    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-      strokeStyle: '#FF0000',
-      lineWidth: 6
-    });
-
-    // Add legend
-    const legendHeight = 200;
-    const legendWidth = 400;
-    const padding = 20;
-    const legendX = canvas.width - legendWidth - padding;
-    const legendY = canvas.height - legendHeight - padding;
-
-    // Draw legend background with border
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-    ctx.strokeStyle = '#002664';
-    ctx.lineWidth = 2;
-    ctx.fillRect(legendX, legendY, legendWidth, legendHeight);
-    ctx.strokeRect(legendX, legendY, legendWidth, legendHeight);
-
-    // Legend title
-    ctx.font = 'bold 28px Public Sans';
-    ctx.fillStyle = '#002664';
-    ctx.textBaseline = 'top';
-    ctx.fillText('Contaminated Sites', legendX + padding, legendY + padding);
-
-    // Legend items
-    const legendItems = [
-      { color: 'rgba(255, 0, 0, 0.4)', label: 'Contaminated Site' }
-    ];
-
-    ctx.textBaseline = 'middle';
-    ctx.font = '22px Public Sans';
-
-    legendItems.forEach((item, index) => {
-      const y = legendY + padding + 60 + (index * 45);
-      
-      // Draw color box
-      ctx.fillStyle = item.color;
-      ctx.fillRect(legendX + padding, y - 10, 20, 20);
-      ctx.strokeStyle = '#363636';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(legendX + padding, y - 10, 20, 20);
-      
-      // Draw label
-      ctx.fillStyle = '#363636';
-      ctx.fillText(item.label, legendX + padding + 35, y);
-    });
-
-    // Store the screenshot in the feature properties
-    const screenshot = canvas.toDataURL('image/png', 1.0);
-    feature.properties.contaminationMapScreenshot = screenshot;
-
-    return screenshot;
+    return {
+      image: canvas.toDataURL('image/png', 1.0),
+      features: contaminationFeatures
+    };
   } catch (error) {
     console.error('Failed to capture contamination map:', error);
     return null;
   }
 }
 
-// Helper functions for tile coordinate calculation
-function lon2tile(lon, zoom) {
-  if (lon < -180 || lon > 180) {
-    console.warn('Invalid longitude:', lon);
-    lon = Math.max(-180, Math.min(180, lon));
-  }
-  return Math.floor((lon + 180) / 360 * Math.pow(2, zoom));
-}
-
-function lat2tile(lat, zoom) {
-  if (lat < -85.0511 || lat > 85.0511) {
-    console.warn('Invalid latitude:', lat);
-    lat = Math.max(-85.0511, Math.min(85.0511, lat));
-  }
-  return Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));
-}
-
-// Convert Web Mercator coordinates to WGS84
-function mercatorToWGS84(mercatorX, mercatorY) {
-  const lon = (mercatorX / 20037508.34) * 180;
-  const lat = (Math.atan(Math.exp((mercatorY / 20037508.34) * Math.PI)) * 360 / Math.PI) - 90;
-  return [lon, lat];
-}
-
 export async function captureOpenStreetMap(feature, developableArea = null) {
-  if (!feature) {
-    console.log('No feature provided for OpenStreetMap capture');
-    return null;
-  }
-  console.log('Starting OpenStreetMap capture...', { feature, developableArea });
+  if (!feature) return null;
+  console.log('Starting OpenStreetMap capture...');
 
   try {
     const config = {
       width: 2048,
       height: 2048,
-      padding: 0.4  // Increased padding to ensure proper scaling
+      padding: 0.2
     };
     
     const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
-    console.log('Calculated bounds:', { centerX, centerY, size });
+    
+    // Convert center and size to Web Mercator for consistent coordinate system
+    const [mercatorCenterX, mercatorCenterY] = gda94ToWebMercator(centerX, centerY);
+    const [mercatorMinX, mercatorMinY] = gda94ToWebMercator(centerX - size/2, centerY - size/2);
+    const [mercatorMaxX, mercatorMaxY] = gda94ToWebMercator(centerX + size/2, centerY + size/2);
+    const mercatorSize = Math.max(
+      Math.abs(mercatorMaxX - mercatorMinX),
+      Math.abs(mercatorMaxY - mercatorMinY)
+    );
     
     // Create base canvas
     const canvas = createCanvas(config.width, config.height);
@@ -2763,24 +2762,15 @@ export async function captureOpenStreetMap(feature, developableArea = null) {
     ctx.fillRect(0, 0, config.width, config.height);
 
     try {
-      // Calculate tile coordinates
-      const { bbox } = calculateMercatorParams(centerX, centerY, size);
-      console.log('Mercator bbox:', bbox);
+      // Convert Web Mercator to WGS84 for tile calculations
+      const [minLon, minLat] = mercatorToWGS84(mercatorMinX, mercatorMinY);
+      const [maxLon, maxLat] = mercatorToWGS84(mercatorMaxX, mercatorMaxY);
       
-      const [minX, minY, maxX, maxY] = bbox.split(',').map(Number);
-      console.log('Parsed bbox coordinates:', { minX, minY, maxX, maxY });
-      
-      // Convert Mercator coordinates to WGS84
-      const [minLon, minLat] = mercatorToWGS84(minX, minY);
-      const [maxLon, maxLat] = mercatorToWGS84(maxX, maxY);
-      console.log('WGS84 coordinates:', { minLon, minLat, maxLon, maxLat });
-      
-      // Calculate zoom level based on bounding box size
+      // Calculate zoom level
       const latSpan = Math.abs(maxLat - minLat);
-      const lonSpan = Math.max(Math.abs(maxLon - minLon), 0.0001);
+      const lonSpan = Math.abs(maxLon - minLon);
       const maxSpan = Math.max(latSpan, lonSpan);
-      const zoomLevel = Math.min(19, Math.floor(Math.log2(360 / maxSpan)) + 1);
-      console.log('Calculated zoom level:', zoomLevel);
+      const zoomLevel = Math.min(18, Math.floor(Math.log2(360 / maxSpan)));
       
       // Calculate tile coordinates
       const tileSize = 256;
@@ -2789,25 +2779,20 @@ export async function captureOpenStreetMap(feature, developableArea = null) {
       const minTileY = lat2tile(maxLat, zoomLevel);
       const maxTileY = lat2tile(minLat, zoomLevel);
 
-      // Calculate scaling and positioning
+      // Calculate dimensions
       const tilesX = maxTileX - minTileX + 1;
       const tilesY = maxTileY - minTileY + 1;
       const totalWidth = tilesX * tileSize;
       const totalHeight = tilesY * tileSize;
       
-      // Adjust scale to account for padding
-      const scale = Math.min(
-        (config.width * 0.8) / totalWidth,
-        (config.height * 0.8) / totalHeight
+      // Calculate scale to fill the canvas
+      const scale = Math.max(
+        config.width / totalWidth,
+        config.height / totalHeight
       );
       
       const offsetX = (config.width - totalWidth * scale) / 2;
       const offsetY = (config.height - totalHeight * scale) / 2;
-
-      console.log('Tile calculations:', {
-        minTileX, maxTileX, minTileY, maxTileY,
-        tilesX, tilesY, scale, offsetX, offsetY
-      });
 
       // Load and draw tiles
       ctx.save();
@@ -2830,7 +2815,7 @@ export async function captureOpenStreetMap(feature, developableArea = null) {
             } catch (tileError) {
               retryCount++;
               if (retryCount === maxRetries) {
-                console.error(`Failed to load tile at ${x},${y} after ${maxRetries} attempts:`, tileError);
+                console.error(`Failed to load tile at ${x},${y} after ${maxRetries} attempts`);
               } else {
                 await new Promise(resolve => setTimeout(resolve, 1000));
               }
@@ -2840,27 +2825,23 @@ export async function captureOpenStreetMap(feature, developableArea = null) {
       }
 
       ctx.restore();
+    
+    // Transform coordinates function that handles GDA94 to Web Mercator conversion
+    const transformCoord = (coord) => {
+      const [mercX, mercY] = gda94ToWebMercator(coord[0], coord[1]);
+      
+      // Scale to canvas coordinates
+        const x = ((mercX - mercatorMinX) / mercatorSize) * totalWidth * scale + offsetX;
+        const y = ((mercatorMaxY - mercY) / mercatorSize) * totalHeight * scale + offsetY;
+      return [x, y];
+    };
 
-      // Calculate transformation functions for coordinates
-      const transformCoord = (coord) => {
-        const [lon, lat] = coord;
-        // Scale coordinates to fit within the map bounds
-        const x = (lon - minLon) / (maxLon - minLon) * totalWidth * scale + offsetX;
-        const y = (1 - (lat - minLat) / (maxLat - minLat)) * totalHeight * scale + offsetY;
-        return [x, y];
-      };
-
-      // Calculate line widths based on scale
-      const baseLineWidth = Math.max(2, 6 / scale);
-      const devAreaLineWidth = Math.max(4, 12 / scale);
-
-      // Draw developable area first (if exists)
+      // Draw developable area
       if (developableArea?.features?.[0]?.geometry?.coordinates?.[0]) {
-        console.log('Drawing developable area boundary...');
         ctx.beginPath();
         ctx.strokeStyle = '#02d1b8';
-        ctx.lineWidth = devAreaLineWidth;
-        ctx.setLineDash([20 / scale, 10 / scale]);
+        ctx.lineWidth = 8;
+        ctx.setLineDash([20, 10]);
         
         const coords = developableArea.features[0].geometry.coordinates[0];
         coords.forEach((coord, i) => {
@@ -2871,14 +2852,13 @@ export async function captureOpenStreetMap(feature, developableArea = null) {
         
         ctx.closePath();
         ctx.stroke();
-        ctx.setLineDash([]); // Reset dash pattern
+        ctx.setLineDash([]);
       }
 
       // Draw property boundary
-      console.log('Drawing property boundary...');
       ctx.beginPath();
       ctx.strokeStyle = '#FF0000';
-      ctx.lineWidth = baseLineWidth;
+      ctx.lineWidth = 6;
       
       const coords = feature.geometry.coordinates[0];
       coords.forEach((coord, i) => {
@@ -2893,18 +2873,10 @@ export async function captureOpenStreetMap(feature, developableArea = null) {
       return canvas.toDataURL('image/png', 1.0);
     } catch (error) {
       console.error('Failed to load OpenStreetMap layer:', error);
-      console.error('Error details:', {
-        message: error.message,
-        stack: error.stack
-      });
       return null;
     }
   } catch (error) {
     console.error('Failed to capture OpenStreetMap:', error);
-    console.error('Error details:', {
-      message: error.message,
-      stack: error.stack
-    });
     return null;
   }
 }
@@ -2917,39 +2889,39 @@ export async function captureTECMap(feature, developableArea = null) {
   console.log('Starting TEC map capture...', { feature, developableArea });
 
   try {
-    const config = {
-      width: 2048,
-      height: 2048,
-      padding: 0.3
-    };
+    const config = LAYER_CONFIGS[SCREENSHOT_TYPES.TEC];
     
     const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
     console.log('Calculated bounds:', { centerX, centerY, size });
     
+    // Calculate bbox early for both Mercator and GDA94
+    const { bbox: mercatorBbox } = calculateMercatorParams(centerX, centerY, size);
+    const gda94Bbox = `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`;
+    console.log('Calculated bboxes:', { mercatorBbox, gda94Bbox });
+    
     // Create base canvas
-    const canvas = createCanvas(config.width, config.height);
+    const canvas = createCanvas(config.width || config.size, config.height || config.size);
     const ctx = canvas.getContext('2d', { alpha: true });
     
     try {
       // 1. Aerial imagery (base)
       console.log('Loading aerial base layer...');
       const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];
-      const { bbox } = calculateMercatorParams(centerX, centerY, size);
       
       const params = new URLSearchParams({
         SERVICE: 'WMS',
         VERSION: '1.3.0',
         REQUEST: 'GetMap',
-        BBOX: bbox,
+        BBOX: mercatorBbox,
         CRS: 'EPSG:3857',
-        WIDTH: config.width,
-        HEIGHT: config.height,
+        WIDTH: config.width || config.size,
+        HEIGHT: config.height || config.size,
         LAYERS: aerialConfig.layers,
         STYLES: '',
         FORMAT: 'image/png',
-        DPI: 300,
-        MAP_RESOLUTION: 300,
-        FORMAT_OPTIONS: 'dpi:300'
+        DPI: config.dpi,
+        MAP_RESOLUTION: config.dpi,
+        FORMAT_OPTIONS: `dpi:${config.dpi}`
       });
 
       const url = `${aerialConfig.url}?${params.toString()}`;
@@ -2963,99 +2935,101 @@ export async function captureTECMap(feature, developableArea = null) {
 
     try {
       // 2. TEC layer
-      const tecConfig = {
-        url: 'https://mapprod1.environment.nsw.gov.au/arcgis/rest/services/EDP/TECs_GreaterSydney/MapServer',
-        layerId: 0,
-        size: 2048,
-        padding: 0.3
-      };
-
-      // First get the features
-      const { bbox } = calculateMercatorParams(centerX, centerY, size);
+      console.log('Loading TEC layer...');
+      
+      // First get the features using proxy
       const queryParams = new URLSearchParams({
         where: '1=1',
-        geometry: bbox,
+        geometry: gda94Bbox,
         geometryType: 'esriGeometryEnvelope',
-        inSR: 3857,
+        inSR: config.spatialReference,
         spatialRel: 'esriSpatialRelIntersects',
         outFields: '*',
         returnGeometry: true,
         f: 'geojson'
       });
 
-      const queryUrl = `${tecConfig.url}/${tecConfig.layerId}/query?${queryParams.toString()}`;
-      console.log('Querying TEC features from:', queryUrl);
-      const tecResponse = await proxyRequest(queryUrl);
-      console.log('TEC Response:', tecResponse);
+      const queryUrl = `${config.url}/${config.layerId}/query?${queryParams.toString()}`;
+      console.log('Querying TEC features through proxy:', queryUrl);
       
-      if (tecResponse?.features?.length > 0) {
-        tecFeatures = tecResponse.features;
-        // Store both the features and response
-        if (!feature.properties) {
-          feature.properties = {};
+      try {
+        const tecResponse = await proxyRequest(queryUrl);
+        console.log('TEC Response:', tecResponse);
+        
+        if (tecResponse?.features?.length > 0) {
+          tecFeatures = tecResponse.features;
+          // Store both the features and response
+          if (!feature.properties) {
+            feature.properties = {};
+          }
+          feature.properties.site_suitability__tecFeatures = tecResponse;
+          feature.properties.tecFeatures = tecFeatures;
+          console.log('Stored TEC features:', tecFeatures.length);
+        } else {
+          console.log('No TEC features found in response');
+          if (!feature.properties) {
+            feature.properties = {};
+          }
+          feature.properties.site_suitability__tecFeatures = { type: 'FeatureCollection', features: [] };
+          feature.properties.tecFeatures = [];
         }
-        feature.properties.site_suitability__tecFeatures = tecResponse;
-        feature.properties.tecFeatures = tecFeatures;
-        console.log('Stored TEC features:', tecFeatures.length);
-        console.log('First TEC feature:', tecFeatures[0]);
-      } else {
-        console.log('No TEC features found in response');
-        // Initialize empty features array to indicate we checked but found none
-        if (!feature.properties) {
-          feature.properties = {};
-        }
-        feature.properties.site_suitability__tecFeatures = { type: 'FeatureCollection', features: [] };
-        feature.properties.tecFeatures = [];
-        console.log('Initialized empty TEC features');
+      } catch (error) {
+        console.error('Error querying TEC features:', error);
       }
 
-      // Then get the image
-      const params = new URLSearchParams({
+      // Then get the image using proxy
+      const imageParams = new URLSearchParams({
         f: 'image',
-        format: 'png32',
-        transparent: 'true',
-        size: `${tecConfig.size},${tecConfig.size}`,
-        bbox: `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`,
-        bboxSR: 4283,
-        imageSR: 4283,
-        layers: `show:${tecConfig.layerId}`,
-        dpi: 96
+        format: config.format,
+        transparent: config.transparent.toString(),
+        size: `${config.size},${config.size}`,
+        bbox: gda94Bbox,
+        bboxSR: config.spatialReference,
+        imageSR: config.spatialReference,
+        layers: `show:${config.layerId}`,
+        dpi: config.dpi
       });
 
-      const url = `${tecConfig.url}/export?${params.toString()}`;
-      console.log('Requesting TEC layer through proxy...', url);
+      const imageUrl = `${config.url}/export?${imageParams.toString()}`;
+      console.log('Requesting TEC layer image through proxy:', imageUrl);
       
-      const proxyUrl = await proxyRequest(url);
-      if (!proxyUrl) {
-        throw new Error('Failed to get proxy URL for TEC layer');
-      }
+      try {
+        const proxyUrl = await proxyRequest(imageUrl);
+        if (!proxyUrl) {
+          throw new Error('Failed to get proxy URL for TEC layer');
+        }
 
-      console.log('Loading TEC image from proxy URL...');
-      const tecLayer = await loadImage(proxyUrl);
-      console.log('TEC layer loaded successfully');
-      drawImage(ctx, tecLayer, canvas.width, canvas.height, 0.7);
+        console.log('Loading TEC image from proxy URL...');
+        const tecLayer = await loadImage(proxyUrl);
+        console.log('TEC layer loaded successfully');
+        drawImage(ctx, tecLayer, canvas.width, canvas.height, 0.7);
+      } catch (error) {
+        console.error('Error loading TEC layer image:', error);
+      }
     } catch (error) {
-      console.warn('Failed to load TEC layer:', error);
+      console.warn('Failed to process TEC layer:', error);
     }
 
-    // Draw boundary lines
-    if (feature.geometry) {
-      drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+    // Draw boundaries
+    console.log('Drawing boundaries...');
+    if (feature.geometry?.coordinates?.[0]) {
+      console.log('Drawing site boundary');
+      drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width || config.size, {
         strokeStyle: '#FF0000',
         lineWidth: 6
       });
-      console.log('Added site boundary');
     }
 
     // Draw developable area if provided
-    if (developableArea?.features?.[0]) {
-      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
+    if (developableArea?.features?.[0]?.geometry?.coordinates?.[0]) {
+      console.log('Drawing developable area boundary');
+      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width || config.size, {
         strokeStyle: '#02d1b8',
         lineWidth: 12,
         dashArray: [20, 10]
       });
-      console.log('Added developable area boundary');
     }
+
     return canvas.toDataURL('image/png', 1.0);
   } catch (error) {
     console.error('Failed to capture TEC map:', error);
@@ -3065,7 +3039,7 @@ export async function captureTECMap(feature, developableArea = null) {
 
 export async function captureBiodiversityMap(feature, developableArea = null) {
   if (!feature) return null;
-  console.log('Starting biodiversity map capture...');
+  console.log('Starting biodiversity map capture...', { feature, developableArea });
 
   try {
     const config = {
@@ -3121,7 +3095,7 @@ export async function captureBiodiversityMap(feature, developableArea = null) {
         padding: 0.3
       };
 
-      // First get the features for scoring
+      // First get the features for overlap calculation
       const { bbox: mercatorBbox } = calculateMercatorParams(centerX, centerY, size);
       const queryParams = new URLSearchParams({
         where: '1=1',
@@ -3186,6 +3160,7 @@ export async function captureBiodiversityMap(feature, developableArea = null) {
       console.log('Added site boundary');
     }
 
+    // Draw developable area with more prominent styling
     if (developableArea?.features?.[0]) {
       drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
         strokeStyle: '#02d1b8',
@@ -3198,6 +3173,398 @@ export async function captureBiodiversityMap(feature, developableArea = null) {
     return canvas.toDataURL('image/png', 1.0);
   } catch (error) {
     console.error('Failed to capture biodiversity map:', error);
+    return null;
+  }
+}
+
+// Helper functions for tile calculations
+function long2tile(lon, zoom) {
+  const n = Math.pow(2, zoom);
+  return Math.floor(((lon + 180) / 360) * n);
+}
+
+function lat2tile(lat, zoom) {
+  const n = Math.pow(2, zoom);
+  const latRad = lat * Math.PI / 180;
+  return Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
+}
+
+// Convert Web Mercator to WGS84
+function mercatorToWGS84(x, y) {
+  const lon = (x / 20037508.34) * 180;
+  const lat = (Math.atan(Math.exp(y / 20037508.34 * Math.PI)) * 360 / Math.PI) - 90;
+  return [lon, lat];
+}
+
+async function getBestImageryForDecade(decade, centerX, centerY, size, feature) {
+  const config = {
+    // Match PowerPoint slide dimensions (16:9 aspect ratio)
+    width: 2048,
+    height: 1152,
+    padding: 0.2
+  };
+
+  const decadeLayers = {
+    '1940s': [
+      { type: 'metromap', year: 1948, layer: 'Illawarra_1948_GM_JPEG' },
+      { type: 'metromap', year: 1943, layer: 'Sydney_1943_1_GM_JPEG' },
+      { type: 'nsw', year: 1947, layer: 'HistoricalImagery1947' },
+      { type: 'nsw', year: 1944, layer: 'HistoricalImagery1944' },
+      { type: 'nsw', year: 1943, layer: 'HistoricalImagery1943' }
+    ],
+    '1950s': [
+      { type: 'nsw', year: 1955, layer: 'HistoricalImagery1955' },
+      { type: 'nsw', year: 1954, layer: 'HistoricalImagery1954' },
+      { type: 'nsw', year: 1951, layer: 'HistoricalImagery1951' }
+    ],
+    '1960s': [
+      { type: 'metromap', year: 1961, layer: 'Sydney_1961_GM_JPEG' },
+      { type: 'nsw', year: 1969, layer: 'HistoricalImagery1969' },
+      { type: 'nsw', year: 1966, layer: 'HistoricalImagery1966' },
+      { type: 'nsw', year: 1965, layer: 'HistoricalImagery1965' }
+    ],
+    '1970s': [
+      { type: 'nsw', year: 1979, layer: 'HistoricalImagery1979' },
+      { type: 'nsw', year: 1978, layer: 'HistoricalImagery1978' },
+      { type: 'nsw', year: 1976, layer: 'HistoricalImagery1976' },
+      { type: 'nsw', year: 1975, layer: 'HistoricalImagery1975' },
+      { type: 'nsw', year: 1974, layer: 'HistoricalImagery1974' },
+      { type: 'nsw', year: 1972, layer: 'HistoricalImagery1972' },
+      { type: 'nsw', year: 1971, layer: 'HistoricalImagery1971' },
+      { type: 'nsw', year: 1970, layer: 'HistoricalImagery1970' }
+    ],
+    '1980s': [
+      { type: 'metromap', year: 1982, layer: 'Sydney_1982_GM_JPEG' },
+      { type: 'nsw', year: 1989, layer: 'HistoricalImagery1988' },
+      { type: 'nsw', year: 1987, layer: 'HistoricalImagery1987' },
+      { type: 'nsw', year: 1986, layer: 'HistoricalImagery1986' },
+      { type: 'nsw', year: 1984, layer: 'HistoricalImagery1984' },
+      { type: 'nsw', year: 1983, layer: 'HistoricalImagery1983' },
+      { type: 'nsw', year: 1982, layer: 'HistoricalImagery1982' },
+      { type: 'nsw', year: 1980, layer: 'HistoricalImagery1980' }
+    ],
+    '1990s': [
+      { type: 'nsw', year: 1998, layer: 'HistoricalImagery1998' },
+      { type: 'nsw', year: 1996, layer: 'HistoricalImagery1996' },
+      { type: 'nsw', year: 1994, layer: 'HistoricalImagery1994' },
+      { type: 'nsw', year: 1993, layer: 'HistoricalImagery1993' },
+      { type: 'nsw', year: 1991, layer: 'HistoricalImagery1991' },
+      { type: 'nsw', year: 1990, layer: 'HistoricalImagery1990' }
+    ]
+  };
+
+  const layers = decadeLayers[decade];
+  if (!layers) return null;
+
+  console.log(`Trying to get imagery for ${decade}...`);
+  
+  const successfulResults = [];
+
+  for (const layerInfo of layers) {
+    try {
+      console.log(`Attempting to load ${layerInfo.type} layer from ${layerInfo.year}: ${layerInfo.layer}`);
+      
+      // Create new canvas for this attempt
+      const canvas = createCanvas(config.width, config.height);
+      const ctx = canvas.getContext('2d', { alpha: true });
+      
+      // Fill with white background
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, config.width, config.height);
+      
+      const { bbox } = calculateMercatorParams(centerX, centerY, size);
+      
+      if (layerInfo.type === 'metromap') {
+        const params = new URLSearchParams({
+          SERVICE: 'WMS',
+          VERSION: '1.3.0',
+          REQUEST: 'GetMap',
+          BBOX: bbox,
+          CRS: 'EPSG:3857',
+          WIDTH: config.width,
+          HEIGHT: config.height,
+          LAYERS: layerInfo.layer,
+          STYLES: '',
+          FORMAT: 'image/png',
+          DPI: 300,
+          MAP_RESOLUTION: 300,
+          FORMAT_OPTIONS: 'dpi:300',
+          TRANSPARENT: 'TRUE'
+        });
+        
+        const url = `https://api.metromap.com.au/ogc/gda2020/key/cstti1v27eq9nu61qu4g5hmzziouk84x211rfim0mb35cujvqpt1tufytqk575pe/service?${params.toString()}`;
+        console.log(`Requesting Metromap imagery: ${layerInfo.layer}`);
+        
+        const image = await loadImage(url);
+        
+        // Create a temporary canvas to check image content
+        const tempCanvas = createCanvas(config.width, config.height);
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(image, 0, 0, config.width, config.height);
+        
+        // Get image data to check if it's not empty/transparent
+        const imageData = tempCtx.getImageData(0, 0, config.width, config.height).data;
+        let hasContent = false;
+        
+        for (let i = 0; i < imageData.length; i += 4) {
+          if (imageData[i + 3] > 0) {
+            hasContent = true;
+            break;
+          }
+        }
+        
+        if (!hasContent) {
+          console.log(`Metromap layer ${layerInfo.layer} returned empty/transparent image`);
+          continue;
+        }
+        
+        drawImage(ctx, image, canvas.width, canvas.height, 1.0);
+      } else {
+        const zoom = 18;
+        const [minLon, minLat, maxLon, maxLat] = bbox.split(',').map(Number);
+        const [centerLon, centerLat] = mercatorToWGS84(
+          (minLon + maxLon) / 2,
+          (minLat + maxLat) / 2
+        );
+
+        const tileCol = long2tile(centerLon, zoom);
+        const tileRow = lat2tile(centerLat, zoom);
+
+        const url = `https://portal.spatial.nsw.gov.au/tileservices/Hosted/${layerInfo.layer}/MapServer/WMTS/tile/1.0.0/${layerInfo.layer}/default/default028mm/${zoom}/${tileRow}/${tileCol}`;
+        console.log(`Requesting NSW historical imagery: ${layerInfo.layer}`);
+        
+        const proxyUrl = await proxyRequest(url);
+        if (!proxyUrl) {
+          throw new Error('Failed to get proxy URL for NSW imagery');
+        }
+        const image = await loadImage(proxyUrl);
+        
+        // Create a temporary canvas to check image content
+        const tempCanvas = createCanvas(config.width, config.height);
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(image, 0, 0, config.width, config.height);
+        
+        // Get image data to check if it's not empty/transparent
+        const imageData = tempCtx.getImageData(0, 0, config.width, config.height).data;
+        let hasContent = false;
+        
+        for (let i = 0; i < imageData.length; i += 4) {
+          if (imageData[i + 3] > 0 && (imageData[i] > 0 || imageData[i + 1] > 0 || imageData[i + 2] > 0)) {
+            hasContent = true;
+            break;
+          }
+        }
+        
+        if (!hasContent) {
+          console.log(`NSW layer ${layerInfo.layer} returned empty/transparent image`);
+          continue;
+        }
+        
+        drawImage(ctx, image, canvas.width, canvas.height, 1.0);
+      }
+      
+      // Draw property boundary
+      drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+        strokeStyle: '#FF0000',
+        lineWidth: 3
+      });
+
+      // Add source attribution
+      ctx.font = 'bold 24px Arial';
+      ctx.fillStyle = '#002664';
+      const source = layerInfo.type === 'metromap' ? 'Metromap' : 'NSW Spatial Services';
+      const sourceText = `Source: ${source}`;
+      const textWidth = ctx.measureText(sourceText).width;
+      const padding = 20;
+      
+      // Draw semi-transparent background for text
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.fillRect(
+        canvas.width - textWidth - padding * 2,
+        canvas.height - 40 - padding,
+        40,
+        40
+      );
+      
+      // Draw text
+      ctx.fillStyle = '#002664';
+      ctx.fillText(sourceText, canvas.width - textWidth - padding, canvas.height - padding - 10);
+
+      successfulResults.push({
+        image: canvas.toDataURL('image/png', 1.0),
+        year: layerInfo.year,
+        type: layerInfo.type,
+        layer: layerInfo.layer,
+        source: source
+      });
+
+      console.log(`Successfully loaded ${layerInfo.type} layer from ${layerInfo.year} with valid image content`);
+    } catch (error) {
+      console.warn(`Failed to load ${layerInfo.type} layer from ${layerInfo.year} (${layerInfo.layer}):`, error.message);
+      continue;
+    }
+  }
+
+  if (successfulResults.length > 0) {
+    console.log(`Found ${successfulResults.length} successful layers with valid content for ${decade}`);
+    
+    successfulResults.sort((a, b) => {
+      if (a.type === 'metromap' && b.type !== 'metromap') return -1;
+      if (a.type !== 'metromap' && b.type === 'metromap') return 1;
+      return b.year - a.year;
+    });
+
+    const bestResult = successfulResults[0];
+    console.log(`Selected best layer for ${decade}: ${bestResult.type} from ${bestResult.year}`);
+    
+    return {
+      image: bestResult.image,
+      year: bestResult.year,
+      type: bestResult.type,
+      layer: bestResult.layer,
+      source: bestResult.source
+    };
+  }
+
+  console.log(`No successful layers found with valid content for ${decade}`);
+  return null;
+}
+
+export async function captureHistoricalImagery(feature, developableArea = null) {
+  if (!feature) return null;
+  console.log('Starting historical imagery capture...');
+
+  try {
+    const config = {
+      width: 2048,
+      height: 2048,  // Match other screenshots
+      padding: 0.2
+    };
+
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    const { bbox } = calculateMercatorParams(centerX, centerY, size);
+
+    // Available Metromap historical layers
+    const metromapLayers = [
+      { year: 1982, layer: 'Sydney_1982_GM_JPEG' },
+      { year: 1961, layer: 'Sydney_1961_GM_JPEG' },
+      { year: 1948, layer: 'Illawarra_1948_GM_JPEG' },
+      { year: 1943, layer: 'Sydney_1943_1_GM_JPEG' }
+    ];
+
+    // Try each layer in order (most recent first) until we find one with content
+    for (const layerInfo of metromapLayers) {
+      try {
+        console.log(`Trying Metromap layer from ${layerInfo.year}: ${layerInfo.layer}`);
+        
+        const canvas = createCanvas(config.width, config.height);
+        const ctx = canvas.getContext('2d', { alpha: true });
+        
+        // Fill with white background
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, config.width, config.height);
+
+        const params = new URLSearchParams({
+          SERVICE: 'WMS',
+          VERSION: '1.3.0',
+          REQUEST: 'GetMap',
+          BBOX: bbox,
+          CRS: 'EPSG:3857',
+          WIDTH: config.width,
+          HEIGHT: config.height,
+          LAYERS: layerInfo.layer,
+          STYLES: '',
+          FORMAT: 'image/png',
+          DPI: 300,
+          MAP_RESOLUTION: 300,
+          FORMAT_OPTIONS: 'dpi:300',
+          TRANSPARENT: 'TRUE'
+        });
+
+        const url = `https://api.metromap.com.au/ogc/gda2020/key/cstti1v27eq9nu61qu4g5hmzziouk84x211rfim0mb35cujvqpt1tufytqk575pe/service?${params.toString()}`;
+        console.log(`Requesting Metromap imagery for ${layerInfo.year}`);
+        
+        const image = await loadImage(url);
+        
+        // Create a temporary canvas to check image content
+        const tempCanvas = createCanvas(config.width, config.height);
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(image, 0, 0, config.width, config.height);
+        
+        // Check if image has content
+        const imageData = tempCtx.getImageData(0, 0, config.width, config.height).data;
+        let hasContent = false;
+        
+        for (let i = 0; i < imageData.length; i += 4) {
+          if (imageData[i + 3] > 0) {
+            hasContent = true;
+            break;
+          }
+        }
+        
+        if (!hasContent) {
+          console.log(`Layer ${layerInfo.layer} returned empty/transparent image, trying next layer...`);
+          continue;
+        }
+
+        // If we get here, we found a valid layer with content
+        console.log(`Found valid historical imagery from ${layerInfo.year}`);
+        
+        // Draw the image
+        drawImage(ctx, image, canvas.width, canvas.height, 1.0);
+
+        // Draw boundaries
+        drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+          strokeStyle: '#FF0000',
+          lineWidth: 6
+        });
+
+        if (developableArea?.features?.[0]) {
+          drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
+            strokeStyle: '#02d1b8',
+            lineWidth: 12,
+            dashArray: [20, 10]
+          });
+        }
+
+        // Add source attribution
+        ctx.font = 'bold 24px Arial';
+        ctx.fillStyle = '#002664';
+        const sourceText = `Source: Metromap (${layerInfo.year})`;
+        const textWidth = ctx.measureText(sourceText).width;
+        const padding = 20;
+        
+        // Draw semi-transparent background for text
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.fillRect(
+          canvas.width - textWidth - padding * 2,
+          canvas.height - 40 - padding,
+          textWidth + padding * 2,
+          40
+        );
+        
+        // Draw text
+        ctx.fillStyle = '#002664';
+        ctx.fillText(sourceText, canvas.width - textWidth - padding, canvas.height - padding - 10);
+
+        // Return single image result
+        return [{
+          image: canvas.toDataURL('image/png', 1.0),
+          year: layerInfo.year,
+          type: 'metromap',
+          layer: layerInfo.layer,
+          source: 'Metromap'
+        }];
+      } catch (error) {
+        console.warn(`Failed to load ${layerInfo.year} layer:`, error.message);
+        continue;
+      }
+    }
+
+    console.log('No valid historical imagery found');
+    return null;
+  } catch (error) {
+    console.error('Failed to capture historical imagery:', error);
     return null;
   }
 }
