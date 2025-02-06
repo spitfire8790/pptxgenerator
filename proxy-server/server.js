@@ -14,6 +14,16 @@ app.use(cors({
 
 app.use(express.json({ limit: '50mb' }));
 
+// Timeout configuration (in milliseconds)
+const FETCH_TIMEOUT = 8000; // 8 seconds to leave room for processing
+
+// Helper function to create a timeout promise
+function timeoutPromise(ms, message) {
+  return new Promise((_, reject) => {
+    setTimeout(() => reject(new Error(message)), ms);
+  });
+}
+
 // Helper function to parse request body
 async function parseRequestBody(req) {
   try {
@@ -41,13 +51,6 @@ async function handleProxyRequest(req) {
       });
     }
 
-    console.log('Proxy request received:', {
-      url,
-      method,
-      headers,
-      bodyLength: body ? JSON.stringify(body).length : 0
-    });
-
     // Validate URL
     let targetUrl;
     try {
@@ -66,7 +69,7 @@ async function handleProxyRequest(req) {
     // Add additional headers for ArcGIS requests
     const requestHeaders = new Headers({
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': '*/*',
+      'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
       'Accept-Language': 'en-US,en;q=0.9',
       'Accept-Encoding': 'gzip, deflate, br',
       'Connection': 'keep-alive',
@@ -83,8 +86,6 @@ async function handleProxyRequest(req) {
       }
     });
 
-    console.log('Sending request to target URL with headers:', Object.fromEntries(requestHeaders.entries()));
-
     const fetchOptions = {
       method,
       headers: requestHeaders,
@@ -96,13 +97,26 @@ async function handleProxyRequest(req) {
       fetchOptions.body = typeof body.body === 'string' ? body.body : JSON.stringify(body.body);
     }
 
-    const response = await fetch(url, fetchOptions);
+    // Race between fetch and timeout
+    const response = await Promise.race([
+      fetch(url, fetchOptions),
+      timeoutPromise(FETCH_TIMEOUT, 'Request timed out')
+    ]);
 
-    console.log('External service response:', {
-      status: response.status,
-      statusText: response.statusText,
-      contentType: response.headers.get('content-type')
+    // Handle different response types with streaming where possible
+    const contentType = response.headers.get('content-type');
+    const responseHeaders = new Headers({
+      'Content-Type': contentType || 'application/octet-stream',
+      'Access-Control-Allow-Origin': '*',
+      'Cache-Control': 'public, max-age=3600' // Cache successful responses for 1 hour
     });
+
+    // Copy relevant headers from the response
+    for (const [key, value] of response.headers.entries()) {
+      if (!['content-length', 'content-encoding', 'transfer-encoding'].includes(key.toLowerCase())) {
+        responseHeaders.set(key, value);
+      }
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -125,30 +139,15 @@ async function handleProxyRequest(req) {
       });
     }
 
-    // Forward the response with appropriate headers
-    const contentType = response.headers.get('content-type');
-    const responseHeaders = new Headers({
-      'Content-Type': contentType || 'application/octet-stream',
-      'Access-Control-Allow-Origin': '*'
-    });
-
-    // Copy all other headers from the response
-    for (const [key, value] of response.headers.entries()) {
-      if (key.toLowerCase() !== 'content-length' && // Skip content-length as it might change
-          key.toLowerCase() !== 'content-encoding') { // Skip encoding as we'll handle it
-        responseHeaders.set(key, value);
-      }
-    }
-
-    // Handle different response types
+    // For image responses, stream directly
     if (contentType?.includes('image') || url.includes('/export') || url.includes('GetMap')) {
-      const buffer = await response.arrayBuffer();
-      return new Response(buffer, { 
+      return new Response(response.body, { 
         status: 200,
         headers: responseHeaders 
       });
     }
 
+    // For JSON responses
     if (contentType?.includes('application/json')) {
       const json = await response.json();
       return new Response(JSON.stringify(json), { 
@@ -157,9 +156,8 @@ async function handleProxyRequest(req) {
       });
     }
 
-    // Default to text response
-    const text = await response.text();
-    return new Response(text, { 
+    // Default to streaming text response
+    return new Response(response.body, { 
       status: 200,
       headers: responseHeaders 
     });
@@ -170,12 +168,14 @@ async function handleProxyRequest(req) {
       stack: error.stack
     });
     
+    const status = error.message.includes('timed out') ? 504 : 500;
+    
     return new Response(JSON.stringify({
       error: 'Proxy request failed',
       message: error.message,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     }), {
-      status: 500,
+      status,
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*'
