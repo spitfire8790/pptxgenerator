@@ -1,5 +1,12 @@
 export default {
   async fetch(request, env, ctx) {
+    // Debug logging
+    console.log('Worker received request:', {
+      method: request.method,
+      url: request.url,
+      headers: Object.fromEntries(request.headers.entries())
+    });
+
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -15,9 +22,12 @@ export default {
 
     try {
       const body = await request.json();
+      console.log('Worker received body:', body);
+
       const { url, method = 'GET', headers = {} } = body;
 
       if (!url) {
+        console.log('No URL provided in request');
         return new Response(JSON.stringify({ error: 'No URL provided' }), {
           status: 400,
           headers: {
@@ -36,6 +46,11 @@ export default {
         ...headers
       });
 
+      console.log('Worker making request to:', url, {
+        method,
+        headers: Object.fromEntries(requestHeaders.entries())
+      });
+
       const response = await fetch(url, {
         method,
         headers: requestHeaders,
@@ -43,6 +58,12 @@ export default {
           (typeof body.body === 'string' ? body.body : JSON.stringify(body.body)) 
           : undefined,
         redirect: 'follow',
+      });
+
+      console.log('Worker received response:', {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries())
       });
 
       const responseHeaders = new Headers({
@@ -58,6 +79,7 @@ export default {
       });
 
     } catch (error) {
+      console.error('Worker error:', error);
       return new Response(JSON.stringify({
         error: 'Proxy request failed',
         message: error.message
