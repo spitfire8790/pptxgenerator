@@ -1,0 +1,6 @@
+name = "proxy-server"
+main = "src/index.js"
+compatibility_date = "2024-02-06"
+
+[build]
+command = ""
