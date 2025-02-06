@@ -42,35 +42,37 @@ import { addHazardsSlide } from './slides/hazardsSlide';
 import { addContaminationSlide } from './slides/contaminationSlide';
 import { addEnviroSlide } from './slides/enviroSlide';
 import { 
-  FaHome, 
-  FaImage, 
-  FaMapMarkedAlt, 
-  FaList, 
-  FaBuilding, 
-  FaLandmark, 
-  FaWrench, 
-  FaChartBar, 
-  FaRoad, 
-  FaExclamationTriangle, 
-  FaLeaf, 
-  FaSkull, 
-  FaChartLine 
-} from 'react-icons/fa';
+  Home,
+  Image as ImageIcon,
+  MapPin,
+  ListTodo,
+  Building2,
+  Landmark,
+  Wrench,
+  BarChart3,
+  Navigation,
+  AlertTriangle,
+  Leaf,
+  Skull,
+  LineChart
+} from 'lucide-react';
+import confetti from 'canvas-confetti';
+import './Timer.css';
 
 const slideOptions = [
-  { id: 'cover', label: 'Cover Page', addSlide: addCoverSlide, icon: FaHome },
-  { id: 'snapshot', label: 'Property Snapshot', addSlide: addPropertySnapshotSlide, icon: FaImage },
-  { id: 'primaryAttributes', label: 'Primary Site Attributes', addSlide: addPrimarySiteAttributesSlide, icon: FaMapMarkedAlt },
-  { id: 'secondaryAttributes', label: 'Secondary Attributes', addSlide: addSecondaryAttributesSlide, icon: FaList },
-  { id: 'planning', label: 'Planning', addSlide: addPlanningSlide, icon: FaBuilding },
-  { id: 'planningTwo', label: 'Heritage & Acid Sulfate Soils', addSlide: addPlanningSlide2, icon: FaLandmark },
-  { id: 'servicing', label: 'Servicing', addSlide: addServicingSlide, icon: FaWrench },
-  { id: 'utilisation', label: 'Utilisation and Improvements', addSlide: addUtilisationSlide, icon: FaChartBar },
-  { id: 'access', label: 'Access', addSlide: addAccessSlide, icon: FaRoad },
-  { id: 'hazards', label: 'Natural Hazards', addSlide: addHazardsSlide, icon: FaExclamationTriangle },
-  { id: 'environmental', label: 'Environmental', addSlide: addEnviroSlide, icon: FaLeaf },
-  { id: 'contamination', label: 'Site Contamination', addSlide: addContaminationSlide, icon: FaSkull },
-  { id: 'scoring', label: 'Scoring', addSlide: createScoringSlide, icon: FaChartLine }
+  { id: 'cover', label: 'Cover Page', addSlide: addCoverSlide, icon: Home },
+  { id: 'snapshot', label: 'Property Snapshot', addSlide: addPropertySnapshotSlide, icon: ImageIcon },
+  { id: 'primaryAttributes', label: 'Primary Site Attributes', addSlide: addPrimarySiteAttributesSlide, icon: MapPin },
+  { id: 'secondaryAttributes', label: 'Secondary Attributes', addSlide: addSecondaryAttributesSlide, icon: ListTodo },
+  { id: 'planning', label: 'Planning', addSlide: addPlanningSlide, icon: Building2 },
+  { id: 'planningTwo', label: 'Heritage & Acid Sulfate Soils', addSlide: addPlanningSlide2, icon: Landmark },
+  { id: 'servicing', label: 'Servicing', addSlide: addServicingSlide, icon: Wrench },
+  { id: 'utilisation', label: 'Utilisation and Improvements', addSlide: addUtilisationSlide, icon: BarChart3 },
+  { id: 'access', label: 'Access', addSlide: addAccessSlide, icon: Navigation },
+  { id: 'hazards', label: 'Natural Hazards', addSlide: addHazardsSlide, icon: AlertTriangle },
+  { id: 'environmental', label: 'Environmental', addSlide: addEnviroSlide, icon: Leaf },
+  { id: 'contamination', label: 'Site Contamination', addSlide: addContaminationSlide, icon: Skull },
+  { id: 'scoring', label: 'Scoring', addSlide: createScoringSlide, icon: LineChart }
 ];
 
 const getStepDescription = (stepId) => {
@@ -108,93 +110,79 @@ const getStepDescription = (stepId) => {
   }
 };
 
-// Define friendly names for each layer type
-const layerNames = {
-  aerial: "Aerial Imagery",
-  acidSulfateSoils: "Acid Sulfate Soils",
-  biodiversity: "Biodiversity Values",
-  bushfire: "Bushfire Prone Land",
-  composite: "Composite Map",
-  contamination: "Contamination",
-  contour: "Contours",
-  cover: "Cover Map",
-  flood: "Flood Extents",
-  fsr: "Floor Space Ratio",
-  geoscape: "Geoscape Buildings",
-  heritage: "Heritage",
-  historical: "Historical Imagery",
-  hob: "Height of Buildings",
-  power: "Power Infrastructure",
-  ptal: "Public Transport Access",
-  regularity: "Site Regularity",
-  roads: "Road Network",
-  sewer: "Sewer Infrastructure",
-  snapshot: "Site Snapshot",
-  tec: "Threatened Ecological Communities",
-  udpPrecincts: "UDP Growth Precincts",
-  waterMains: "Water Infrastructure",
-  zoning: "Zoning"
-};
-
 const ScreenshotProgress = ({ screenshots, failedScreenshots }) => {
-  // Create array of all possible layers, excluding specific ones
-  const excludedLayers = ['composite', 'cover', 'regularity', 'snapshot'];
-  
-  const layers = Object.entries(layerNames)
-    .filter(([id]) => !excludedLayers.includes(id))
-    .map(([id, name]) => ({
-      id,
-      name,
-      status: screenshots[`${id}Screenshot`] 
-        ? 'captured' 
-        : (failedScreenshots?.includes(`${id}Screenshot`) ? 'failed' : 'pending')
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-
   return (
-    <div className="mt-4 p-6 bg-gray-50 rounded-lg">
-      <h3 className="text-base font-semibold text-gray-900 mb-4">Map Layer Progress</h3>
-      <div className="max-h-[400px] overflow-y-auto pr-2">
-        <div className="grid grid-cols-2 gap-3">
-          {layers.map(layer => (
-            <div 
-              key={layer.id}
-              className={`flex items-center justify-between p-3 rounded-lg ${
-                layer.status === 'captured' ? 'bg-green-50' :
-                layer.status === 'failed' ? 'bg-red-50' :
-                'bg-white'
-              }`}
-            >
-              <span className="text-sm font-medium text-gray-900 mr-2">{layer.name}</span>
-              <div className="flex items-center flex-shrink-0">
-                {layer.status === 'captured' ? (
-                  <span className="text-green-600 flex items-center text-sm whitespace-nowrap">
+    <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+      <h3 className="text-sm font-medium text-gray-700 mb-3">Screenshot Progress</h3>
+      <div className="space-y-2">
+        {Object.entries(screenshots).map(([key, value]) => {
+          const isFailed = failedScreenshots?.includes(key);
+          return (
+            <div key={key} className="flex items-center justify-between text-sm">
+              <span className="text-gray-600">{key.replace(/Screenshot$/, '')}</span>
+              <div className="flex items-center">
+                {value ? (
+                  <span className="text-green-600 flex items-center">
                     <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                     Captured
                   </span>
-                ) : layer.status === 'failed' ? (
-                  <span className="text-red-600 flex items-center text-sm whitespace-nowrap">
+                ) : isFailed ? (
+                  <span className="text-red-600 flex items-center">
                     <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                     </svg>
                     Failed
                   </span>
                 ) : (
-                  <span className="text-gray-400 text-sm flex items-center whitespace-nowrap">
-                    <svg className="w-4 h-4 mr-1 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Processing
-                  </span>
+                  <span className="text-gray-400">Pending</span>
                 )}
               </div>
             </div>
-          ))}
-        </div>
+          );
+        })}
       </div>
+    </div>
+  );
+};
+
+const formatTime = (ms) => {
+  const seconds = Math.floor((ms / 1000) % 60);
+  const minutes = Math.floor((ms / 1000 / 60) % 60);
+  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+};
+
+const Timer = ({ isRunning, onComplete }) => {
+  const [time, setTime] = useState(0);
+  const [completed, setCompleted] = useState(false);
+  const intervalRef = useRef(null);
+
+  useEffect(() => {
+    if (isRunning) {
+      setCompleted(false);
+      const startTime = Date.now() - time;
+      intervalRef.current = setInterval(() => {
+        setTime(Date.now() - startTime);
+      }, 10);
+    } else if (!isRunning && time !== 0) {
+      clearInterval(intervalRef.current);
+      setCompleted(true);
+      if (onComplete) {
+        onComplete(time);
+      }
+    }
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [isRunning]);
+
+  return (
+    <div className={`timer ${isRunning ? 'running' : ''} ${completed ? 'completed' : ''}`}>
+      {formatTime(time)}
     </div>
   );
 };
@@ -227,6 +215,7 @@ const ReportGenerator = ({ selectedFeature }) => {
   const [showHowTo, setShowHowTo] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [failedScreenshots, setFailedScreenshots] = useState([]);
+  const [showConfetti, setShowConfetti] = useState(false);
 
   useEffect(() => {
     if (selectedFeature) {
@@ -247,28 +236,13 @@ const ReportGenerator = ({ selectedFeature }) => {
     clearServiceCache();
     
     try {
+      const screenshots = {};
       const failed = [];
       
-      // Initialize screenshots state with all pending layers
-      const initialScreenshots = {};
-      Object.keys(layerNames).forEach(id => {
-        initialScreenshots[`${id}Screenshot`] = null;
-      });
-      setScreenshots(initialScreenshots);
-      
-      // Helper function to update screenshot state
-      const updateScreenshot = (key, value) => {
-        setScreenshots(prev => ({
-          ...prev,
-          [key]: value
-        }));
-      };
-
       // Only capture screenshots for selected slides
       if (selectedSlides.cover) {
         try {
-          const coverShot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.COVER);
-          updateScreenshot('coverScreenshot', coverShot);
+          screenshots.coverScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.COVER);
         } catch (error) {
           console.error('Failed to capture cover screenshot:', error);
           failed.push('coverScreenshot');
@@ -277,10 +251,8 @@ const ReportGenerator = ({ selectedFeature }) => {
       
       if (selectedSlides.snapshot) {
         try {
-          const aerialShot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.AERIAL);
-          updateScreenshot('aerialScreenshot', aerialShot);
-          const snapshotShot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.SNAPSHOT);
-          updateScreenshot('snapshotScreenshot', snapshotShot);
+          screenshots.aerialScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.AERIAL);
+          screenshots.snapshotScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.SNAPSHOT);
         } catch (error) {
           console.error('Failed to capture snapshot screenshots:', error);
           failed.push('aerialScreenshot', 'snapshotScreenshot');
@@ -289,78 +261,70 @@ const ReportGenerator = ({ selectedFeature }) => {
       
       if (selectedSlides.planning) {
         await planningMapRef.current?.captureScreenshots();
-        const zoningShot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.ZONING, true, developableArea);
-        updateScreenshot('zoningScreenshot', zoningShot);
-        const fsrShot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.FSR, true, developableArea);
-        updateScreenshot('fsrScreenshot', fsrShot);
-        const hobShot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.HOB, true, developableArea);
-        updateScreenshot('hobScreenshot', hobShot);
+        screenshots.zoningScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.ZONING, true, developableArea);
+        screenshots.fsrScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.FSR, true, developableArea);
+        screenshots.hobScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.HOB, true, developableArea);
       }
       
       if (selectedSlides.primaryAttributes) {
-        const compositeShot = await capturePrimarySiteAttributesMap(selectedFeature, developableArea);
-        updateScreenshot('compositeMapScreenshot', compositeShot);
+        screenshots.compositeMapScreenshot = await capturePrimarySiteAttributesMap(selectedFeature, developableArea);
       }
       
       if (selectedSlides.secondaryAttributes) {
-        const contourShot = await captureContourMap(selectedFeature, developableArea);
-        updateScreenshot('contourScreenshot', contourShot);
-        const regularityShot = await captureRegularityMap(selectedFeature, developableArea);
-        updateScreenshot('regularityScreenshot', regularityShot);
+        screenshots.contourScreenshot = await captureContourMap(selectedFeature, developableArea);
+        screenshots.regularityScreenshot = await captureRegularityMap(selectedFeature, developableArea);
       }
       
       if (selectedSlides.planningTwo) {
-        const heritageShot = await captureHeritageMap(selectedFeature, developableArea);
-        updateScreenshot('heritageScreenshot', heritageShot);
-        const acidShot = await captureAcidSulfateMap(selectedFeature, developableArea);
-        updateScreenshot('acidSulfateSoilsScreenshot', acidShot);
+        screenshots.heritageScreenshot = await captureHeritageMap(selectedFeature, developableArea);
+        screenshots.acidSulfateSoilsScreenshot = await captureAcidSulfateMap(selectedFeature, developableArea);
       }
       
       if (selectedSlides.servicing) {
         const waterMains = await captureWaterMainsMap(selectedFeature, developableArea);
-        updateScreenshot('waterMainsScreenshot', waterMains?.image);
+        screenshots.waterMainsScreenshot = waterMains?.image;
+        screenshots.waterFeatures = waterMains?.features;
         
         const sewer = await captureSewerMap(selectedFeature, developableArea);
-        updateScreenshot('sewerScreenshot', sewer?.image);
+        screenshots.sewerScreenshot = sewer?.image;
+        screenshots.sewerFeatures = sewer?.features;
         
         const power = await capturePowerMap(selectedFeature, developableArea);
-        updateScreenshot('powerScreenshot', power?.image);
+        screenshots.powerScreenshot = power?.image;
+        screenshots.powerFeatures = power?.features;
       }
       
       if (selectedSlides.utilisation) {
         const geoscape = await captureGeoscapeMap(selectedFeature, developableArea);
-        updateScreenshot('geoscapeScreenshot', geoscape?.image);
+        screenshots.geoscapeScreenshot = geoscape?.image;
+        screenshots.geoscapeFeatures = geoscape?.features;
       }
       
       if (selectedSlides.access) {
-        const roadsShot = await captureRoadsMap(selectedFeature, developableArea);
-        updateScreenshot('roadsScreenshot', roadsShot);
-        const udpShot = await captureUDPPrecinctMap(selectedFeature, developableArea);
-        updateScreenshot('udpPrecinctsScreenshot', udpShot);
-        const ptalShot = await capturePTALMap(selectedFeature, developableArea);
-        updateScreenshot('ptalScreenshot', ptalShot);
+        screenshots.roadsScreenshot = await captureRoadsMap(selectedFeature, developableArea);
+        screenshots.udpPrecinctsScreenshot = await captureUDPPrecinctMap(selectedFeature, developableArea);
+        screenshots.ptalScreenshot = await capturePTALMap(selectedFeature, developableArea);
       }
       
       if (selectedSlides.hazards) {
-        const floodShot = await captureFloodMap(selectedFeature, developableArea);
-        updateScreenshot('floodScreenshot', floodShot);
-        const bushfireShot = await captureBushfireMap(selectedFeature, developableArea);
-        updateScreenshot('bushfireScreenshot', bushfireShot);
+        screenshots.floodMapScreenshot = await captureFloodMap(selectedFeature, developableArea);
+        screenshots.bushfireMapScreenshot = await captureBushfireMap(selectedFeature, developableArea);
       }
       
       if (selectedSlides.environmental) {
-        const tecShot = await captureTECMap(selectedFeature, developableArea);
-        updateScreenshot('tecScreenshot', tecShot);
-        const bioShot = await captureBiodiversityMap(selectedFeature, developableArea);
-        updateScreenshot('biodiversityScreenshot', bioShot);
+        screenshots.tecMapScreenshot = await captureTECMap(selectedFeature, developableArea);
+        screenshots.tecFeatures = screenshots.tecMapScreenshot?.features;
+        screenshots.biodiversityMapScreenshot = await captureBiodiversityMap(selectedFeature, developableArea);
+        screenshots.biodiversityFeatures = screenshots.biodiversityMapScreenshot?.features;
       }
       
       if (selectedSlides.contamination) {
         const contaminationResult = await captureContaminationMap(selectedFeature, developableArea);
-        updateScreenshot('contaminationScreenshot', contaminationResult?.image);
+        screenshots.contaminationMapScreenshot = contaminationResult?.image;
+        screenshots.contaminationFeatures = contaminationResult?.features;
         
-        const historicalShot = await captureHistoricalImagery(selectedFeature);
-        updateScreenshot('historicalScreenshot', historicalShot);
+        // Add historical imagery
+        screenshots.historicalImagery = await captureHistoricalImagery(selectedFeature);
       }
 
       setFailedScreenshots(failed);
@@ -491,59 +455,55 @@ const ReportGenerator = ({ selectedFeature }) => {
     }, 500);
   };
 
+  const triggerConfetti = () => {
+    setShowConfetti(true);
+    const end = Date.now() + 3000;
+
+    const colors = ['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF'];
+
+    (function frame() {
+      confetti({
+        particleCount: 7,
+        angle: 60,
+        spread: 55,
+        origin: { x: 0 },
+        colors: colors
+      });
+      confetti({
+        particleCount: 7,
+        angle: 120,
+        spread: 55,
+        origin: { x: 1 },
+        colors: colors
+      });
+
+      if (Date.now() < end) {
+        requestAnimationFrame(frame);
+      }
+    }());
+
+    setTimeout(() => {
+      setShowConfetti(false);
+    }, 3000);
+  };
+
+  const handleTimerComplete = (time) => {
+    console.log(`Report generated in ${formatTime(time)}`);
+    triggerConfetti();
+  };
+
   return (
     <div className="h-full overflow-auto">
       <div className="p-4">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold">Desktop Due Diligence PowerPoint Report Generator (WIP)</h2>
           
-          <div className="relative">
-            <button
-              className="w-full px-4 py-2 rounded text-white font-medium bg-blue-600 hover:bg-blue-700 transition-colors"
-              onClick={() => setShowHowTo(true)}
-            >
-              How to use
-            </button>
-            
-            {showHowTo && (
-              <div className="fixed inset-0 bg-black/20 z-50 flex items-start justify-end p-4">
-                <div className="w-[500px] rounded-xl border-2 border-blue-600 bg-white p-6 shadow-xl mt-12 mr-4">
-                  <div className="flex justify-between items-start mb-4">
-                    <h3 className="text-xl font-semibold text-gray-900">How to use</h3>
-                    <button 
-                      onClick={() => setShowHowTo(false)}
-                      className="rounded-full p-1 hover:bg-gray-100 transition-colors"
-                    >
-                      <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M11.7816 4.03157C12.0062 3.80702 12.0062 3.44295 11.7816 3.2184C11.5571 2.99385 11.193 2.99385 10.9685 3.2184L7.50005 6.68682L4.03164 3.2184C3.80708 2.99385 3.44301 2.99385 3.21846 3.2184C2.99391 3.44295 2.99391 3.80702 3.21846 4.03157L6.68688 7.49999L3.21846 10.9684C2.99391 11.193 2.99391 11.557 3.21846 11.7816C3.44301 12.0061 3.80708 12.0061 4.03164 11.7816L7.50005 8.31316L10.9685 11.7816C11.193 12.0061 11.5571 12.0061 11.7816 11.7816C12.0062 11.557 12.0062 11.193 11.7816 10.9684L8.31322 7.49999L11.7816 4.03157Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd"></path>
-                      </svg>
-                    </button>
-                  </div>
-                  
-                  <ol className="space-y-4 text-sm list-decimal pl-5">
-                    <li className="pl-2 leading-relaxed">
-                      Using Land iQ Site Search, identify a property of interest and create a feature on the 'Site Boundary' drawing layer. Ensure you are creating a feature using the Land iQ search results so the data is attached to the feature.
-                    </li>
-                    <li className="pl-2 leading-relaxed">
-                      Draw the developable area boundary as a new feature on the 'Developable Area Boundary' drawing layer.
-                    </li>
-                    <li className="pl-2 leading-relaxed">
-                      Click on the Site Boundary and then select the Developable Area Boundary under 'Select Developable Area Layer' up the top.
-                    </li>
-                    <li className="pl-2 leading-relaxed">
-                      A preview will load of the cover slide and if everything looks good to go, select the slides you want and click on the blue 'Generate Report' button.
-                    </li>
-                    <li className="pl-2 leading-relaxed">
-                      ???
-                    </li>
-                    <li className="pl-2 leading-relaxed">
-                      Profit
-                    </li>
-                  </ol>
-                </div>
-              </div>
-            )}
-          </div>
+          <button
+            className="px-4 py-2 rounded text-white font-medium bg-blue-600 hover:bg-blue-700 transition-colors"
+            onClick={() => setShowHowTo(true)}
+          >
+            How to use
+          </button>
         </div>
         
         <PlanningMapView 
@@ -561,84 +521,84 @@ const ReportGenerator = ({ selectedFeature }) => {
             screenshot={previewScreenshot}
           />
 
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="flex items-center space-x-2 pb-2 border-b border-gray-200">
-                <input
-                  type="checkbox"
-                  checked={Object.values(selectedSlides).every(Boolean)}
-                  onChange={(e) => {
-                    const value = e.target.checked;
-                    setSelectedSlides(
-                      Object.keys(selectedSlides).reduce((acc, key) => ({
-                        ...acc,
-                        [key]: value
-                      }), {})
-                    );
-                  }}
-                  className="w-4 h-4 text-blue-600 rounded"
-                  disabled={isGenerating}
-                />
-                <span className="font-medium">{Object.values(selectedSlides).every(Boolean) ? 'Deselect All' : 'Select All'}</span>
-              </label>
-
-              <div className="grid grid-cols-1 gap-2">
-                {slideOptions.map((option) => {
-                  const isActive = currentStep === option.id;
-                  const isCompleted = completedSteps.includes(option.id);
-                  const Icon = option.icon;
-                  
-                  return (
-                    <div key={option.id} className="flex items-center justify-between p-2 rounded hover:bg-gray-50">
-                      <div className={`flex items-center ${isGenerating && !selectedSlides[option.id] ? 'opacity-50' : ''}`}>
-                        <input
-                          type="checkbox"
-                          id={option.id}
-                          checked={selectedSlides[option.id]}
-                          onChange={(e) => setSelectedSlides(prev => ({
-                            ...prev,
-                            [option.id]: e.target.checked
-                          }))}
-                          disabled={isGenerating}
-                          className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                        />
-                        <label htmlFor={option.id} className="ml-3 flex items-center text-sm font-medium text-gray-700">
-                          <Icon className="w-4 h-4 mr-2" />
-                          {option.label}
-                        </label>
-                      </div>
-                      
-                      {isGenerating && selectedSlides[option.id] && (
-                        <div className="flex items-center space-x-3">
-                          {isCompleted ? (
-                            <div className="flex items-center text-green-600">
-                              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                              </svg>
-                              <span className="ml-2 text-sm">Complete</span>
-                            </div>
-                          ) : isActive ? (
-                            <div className="flex items-center space-x-2">
-                              <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                              <span className="text-sm text-blue-500">{getStepDescription(option.id)}</span>
-                            </div>
-                          ) : (
-                            <div className="text-sm text-gray-400">Pending</div>
-                          )}
-                        </div>
-                      )}
-                    </div>
+          <div className="flex items-center justify-between mt-4 mb-2 pb-2 border-b border-gray-200">
+            <label className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                checked={Object.values(selectedSlides).every(Boolean)}
+                onChange={(e) => {
+                  const value = e.target.checked;
+                  setSelectedSlides(
+                    Object.keys(selectedSlides).reduce((acc, key) => ({
+                      ...acc,
+                      [key]: value
+                    }), {})
                   );
-                })}
-              </div>
-            </div>
+                }}
+                className="w-4 h-4 text-blue-600 rounded"
+                disabled={isGenerating}
+              />
+              <span className="font-medium">{Object.values(selectedSlides).every(Boolean) ? 'Deselect All' : 'Select All'}</span>
+            </label>
 
-            {isGenerating && currentStep === 'screenshots' && (
-              <ScreenshotProgress 
-                screenshots={screenshots}
-                failedScreenshots={failedScreenshots}
+            {isGenerating && (
+              <Timer 
+                isRunning={isGenerating} 
+                onComplete={handleTimerComplete}
               />
             )}
+          </div>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-2">
+              {slideOptions.map((option) => {
+                const isActive = currentStep === option.id;
+                const isCompleted = completedSteps.includes(option.id);
+                const Icon = option.icon;
+                
+                return (
+                  <div key={option.id} className="flex items-center justify-between p-2 rounded hover:bg-gray-50">
+                    <div className={`flex items-center ${isGenerating && !selectedSlides[option.id] ? 'opacity-50' : ''}`}>
+                      <input
+                        type="checkbox"
+                        id={option.id}
+                        checked={selectedSlides[option.id]}
+                        onChange={(e) => setSelectedSlides(prev => ({
+                          ...prev,
+                          [option.id]: e.target.checked
+                        }))}
+                        disabled={isGenerating}
+                        className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                      />
+                      <label htmlFor={option.id} className="ml-3 flex items-center text-sm font-medium text-gray-700">
+                        <Icon className="w-5 h-5 mr-2 stroke-current" strokeWidth={1.5} />
+                        {option.label}
+                      </label>
+                    </div>
+                    
+                    {isGenerating && selectedSlides[option.id] && (
+                      <div className="flex items-center space-x-3">
+                        {isCompleted ? (
+                          <div className="flex items-center text-green-600">
+                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                            <span className="ml-2 text-sm">Complete</span>
+                          </div>
+                        ) : isActive ? (
+                          <div className="flex items-center space-x-2">
+                            <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                            <span className="text-sm text-blue-500">{getStepDescription(option.id)}</span>
+                          </div>
+                        ) : (
+                          <div className="text-sm text-gray-400">Pending</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
 
             <div className="flex gap-4">
               <button
@@ -668,7 +628,7 @@ const ReportGenerator = ({ selectedFeature }) => {
             </div>
 
             {!isGenerating && status === 'success' && (
-              <div className="text-green-600">Report generated successfully</div>
+              <div className="text-green-600 success-message">Report generated successfully</div>
             )}
             
             {!isGenerating && status === 'error' && (
@@ -681,6 +641,45 @@ const ReportGenerator = ({ selectedFeature }) => {
           </div>
         </div>
       </div>
+
+      {showHowTo && (
+        <div className="fixed inset-0 bg-black/20 z-50 flex items-start justify-end p-4">
+          <div className="w-[500px] rounded-xl border-2 border-blue-600 bg-white p-6 shadow-xl mt-12 mr-4">
+            <div className="flex justify-between items-start mb-4">
+              <h3 className="text-xl font-semibold text-gray-900">How to use</h3>
+              <button 
+                onClick={() => setShowHowTo(false)}
+                className="rounded-full p-1 hover:bg-gray-100 transition-colors"
+              >
+                <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12.8536 2.85355C13.0488 2.65829 13.0488 2.34171 12.8536 2.14645C12.6583 1.95118 12.3417 1.95118 12.1464 2.14645L7.5 6.79289L2.85355 2.14645C2.65829 1.95118 2.34171 1.95118 2.14645 2.14645C1.95118 2.34171 1.95118 2.65829 2.14645 2.85355L6.79289 7.5L2.14645 12.1464C1.95118 12.3417 1.95118 12.6583 2.14645 12.8536C2.34171 13.0488 2.65829 13.0488 2.85355 12.8536L7.5 8.20711L12.1464 12.8536C12.3417 13.0488 12.6583 13.0488 12.8536 12.8536C13.0488 12.6583 13.0488 12.3417 12.8536 12.1464L8.20711 7.5L12.8536 2.85355Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
+            
+            <ol className="space-y-4 text-sm list-decimal pl-5">
+              <li className="pl-2 leading-relaxed">
+                Using Land iQ Site Search, identify a property of interest and create a feature on the 'Site Boundary' drawing layer. Ensure you are creating a feature using the Land iQ search results so the data is attached to the feature.
+              </li>
+              <li className="pl-2 leading-relaxed">
+                Draw the developable area boundary as a new feature on the 'Developable Area Boundary' drawing layer.
+              </li>
+              <li className="pl-2 leading-relaxed">
+                Click on the Site Boundary and then select the Developable Area Boundary under 'Select Developable Area Layer' up the top.
+              </li>
+              <li className="pl-2 leading-relaxed">
+                A preview will load of the cover slide and if everything looks good to go, select the slides you want and click on the blue 'Generate Report' button.
+              </li>
+              <li className="pl-2 leading-relaxed">
+                ???
+              </li>
+              <li className="pl-2 leading-relaxed">
+                Profit
+              </li>
+            </ol>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

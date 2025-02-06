@@ -81,7 +81,7 @@ export async function createScoringSlide(pres, feature, developableArea) {
     slide.addText([
       { text: feature?.properties?.site__address || 'Address not available', options: { color: styles.title.color } },
       { text: ' ', options: { breakLine: true } },
-      { text: 'Scoring - NOTE THIS IS WIP', options: { color: styles.subtitle.color } }
+      { text: 'Scoring', options: { color: styles.subtitle.color } }
     ], styles.title);
     
     // Add horizontal line under title
@@ -175,7 +175,7 @@ export async function createScoringSlide(pres, feature, developableArea) {
       ['Total Score', '', `${totalScore}/${maxScore}\n(${percentage}%)`]
     ];
 
-    // Add table with styling and score-based colors
+    // Add table with styling
     slide.addTable(tableData, {
       x: '5%',
       y: '20%',
@@ -208,27 +208,7 @@ export async function createScoringSlide(pres, feature, developableArea) {
         { row: 12, col: 0, rowspan: 2 }, // Hazards
         { row: 14, col: 0, rowspan: 2 }, // Site Contamination
         { row: 16, col: 0, rowspan: 1 }, // Environmental
-      ],
-      // Add cell-specific styling based on scores
-      rows: tableData.map((row, rowIndex) => {
-        // Skip header row
-        if (rowIndex === 0) return {};
-
-        // Get the score from the last column if it exists
-        const scoreValue = parseInt(row[2]);
-        if (!isNaN(scoreValue)) {
-          return {
-            cells: [
-              {}, // First column - no special styling
-              {}, // Second column - no special styling
-              {
-                fill: scoringCriteria.planning.getScoreColor(scoreValue) // Use the color from scoringLogic
-              }
-            ]
-          };
-        }
-        return {}; // Default to no special styling
-      })
+      ]
     });
 
     // Move recommendation box to align with wider table
