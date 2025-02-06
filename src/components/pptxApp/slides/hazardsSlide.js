@@ -152,7 +152,7 @@ export async function addHazardsSlide(pptx, properties) {
     // Add footer elements
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.footerLine));
     slide.addText('Property and Development NSW', convertCmValues(styles.footer));
-    slide.addText('7', convertCmValues(styles.pageNumber));
+    slide.addText('10', convertCmValues(styles.pageNumber));
 
     // Add left map container (Flood Risk)
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({

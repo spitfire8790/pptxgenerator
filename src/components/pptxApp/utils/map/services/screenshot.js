@@ -8,6 +8,7 @@ import { proxyRequest } from '../../services/proxyService';
 import { loadImage } from '../utils/image';
 import { giraffeState } from '@gi-nx/iframe-sdk';
 import proj4 from 'proj4';
+import { getPTALToken } from './tokenService';
 
 
 console.log('Aerial config:', LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL]);
@@ -2430,9 +2431,11 @@ export async function capturePTALMap(feature, developableArea = null) {
       console.log('Loading PTAL layer...');
       const ptalConfig = {
         baseUrl: 'https://portal.data.nsw.gov.au/arcgis/rest/services/Hosted/ptal_dec20_gdb__(1)/FeatureServer/0',
-        layerId: 0,
-        token: 'nriaYsaElmHkISJLpTc2uviG_f4pOz8_-UwWS37FZzJcdvKvmqGzwJcmt37iGCnZO8EhEGkpWppk3KeGu0trWy_7ZyegQ12I-4kqzn6pO0Yl8XJ-ptQhSj1_TbLMSwmSPmNCeim4hKd0KJ5WxMuiUO9h0Yktbb-9XffbdPr8brQL8-psrxjxhKX9ICUXw3A9UGKZULyHKWoTPk3w4V2X_coVNFqjrAL5YBAuQvAswN15f7azRegJg_Pf57ifWfr9'
+        layerId: 0
       };
+
+      // Get a valid token from the token service
+      const token = await getPTALToken();
 
       // Color mapping for PTAL values
       const ptalColors = {
@@ -2455,11 +2458,11 @@ export async function capturePTALMap(feature, developableArea = null) {
         outFields: '*',
         returnGeometry: true,
         f: 'geojson',
-        token: ptalConfig.token
+        token
       });
 
       const url = `${ptalConfig.baseUrl}/query?${params.toString()}`;
-      console.log('PTAL request URL:', url);
+      console.log('PTAL request URL:', url.replace(token, 'REDACTED'));
       
       const ptalResponse = await proxyRequest(url);
       console.log('PTAL response:', ptalResponse);

@@ -155,7 +155,7 @@ export async function addUtilisationSlide(pptx, properties) {
         // Add footer elements
         slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.footerLine));
         slide.addText('Property and Development NSW', convertCmValues(styles.footer));
-        slide.addText('7', convertCmValues(styles.pageNumber));
+        slide.addText('9', convertCmValues(styles.pageNumber));
 
         // Left section - Geoscape 3D Built Form
         slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
