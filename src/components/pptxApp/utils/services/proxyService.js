@@ -23,35 +23,45 @@ export async function proxyRequest(url, options = {}) {
     });
 
     if (!response.ok) {
-      throw new Error(`Proxy request failed: ${response.statusText}`);
+      const errorText = await response.text();
+      console.error('Proxy request failed:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorText
+      });
+      throw new Error(`Proxy request failed: ${response.statusText}. ${errorText}`);
     }
 
     const contentType = response.headers.get('content-type');
     
-    // Clone the response before reading it
-    const responseClone = response.clone();
-    
-    // Handle image responses
+    // Handle binary responses (images, etc.)
     if (contentType?.includes('image') || url.includes('/export') || url.includes('GetMap')) {
-      const blob = await responseClone.blob();
+      const arrayBuffer = await response.arrayBuffer();
+      const blob = new Blob([arrayBuffer], { type: contentType });
       return URL.createObjectURL(blob);
     }
 
-    // Handle Street View responses
-    if (url.includes('maps.google.com/maps') || url.includes('google.com/maps')) {
-      return await responseClone.text();
-    }
-
-    // Handle JSON responses
-    try {
-      const data = await responseClone.json();
-      return data;
-    } catch (e) {
-      // If JSON parsing fails, return the raw text
+    // Handle text responses
+    if (contentType?.includes('text') || url.includes('maps.google.com/maps') || url.includes('google.com/maps')) {
       return await response.text();
     }
+
+    // Try to parse as JSON, fallback to text if that fails
+    try {
+      return await response.json();
+    } catch (e) {
+      const text = await response.text();
+      if (!text) {
+        throw new Error('Empty response from proxy server');
+      }
+      return text;
+    }
   } catch (error) {
-    console.error('Proxy request failed:', error);
+    console.error('Proxy request error:', {
+      url,
+      error: error.message,
+      stack: error.stack
+    });
     throw error;
   }
-} 
+}

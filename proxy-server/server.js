@@ -83,14 +83,26 @@ async function handleProxyRequest(req, res) {
     const contentType = response.headers.get('content-type');
     res.set('Content-Type', contentType || 'application/octet-stream');
 
-    try {
-      if (contentType?.includes('image')) {
-        const buffer = await response.buffer();
-        res.send(buffer);
-      } else {
-        const text = await response.text();
-        res.send(text);
+    // Copy all other headers from the response
+    for (const [key, value] of response.headers.entries()) {
+      if (key.toLowerCase() !== 'content-length') { // Skip content-length as it might change
+        res.set(key, value);
       }
+    }
+
+    try {
+      if (contentType?.includes('image') || url.includes('/export') || url.includes('GetMap')) {
+        const buffer = await response.buffer();
+        return res.send(buffer);
+      }
+
+      if (contentType?.includes('application/json')) {
+        const json = await response.json();
+        return res.json(json);
+      }
+
+      const text = await response.text();
+      return res.send(text);
     } catch (error) {
       console.error('Error processing response:', error);
       res.status(500).json({ 
