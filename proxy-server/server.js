@@ -81,46 +81,49 @@ async function handleProxyRequest(req, res) {
 
     // Forward the response
     const contentType = response.headers.get('content-type');
-    res.set('Content-Type', contentType || 'application/octet-stream');
+    const headers = new Headers();
+    headers.set('Content-Type', contentType || 'application/octet-stream');
 
     // Copy all other headers from the response
     for (const [key, value] of response.headers.entries()) {
       if (key.toLowerCase() !== 'content-length') { // Skip content-length as it might change
-        res.set(key, value);
+        headers.set(key, value);
       }
     }
 
     try {
       if (contentType?.includes('image') || url.includes('/export') || url.includes('GetMap')) {
-        const buffer = await response.buffer();
-        return res.send(buffer);
+        const buffer = await response.arrayBuffer();
+        return res.send(new Response(buffer, { headers }));
       }
 
       if (contentType?.includes('application/json')) {
         const json = await response.json();
-        return res.json(json);
+        return res.send(new Response(JSON.stringify(json), { headers }));
       }
 
+      // Default to text response
       const text = await response.text();
-      return res.send(text);
+      return res.send(new Response(text, { headers }));
     } catch (error) {
       console.error('Error processing response:', error);
-      res.status(500).json({ 
-        error: 'Error processing response',
-        message: error.message
-      });
+      return res.status(500).send(new Response(JSON.stringify({ error: 'Error processing response', details: error.message }), {
+        headers: { 'Content-Type': 'application/json' }
+      }));
     }
   } catch (error) {
     console.error('Detailed proxy error:', {
-      message: error.message,
-      stack: error.stack,
-      code: error.code
+      url,
+      error: error.message,
+      stack: error.stack
     });
-    res.status(500).json({ 
+    
+    return new Response(JSON.stringify({
       error: 'Proxy request failed',
-      message: error.message,
-      code: error.code,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      message: error.message
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
     });
   }
 }
