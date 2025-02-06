@@ -3,6 +3,11 @@ import { PROXY_CONFIG } from '../config/proxyConfig';
 export async function proxyRequest(url, options = {}) {
   const proxyUrl = PROXY_CONFIG.baseUrl;
   
+  // Debug logs
+  console.log('Debug - PROXY_CONFIG:', PROXY_CONFIG);
+  console.log('Debug - proxyUrl being used:', proxyUrl);
+  console.log('Debug - import.meta.env:', import.meta.env);
+  
   try {
     console.log('Sending proxy request for:', url);
     

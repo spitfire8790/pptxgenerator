@@ -2431,7 +2431,7 @@ export async function capturePTALMap(feature, developableArea = null) {
       const ptalConfig = {
         baseUrl: 'https://portal.data.nsw.gov.au/arcgis/rest/services/Hosted/ptal_dec20_gdb__(1)/FeatureServer/0',
         layerId: 0,
-        token: 'deNXgeGpKVAQ-PGbcnPGYg_Bo4iEBU2AJmcO7kT1ivN7HTuqcMc5imtDG6MTBtyU36kJhrdVm37nZMS8yLUMBJ7yUICRIhIEeAnRGGoySQ6vPBLWhb7-C-CR4f0_kL9dr8mmx0f15No03QuzdjXwa2g5TkAz9QIa41nxZR3soMjS85RCcZayZMroCqgopcaYRmGFb5GjGJNF_6u9kqgMCAlY7XQPhazKZIpjBk2iZfzHGb-BAd9jZtVVfOcheq1j'
+        token: 'nriaYsaElmHkISJLpTc2uviG_f4pOz8_-UwWS37FZzJcdvKvmqGzwJcmt37iGCnZO8EhEGkpWppk3KeGu0trWy_7ZyegQ12I-4kqzn6pO0Yl8XJ-ptQhSj1_TbLMSwmSPmNCeim4hKd0KJ5WxMuiUO9h0Yktbb-9XffbdPr8brQL8-psrxjxhKX9ICUXw3A9UGKZULyHKWoTPk3w4V2X_coVNFqjrAL5YBAuQvAswN15f7azRegJg_Pf57ifWfr9'
       };
 
       // Color mapping for PTAL values

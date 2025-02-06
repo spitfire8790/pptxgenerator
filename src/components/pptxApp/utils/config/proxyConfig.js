@@ -1,5 +1,5 @@
 export const PROXY_CONFIG = {
-  baseUrl: import.meta.env.VITE_PROXY_URL || '/api/proxy',
+  baseUrl: 'https://proxy-server.jameswilliamstrutt.workers.dev',
   allowedDomains: [
     'portal.spatial.nsw.gov.au',
     'mapprod3.environment.nsw.gov.au',
@@ -11,4 +11,4 @@ export const PROXY_CONFIG = {
     'spatial.industry.nsw.gov.au',
     'sims.spatial.nsw.gov.au'
   ]
-}; 
+};
