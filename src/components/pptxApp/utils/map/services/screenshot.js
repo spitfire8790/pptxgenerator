@@ -1003,7 +1003,7 @@ export async function capturePowerMap(feature, developableArea = null) {
         geometry: mercatorBbox,
         geometryType: 'esriGeometryEnvelope',
         inSR: 3857,
-        outSR: 7856,  // Changed to match the service's native CRS
+        outSR: 4283,  // Changed to match the service's native CRS
         spatialRel: 'esriSpatialRelIntersects',
         outFields: '*',
         returnGeometry: true,
@@ -1022,30 +1022,7 @@ export async function capturePowerMap(feature, developableArea = null) {
         lookupResponse.features.forEach((feature, index) => {
           console.log(`Drawing LookUpNLive power feature ${index + 1}...`);
 
-          // Function to transform coordinates
-          const transformCoordinates = (geometry, sourceCrs, targetCrs) => {
-            if (geometry.type === 'Point') {
-              const [x, y] = geometry.coordinates;
-              const [newX, newY] = proj4(sourceCrs, targetCrs, [x, y]);
-              return [newX, newY];
-            } else if (geometry.type === 'LineString') {
-              return geometry.coordinates.map(([x, y]) => {
-                const [newX, newY] = proj4(sourceCrs, targetCrs, [x, y]);
-                return [newX, newY];
-              });
-            } else if (geometry.type === 'Polygon') {
-              return geometry.coordinates.map(ring => ring.map(([x, y]) => {
-                const [newX, newY] = proj4(sourceCrs, targetCrs, [x, y]);
-                return [newX, newY];
-              }));
-            }
-            return geometry.coordinates; // Handle other geometry types as needed
-          };
-
-          // Transform the geometry to WGS84 (EPSG:4326)
-          const transformedCoordinates = transformCoordinates(feature.geometry, mga56, wgs84);
-
-          drawBoundary(ctx, transformedCoordinates, centerX, centerY, size, config.width, {
+          drawBoundary(ctx, feature.geometry.coordinates, centerX, centerY, size, config.width, {
             strokeStyle: '#FFBD33',
             lineWidth: 8,
             lineDash: [15, 10]
