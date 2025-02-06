@@ -108,38 +108,92 @@ const getStepDescription = (stepId) => {
   }
 };
 
+// Define friendly names for each layer type
+const layerNames = {
+  aerial: "Aerial Imagery",
+  acidSulfateSoils: "Acid Sulfate Soils",
+  biodiversity: "Biodiversity Values",
+  bushfire: "Bushfire Prone Land",
+  composite: "Composite Map",
+  contamination: "Contamination",
+  contour: "Contours",
+  cover: "Cover Map",
+  flood: "Flood Extents",
+  fsr: "Floor Space Ratio",
+  geoscape: "Geoscape Buildings",
+  heritage: "Heritage",
+  historical: "Historical Imagery",
+  hob: "Height of Buildings",
+  power: "Power Infrastructure",
+  ptal: "Public Transport Access",
+  regularity: "Site Regularity",
+  roads: "Road Network",
+  sewer: "Sewer Infrastructure",
+  snapshot: "Site Snapshot",
+  tec: "Threatened Ecological Communities",
+  udpPrecincts: "UDP Growth Precincts",
+  waterMains: "Water Infrastructure",
+  zoning: "Zoning"
+};
+
 const ScreenshotProgress = ({ screenshots, failedScreenshots }) => {
+  // Create array of all possible layers, excluding specific ones
+  const excludedLayers = ['composite', 'cover', 'regularity', 'snapshot'];
+  
+  const layers = Object.entries(layerNames)
+    .filter(([id]) => !excludedLayers.includes(id))
+    .map(([id, name]) => ({
+      id,
+      name,
+      status: screenshots[`${id}Screenshot`] 
+        ? 'captured' 
+        : (failedScreenshots?.includes(`${id}Screenshot`) ? 'failed' : 'pending')
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
   return (
-    <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-      <h3 className="text-sm font-medium text-gray-700 mb-3">Screenshot Progress</h3>
-      <div className="space-y-2">
-        {Object.entries(screenshots).map(([key, value]) => {
-          const isFailed = failedScreenshots?.includes(key);
-          return (
-            <div key={key} className="flex items-center justify-between text-sm">
-              <span className="text-gray-600">{key.replace(/Screenshot$/, '')}</span>
-              <div className="flex items-center">
-                {value ? (
-                  <span className="text-green-600 flex items-center">
+    <div className="mt-4 p-6 bg-gray-50 rounded-lg">
+      <h3 className="text-base font-semibold text-gray-900 mb-4">Map Layer Progress</h3>
+      <div className="max-h-[400px] overflow-y-auto pr-2">
+        <div className="grid grid-cols-2 gap-3">
+          {layers.map(layer => (
+            <div 
+              key={layer.id}
+              className={`flex items-center justify-between p-3 rounded-lg ${
+                layer.status === 'captured' ? 'bg-green-50' :
+                layer.status === 'failed' ? 'bg-red-50' :
+                'bg-white'
+              }`}
+            >
+              <span className="text-sm font-medium text-gray-900 mr-2">{layer.name}</span>
+              <div className="flex items-center flex-shrink-0">
+                {layer.status === 'captured' ? (
+                  <span className="text-green-600 flex items-center text-sm whitespace-nowrap">
                     <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                     Captured
                   </span>
-                ) : isFailed ? (
-                  <span className="text-red-600 flex items-center">
+                ) : layer.status === 'failed' ? (
+                  <span className="text-red-600 flex items-center text-sm whitespace-nowrap">
                     <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                     </svg>
                     Failed
                   </span>
                 ) : (
-                  <span className="text-gray-400">Pending</span>
+                  <span className="text-gray-400 text-sm flex items-center whitespace-nowrap">
+                    <svg className="w-4 h-4 mr-1 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Processing
+                  </span>
                 )}
               </div>
             </div>
-          );
-        })}
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -193,13 +247,28 @@ const ReportGenerator = ({ selectedFeature }) => {
     clearServiceCache();
     
     try {
-      const screenshots = {};
       const failed = [];
       
+      // Initialize screenshots state with all pending layers
+      const initialScreenshots = {};
+      Object.keys(layerNames).forEach(id => {
+        initialScreenshots[`${id}Screenshot`] = null;
+      });
+      setScreenshots(initialScreenshots);
+      
+      // Helper function to update screenshot state
+      const updateScreenshot = (key, value) => {
+        setScreenshots(prev => ({
+          ...prev,
+          [key]: value
+        }));
+      };
+
       // Only capture screenshots for selected slides
       if (selectedSlides.cover) {
         try {
-          screenshots.coverScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.COVER);
+          const coverShot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.COVER);
+          updateScreenshot('coverScreenshot', coverShot);
         } catch (error) {
           console.error('Failed to capture cover screenshot:', error);
           failed.push('coverScreenshot');
@@ -208,8 +277,10 @@ const ReportGenerator = ({ selectedFeature }) => {
       
       if (selectedSlides.snapshot) {
         try {
-          screenshots.aerialScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.AERIAL);
-          screenshots.snapshotScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.SNAPSHOT);
+          const aerialShot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.AERIAL);
+          updateScreenshot('aerialScreenshot', aerialShot);
+          const snapshotShot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.SNAPSHOT);
+          updateScreenshot('snapshotScreenshot', snapshotShot);
         } catch (error) {
           console.error('Failed to capture snapshot screenshots:', error);
           failed.push('aerialScreenshot', 'snapshotScreenshot');
@@ -218,70 +289,78 @@ const ReportGenerator = ({ selectedFeature }) => {
       
       if (selectedSlides.planning) {
         await planningMapRef.current?.captureScreenshots();
-        screenshots.zoningScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.ZONING, true, developableArea);
-        screenshots.fsrScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.FSR, true, developableArea);
-        screenshots.hobScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.HOB, true, developableArea);
+        const zoningShot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.ZONING, true, developableArea);
+        updateScreenshot('zoningScreenshot', zoningShot);
+        const fsrShot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.FSR, true, developableArea);
+        updateScreenshot('fsrScreenshot', fsrShot);
+        const hobShot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.HOB, true, developableArea);
+        updateScreenshot('hobScreenshot', hobShot);
       }
       
       if (selectedSlides.primaryAttributes) {
-        screenshots.compositeMapScreenshot = await capturePrimarySiteAttributesMap(selectedFeature, developableArea);
+        const compositeShot = await capturePrimarySiteAttributesMap(selectedFeature, developableArea);
+        updateScreenshot('compositeMapScreenshot', compositeShot);
       }
       
       if (selectedSlides.secondaryAttributes) {
-        screenshots.contourScreenshot = await captureContourMap(selectedFeature, developableArea);
-        screenshots.regularityScreenshot = await captureRegularityMap(selectedFeature, developableArea);
+        const contourShot = await captureContourMap(selectedFeature, developableArea);
+        updateScreenshot('contourScreenshot', contourShot);
+        const regularityShot = await captureRegularityMap(selectedFeature, developableArea);
+        updateScreenshot('regularityScreenshot', regularityShot);
       }
       
       if (selectedSlides.planningTwo) {
-        screenshots.heritageScreenshot = await captureHeritageMap(selectedFeature, developableArea);
-        screenshots.acidSulfateSoilsScreenshot = await captureAcidSulfateMap(selectedFeature, developableArea);
+        const heritageShot = await captureHeritageMap(selectedFeature, developableArea);
+        updateScreenshot('heritageScreenshot', heritageShot);
+        const acidShot = await captureAcidSulfateMap(selectedFeature, developableArea);
+        updateScreenshot('acidSulfateSoilsScreenshot', acidShot);
       }
       
       if (selectedSlides.servicing) {
         const waterMains = await captureWaterMainsMap(selectedFeature, developableArea);
-        screenshots.waterMainsScreenshot = waterMains?.image;
-        screenshots.waterFeatures = waterMains?.features;
+        updateScreenshot('waterMainsScreenshot', waterMains?.image);
         
         const sewer = await captureSewerMap(selectedFeature, developableArea);
-        screenshots.sewerScreenshot = sewer?.image;
-        screenshots.sewerFeatures = sewer?.features;
+        updateScreenshot('sewerScreenshot', sewer?.image);
         
         const power = await capturePowerMap(selectedFeature, developableArea);
-        screenshots.powerScreenshot = power?.image;
-        screenshots.powerFeatures = power?.features;
+        updateScreenshot('powerScreenshot', power?.image);
       }
       
       if (selectedSlides.utilisation) {
         const geoscape = await captureGeoscapeMap(selectedFeature, developableArea);
-        screenshots.geoscapeScreenshot = geoscape?.image;
-        screenshots.geoscapeFeatures = geoscape?.features;
+        updateScreenshot('geoscapeScreenshot', geoscape?.image);
       }
       
       if (selectedSlides.access) {
-        screenshots.roadsScreenshot = await captureRoadsMap(selectedFeature, developableArea);
-        screenshots.udpPrecinctsScreenshot = await captureUDPPrecinctMap(selectedFeature, developableArea);
-        screenshots.ptalScreenshot = await capturePTALMap(selectedFeature, developableArea);
+        const roadsShot = await captureRoadsMap(selectedFeature, developableArea);
+        updateScreenshot('roadsScreenshot', roadsShot);
+        const udpShot = await captureUDPPrecinctMap(selectedFeature, developableArea);
+        updateScreenshot('udpPrecinctsScreenshot', udpShot);
+        const ptalShot = await capturePTALMap(selectedFeature, developableArea);
+        updateScreenshot('ptalScreenshot', ptalShot);
       }
       
       if (selectedSlides.hazards) {
-        screenshots.floodMapScreenshot = await captureFloodMap(selectedFeature, developableArea);
-        screenshots.bushfireMapScreenshot = await captureBushfireMap(selectedFeature, developableArea);
+        const floodShot = await captureFloodMap(selectedFeature, developableArea);
+        updateScreenshot('floodScreenshot', floodShot);
+        const bushfireShot = await captureBushfireMap(selectedFeature, developableArea);
+        updateScreenshot('bushfireScreenshot', bushfireShot);
       }
       
       if (selectedSlides.environmental) {
-        screenshots.tecMapScreenshot = await captureTECMap(selectedFeature, developableArea);
-        screenshots.tecFeatures = screenshots.tecMapScreenshot?.features;
-        screenshots.biodiversityMapScreenshot = await captureBiodiversityMap(selectedFeature, developableArea);
-        screenshots.biodiversityFeatures = screenshots.biodiversityMapScreenshot?.features;
+        const tecShot = await captureTECMap(selectedFeature, developableArea);
+        updateScreenshot('tecScreenshot', tecShot);
+        const bioShot = await captureBiodiversityMap(selectedFeature, developableArea);
+        updateScreenshot('biodiversityScreenshot', bioShot);
       }
       
       if (selectedSlides.contamination) {
         const contaminationResult = await captureContaminationMap(selectedFeature, developableArea);
-        screenshots.contaminationMapScreenshot = contaminationResult?.image;
-        screenshots.contaminationFeatures = contaminationResult?.features;
+        updateScreenshot('contaminationScreenshot', contaminationResult?.image);
         
-        // Add historical imagery
-        screenshots.historicalImagery = await captureHistoricalImagery(selectedFeature);
+        const historicalShot = await captureHistoricalImagery(selectedFeature);
+        updateScreenshot('historicalScreenshot', historicalShot);
       }
 
       setFailedScreenshots(failed);

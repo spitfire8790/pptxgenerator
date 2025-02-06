@@ -2434,8 +2434,8 @@ export async function capturePTALMap(feature, developableArea = null) {
         layerId: 0
       };
 
-      // Get a valid token from the token service
-      const token = await getPTALToken();
+      // Use the provided token directly
+      const token = 'XV_xaQkwiRbjCLCBeasq-afrcYm62rsImkoi9vidYpVq-mO3uqD52fvxEvxSy3s_RhicU4C7xpZQZbT_Ad1j4DjTfLPq1f5TbuQfpzqkNQ7qmkTEWoWYZjhwsao0N-Y7-P453oOaZt7kb3XDwzxO0gzh3vpG_iokZCdzrg3E3XaShK4V53jDLMqdKMPMogYCKQQLh58lz28FHVCD3llWmjirNN_0FmE6-P8gIkQj1W-vc39HRqvwq-7GZRU7mZqP';
 
       // Color mapping for PTAL values
       const ptalColors = {
@@ -2466,7 +2466,7 @@ export async function capturePTALMap(feature, developableArea = null) {
       
       const ptalResponse = await proxyRequest(url);
       console.log('PTAL response:', ptalResponse);
-
+      
       if (ptalResponse?.features?.length > 0) {
         console.log(`Drawing ${ptalResponse.features.length} PTAL features...`);
         ptalFeatures = ptalResponse.features;
@@ -2508,54 +2508,6 @@ export async function capturePTALMap(feature, developableArea = null) {
         dashArray: [20, 10]
       });
     }
-
-    // Add legend
-    const legendHeight = 360;
-    const legendWidth = 400;
-    const padding = 20;
-    const legendX = canvas.width - legendWidth - padding;
-    const legendY = canvas.height - legendHeight - padding;
-
-    // Draw legend background with border
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-    ctx.strokeStyle = '#002664';
-    ctx.lineWidth = 2;
-    ctx.fillRect(legendX, legendY, legendWidth, legendHeight);
-    ctx.strokeRect(legendX, legendY, legendWidth, legendHeight);
-
-    // Legend title
-    ctx.font = 'bold 28px Public Sans';
-    ctx.fillStyle = '#002664';
-    ctx.textBaseline = 'top';
-    ctx.fillText('PTAL', legendX + padding, legendY + padding);
-
-    // Legend items
-    const legendItems = [
-      { color: '#ff0000', label: '1 - Low' },
-      { color: '#ff7f0e', label: '2 - Low-Medium' },
-      { color: '#f2ff00', label: '3 - Medium' },
-      { color: '#0e9aff', label: '4 - Medium-High' },
-      { color: '#a8ff7f', label: '5 - High' },
-      { color: '#1d9604', label: '6 - Very High' }
-    ];
-
-    ctx.textBaseline = 'middle';
-    ctx.font = '22px Public Sans';
-
-    legendItems.forEach((item, index) => {
-      const y = legendY + padding + 60 + (index * 45);
-      
-      // Draw color box
-      ctx.fillStyle = item.color;
-      ctx.fillRect(legendX + padding, y - 10, 20, 20);
-      ctx.strokeStyle = '#363636';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(legendX + padding, y - 10, 20, 20);
-      
-      // Draw label
-      ctx.fillStyle = '#363636';
-      ctx.fillText(item.label, legendX + padding + 35, y);
-    });
 
     return canvas.toDataURL('image/png', 1.0);
   } catch (error) {

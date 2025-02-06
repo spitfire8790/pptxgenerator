@@ -958,36 +958,74 @@ const scoringCriteria = {
 
         let minDistance = Infinity;
         let nearestPrecinct = null;
+        let intersectionFound = false;
 
         features.forEach((feature, index) => {
           if (!feature.geometry) return;
 
           try {
-            let precinctPolygon;
             if (feature.geometry.type === 'MultiPolygon') {
               // For MultiPolygon, check each polygon
               feature.geometry.coordinates.forEach((polygonCoords, polyIndex) => {
+                console.log(`Processing polygon ${polyIndex + 1} of MultiPolygon ${index + 1}`);
                 const polygon = turf.polygon(polygonCoords);
-                const distance = turf.distance(
-                  turf.center(developablePolygon),
-                  turf.center(polygon),
-                  { units: 'meters' }
-                );
-                if (distance < minDistance) {
-                  minDistance = distance;
+                
+                // First check for intersection
+                const intersects = turf.booleanIntersects(developablePolygon, polygon);
+                console.log(`Polygon ${polyIndex + 1} intersects:`, intersects);
+                
+                if (intersects) {
+                  intersectionFound = true;
+                  minDistance = 0;
                   nearestPrecinct = feature.properties?.Precinct_Name || null;
+                  console.log('Found intersection - setting minDistance to 0');
+                  return;
+                }
+
+                // If no intersection, calculate minimum distance between boundaries
+                if (!intersectionFound) {
+                  const distance = turf.distance(
+                    turf.nearestPoint(turf.centerOfMass(developablePolygon), turf.explode(polygon)),
+                    turf.nearestPoint(turf.centerOfMass(polygon), turf.explode(developablePolygon)),
+                    { units: 'meters' }
+                  );
+                  
+                  if (distance < minDistance) {
+                    minDistance = distance;
+                    nearestPrecinct = feature.properties?.Precinct_Name || null;
+                    console.log('New minimum distance found:', minDistance.toFixed(2), 'm');
+                  }
                 }
               });
             } else if (feature.geometry.type === 'Polygon') {
-              precinctPolygon = turf.polygon(feature.geometry.coordinates);
-              const distance = turf.distance(
-                turf.center(developablePolygon),
-                turf.center(precinctPolygon),
-                { units: 'meters' }
-              );
-              if (distance < minDistance) {
-                minDistance = distance;
+              console.log(`Processing regular polygon ${index + 1}`);
+              const precinctPolygon = turf.polygon(feature.geometry.coordinates);
+              
+              // First check for intersection
+              const intersects = turf.booleanIntersects(developablePolygon, precinctPolygon);
+              console.log(`Polygon ${index + 1} intersects:`, intersects);
+              
+              if (intersects) {
+                intersectionFound = true;
+                minDistance = 0;
                 nearestPrecinct = feature.properties?.Precinct_Name || null;
+                console.log('Found intersection - setting minDistance to 0');
+                return;
+              }
+
+              // If no intersection, calculate minimum distance between boundaries
+              if (!intersectionFound) {
+                const distance = turf.distance(
+                  turf.nearestPoint(turf.centerOfMass(developablePolygon), turf.explode(precinctPolygon)),
+                  turf.nearestPoint(turf.centerOfMass(precinctPolygon), turf.explode(developablePolygon)),
+                  { units: 'meters' }
+                );
+                
+                if (distance < minDistance) {
+                  minDistance = distance;
+                  nearestPrecinct = feature.properties?.Precinct_Name || null;
+                  console.log('New minimum distance found:', minDistance.toFixed(2), 'm');
+                }
               }
             }
           } catch (error) {
@@ -996,7 +1034,7 @@ const scoringCriteria = {
         });
 
         let score;
-        if (minDistance <= 800) {
+        if (minDistance === 0 || minDistance <= 800) {
           score = 3;
         } else if (minDistance <= 1600) {
           score = 2;
@@ -1015,7 +1053,12 @@ const scoringCriteria = {
     getScoreDescription: (scoreObj) => {
       const { score, minDistance, nearestPrecinct } = scoreObj;
       
-      // Format distance based on value
+      // Special case for when the site is within a precinct
+      if (minDistance === 0) {
+        return `The developable area is within a UDP growth precinct (${nearestPrecinct}).`;
+      }
+      
+      // Format distance based on value for other cases
       let formattedDistance;
       if (minDistance >= 1000) {
         formattedDistance = `${(minDistance / 1000).toFixed(1)} kilometres`;
