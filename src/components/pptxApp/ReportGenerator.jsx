@@ -659,7 +659,7 @@ const ReportGenerator = ({ selectedFeature }) => {
             
             <ol className="space-y-4 text-sm list-decimal pl-5">
               <li className="pl-2 leading-relaxed">
-                Using Land iQ Site Search, identify a property of interest and create a feature on the 'Site Boundary' drawing layer. Ensure you are creating a feature using the Land iQ search results so the data is attached to the feature.
+                Turn off Harmony / VPN and then using Land iQ Site Search, identify a property of interest and create a feature on the 'Site Boundary' drawing layer. Ensure you are creating a feature using the Land iQ search results so the data is attached to the feature.
               </li>
               <li className="pl-2 leading-relaxed">
                 Draw the developable area boundary as a new feature on the 'Developable Area Boundary' drawing layer.
