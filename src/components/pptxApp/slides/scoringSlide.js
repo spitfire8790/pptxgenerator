@@ -74,12 +74,18 @@ const styles = {
 };
 
 export async function createScoringSlide(pres, feature, developableArea) {
+  console.log('Creating scoring slide with feature:', {
+    feature,
+    address: feature?.site__address,
+    allProperties: feature
+  });
+
   const slide = pres.addSlide({ masterName: 'NSW_MASTER' });
 
   try {
     // Add title with fallback for missing address
     slide.addText([
-      { text: feature?.properties?.site__address || 'Address not available', options: { color: styles.title.color } },
+      { text: feature?.site__address || 'Address not available', options: { color: styles.title.color } },
       { text: ' ', options: { breakLine: true } },
       { text: 'Scoring', options: { color: styles.subtitle.color } }
     ], styles.title);
@@ -114,155 +120,228 @@ export async function createScoringSlide(pres, feature, developableArea) {
       }
     };
 
+    // Helper function to format score with color
+    const formatScoreWithColor = (score) => {
+      let fill;
+      switch (parseInt(score)) {
+        case 1:
+          fill = 'FFE6E6'; // Light red
+          break;
+        case 2:
+          fill = 'FFF3E0'; // Light orange
+          break;
+        case 3:
+          fill = 'E6FFE6'; // Light green
+          break;
+        default:
+          fill = 'FFFFFF'; // White
+      }
+      return {
+        text: score.toString(),
+        options: { 
+          align: 'center',
+          bold: true,
+          fill: fill,
+          color: '363636'  // Keep text color consistent
+        }
+      };
+    };
+
+    // Helper function to format criteria cell
+    const formatCriteriaCell = (text) => {
+      return {
+        text: text,
+        options: { align: 'left' }
+      };
+    };
+
+    // Helper function to format group cell
+    const formatGroupCell = (text, rowspan) => {
+      return text ? {
+        text: text,
+        options: { rowspan, valign: 'middle' }
+      } : {
+        text: '',
+        options: { rowspan: 1 }
+      };
+    };
+
     // Calculate scores with default values if data is missing
     const scores = {
       developableArea: getScoreValue(scoringCriteria.developableArea.calculateScore(feature?.properties?.developableAreaSize || 0)),
-      siteContour: getScoreValue(scoringCriteria.contours.calculateScore(feature?.properties?.elevationChange || 0)),
+      contours: getScoreValue(scoringCriteria.contours.calculateScore(feature?.properties?.elevationChange || 0)),
       siteRegularity: getScoreValue(scoringCriteria.siteRegularity.calculateScore(feature || {})),
       zoning: getScoreValue(scoringCriteria.planning.calculateScore(feature?.properties?.zones || [], feature?.properties?.fsr || 0, feature?.properties?.hob || 0)),
       heritage: getScoreValue(scoringCriteria.heritage.calculateScore(feature?.properties?.heritageData || null)),
-      acidSulphateSoil: getScoreValue(scoringCriteria.acidSulfateSoils.calculateScore(feature?.properties?.soilsData || null)),
+      acidSulfateSoils: getScoreValue(scoringCriteria.acidSulfateSoils.calculateScore(feature?.properties?.soilsData || null)),
       servicing: getScoreValue(scoringCriteria.servicing.calculateScore(
         getScoreValue(scoringCriteria.water.calculateScore(feature?.properties?.waterFeatures || [], developableArea || null)),
         getScoreValue(scoringCriteria.sewer.calculateScore(feature?.properties?.sewerFeatures || [], developableArea || null)),
         getScoreValue(scoringCriteria.power.calculateScore(feature?.properties?.powerFeatures || [], developableArea || null))
       )),
-      access: getScoreValue(scoringCriteria.roads.calculateScore(feature?.properties?.roadFeatures || [], developableArea || null)),
-      proximityToStrategicCentre: getScoreValue(scoringCriteria.udpPrecincts.calculateScore(feature?.properties?.udpPrecincts || [], developableArea || null)),
+      roads: getScoreValue(scoringCriteria.roads.calculateScore(feature?.properties?.roadFeatures || [], developableArea || null)),
+      udpPrecincts: getScoreValue(scoringCriteria.udpPrecincts.calculateScore(feature?.properties?.udpPrecincts || [], developableArea || null)),
       ptal: getScoreValue(scoringCriteria.ptal.calculateScore(feature?.properties?.ptalValues || [])),
-      builtForm: getScoreValue(scoringCriteria.geoscape.calculateScore(feature?.properties?.geoscapeFeatures || [], developableArea || null)),
-      floodRisk: getScoreValue(scoringCriteria.flood.calculateScore(feature?.properties?.site_suitability__floodFeatures || null, developableArea || null)),
-      bushfireRisk: getScoreValue(scoringCriteria.bushfire.calculateScore(feature?.properties?.site_suitability__bushfireFeatures || null, developableArea || null)),
-      contaminatedSites: getScoreValue(scoringCriteria.contamination.calculateScore(feature?.properties?.site_suitability__contaminationFeatures || null, developableArea || null)),
-      siteRemediation: 2,
+      geoscape: getScoreValue(scoringCriteria.geoscape.calculateScore(feature?.properties?.geoscapeFeatures || [], developableArea || null)),
+      flood: getScoreValue(scoringCriteria.flood.calculateScore(feature?.properties?.site_suitability__floodFeatures || null, developableArea || null)),
+      bushfire: getScoreValue(scoringCriteria.bushfire.calculateScore(feature?.properties?.site_suitability__bushfireFeatures || null, developableArea || null)),
+      contamination: getScoreValue(scoringCriteria.contamination.calculateScore(feature?.properties?.site_suitability__contaminationFeatures || null, developableArea || null)),
+      siteRemediation: 3,
       tec: getScoreValue(scoringCriteria.tec.calculateScore(feature?.properties?.tecFeatures || [], developableArea || null))
     };
 
     // Calculate total score
     const totalScore = Object.values(scores).reduce((sum, score) => sum + (parseInt(score) || 0), 0);
     const maxScore = 48;
-    const percentage = ((totalScore / maxScore) * 100).toFixed(2);
+    const percentage = Math.round((totalScore / maxScore) * 100);
+
+    console.log('Creating table with scores:', scores);
 
     // Create scoring table with proper row merging
     const tableData = [
       // Headers
-      ['Group', 'Criteria', 'Scoring'],
+      [{ text: 'Group', options: { fill: '002664', color: 'FFFFFF' } }, 
+       { text: 'Criteria', options: { fill: '002664', color: 'FFFFFF' } }, 
+       { text: 'Scoring', options: { fill: '002664', color: 'FFFFFF' } }],
       // Primary Site Attributes
-      ['Primary Site Attributes', 'Developable Area', scores.developableArea],
+      [{ text: 'Primary Site Attributes\n\n', options: { rowspan: 1, valign: 'middle' }}, 
+       'Developable Area', formatScoreWithColor(scores.developableArea)],
       // Secondary Site Attributes
-      ['Secondary Site Attributers', 'Site Contour', scores.siteContour],
-      ['', 'Site Regularity', scores.siteRegularity],
+      [{ text: 'Secondary Site Attributes\n\n', options: { rowspan: 2, valign: 'middle' }}, 
+       'Site Contour', formatScoreWithColor(scores.contours)],
+      ['Site Regularity', formatScoreWithColor(scores.siteRegularity)],
       // Planning
-      ['Planning', 'Zoning', scores.zoning],
-      ['', 'Heritage', scores.heritage],
-      ['', 'Acid Sulphate Soil', scores.acidSulphateSoil],
+      [{ text: 'Planning\n\n', options: { rowspan: 3, valign: 'middle' }}, 
+       'Zoning', formatScoreWithColor(scores.zoning)],
+      ['Heritage', formatScoreWithColor(scores.heritage)],
+      ['Acid Sulfate Soils', formatScoreWithColor(scores.acidSulfateSoils)],
       // Access & Services
-      ['Access & Services', 'Servicing', scores.servicing],
-      ['', 'Access', scores.access],
-      ['', 'Proximity to Strategic Centre', scores.proximityToStrategicCentre],
-      ['', 'Public Transport Access Level (PTAL)', scores.ptal],
+      [{ text: 'Access & Services\n\n', options: { rowspan: 4, valign: 'middle' }}, 
+       'Servicing', formatScoreWithColor(scores.servicing)],
+      ['Access', formatScoreWithColor(scores.roads)],
+      ['Proximity to Strategic Centre', formatScoreWithColor(scores.udpPrecincts)],
+      ['Public Transport Access Level (PTAL)', formatScoreWithColor(scores.ptal)],
       // Utilisation & Improvements
-      ['Utilisation & Improvements', 'Built Form', scores.builtForm],
+      [{ text: 'Utilisation & Improvements\n\n', options: { rowspan: 1, valign: 'middle' }}, 
+       'Built Form', formatScoreWithColor(scores.geoscape)],
       // Hazards
-      ['Hazards', 'Flood risk (1% AEP)', scores.floodRisk],
-      ['', 'Bushfire Risk', scores.bushfireRisk],
+      [{ text: 'Hazards\n\n', options: { rowspan: 2, valign: 'middle' }}, 
+       'Flood risk (1% AEP)', formatScoreWithColor(scores.flood)],
+      ['Bushfire Risk', formatScoreWithColor(scores.bushfire)],
       // Site Contamination
-      ['Site Contamination', 'Contaminated sites Register', scores.contaminatedSites],
-      ['', 'Usage & potential site remediation', scores.siteRemediation],
+      [{ text: 'Site Contamination\n\n', options: { rowspan: 2, valign: 'middle' }}, 
+       'Contaminated sites Register', formatScoreWithColor(scores.contamination)],
+      ['Usage & potential site remediation', formatScoreWithColor(scores.siteRemediation)],
       // Environmental
-      ['Environmental', 'Threatened Ecological Communities', scores.tec],
+      [{ text: 'Environmental\n\n', options: { rowspan: 1, valign: 'middle' }}, 
+       'Threatened Ecological Communities', formatScoreWithColor(scores.tec)],
       // Total Score
-      ['Total Score', '', `${totalScore}/${maxScore}\n(${percentage}%)`]
+      [{ text: 'Total Score\n\n', options: { rowspan: 1, valign: 'middle', bold: true }}, 
+       '', { text: `${totalScore}/${maxScore} (${percentage}%)`, options: { bold: true, align: 'center' }}]
     ];
+
+    console.log('Table data structure:', JSON.stringify(tableData, null, 2));
 
     // Add table with styling
     slide.addTable(tableData, {
       x: '5%',
-      y: '20%',
-      w: '63%',
-      colW: [2, 3.5, 0.7],
+      y: '18%',
+      w: '62%',
+      colW: [2, 3.5, 1],
       border: { type: 'solid', color: '363636', pt: 0.5 },
+      rowH: Array(tableData.length).fill(0.25),
       align: 'left',
-      fontFace: 'Public Sans',
-      fontSize: 8,
-      color: '363636',
       valign: 'middle',
+      fontSize: 7,
+      fontFace: 'Public Sans',
+      color: '363636',
       autoPage: false,
-      // Add header row styling
-      firstRow: {
-        options: {
-          fill: '002664',
-          color: 'FFFFFF',
-          fontFace: 'Public Sans',
-          fontSize: 8,
-          valign: 'middle'
-        }
-      },
-      // Add row merging
-      rowMerge: [
-        { row: 1, col: 0, rowspan: 1 },  // Primary Site Attributes
-        { row: 2, col: 0, rowspan: 2 },  // Secondary Site Attributes
-        { row: 4, col: 0, rowspan: 3 },  // Planning
-        { row: 7, col: 0, rowspan: 4 },  // Access & Services
-        { row: 11, col: 0, rowspan: 1 }, // Utilisation & Improvements
-        { row: 12, col: 0, rowspan: 2 }, // Hazards
-        { row: 14, col: 0, rowspan: 2 }, // Site Contamination
-        { row: 16, col: 0, rowspan: 1 }, // Environmental
-      ]
+      margin: 2
     });
 
-    // Move recommendation box to align with wider table
+    // Calculate the bottom position of the table
+    const tableBottom = '18%' + (0.25 * tableData.length) + '%';
+
+    // Move recommendation box to align with table
     const recommendationBox = slide.addShape('rect', {
-      x: '71%',  // Moved slightly right to accommodate wider table
-      y: '20%',
-      w: '25%',
-      h: '30%',
-      fill: { color: 'F5F5F5' },
+      x: '68%',
+      y: '18%',
+      w: '28%',
+      h: tableData.length * 0.25 + '%',
+      fill: { color: 'FFFFFF' },
       line: { color: '363636', width: 0.5 }
     });
 
-    // Add recommendation title
-    slide.addText('Recommendation:', {
-      x: '71%',
-      y: '21%',
-      w: '23%',
-      fontSize: 14,
+    // Add recommendation header with blue background
+    slide.addShape('rect', {
+      x: '68%',
+      y: '18%',
+      w: '28%',
+      h: '0.25',
+      fill: { color: '002664' },
+      line: { color: '363636', width: 0.5 }
+    });
+
+    // Add recommendation title in white text
+    slide.addText('Recommendation', {
+      x: '69%',
+      y: '18%',
+      w: '26%',
+      h: '0.25',
+      fontSize: 7,
       fontFace: 'Public Sans',
-      bold: true,
-      color: '363636'
+      color: 'FFFFFF',
+      valign: 'middle',
+      align: 'left'
     });
 
     // Add placeholder recommendation text
     slide.addText('Please add recommendation and rationale', {
-      x: '71%',
-      y: '25%',
-      w: '23%',
-      fontSize: 12,
+      x: '69%',
+      y: '18.5%',
+      w: '26%',
+      h: '20%',
+      fontSize: 7,
       fontFace: 'Public Sans',
       color: '363636',
-      bullet: true
+      bullet: true,
+      valign: 'middle'
     });
 
-    // Add key reasons title
-    slide.addText('Key Reasons:', {
-      x: '71%',
-      y: '35%',
-      w: '23%',
-      fontSize: 14,
+    // Add key reasons header with blue background
+    slide.addShape('rect', {
+      x: '68%',
+      y: '39%',
+      w: '28%',
+      h: '0.25',
+      fill: { color: '002664' },
+      line: { color: '363636', width: 0.5 }
+    });
+
+    // Add key reasons title in white text
+    slide.addText('Key Reasons', {
+      x: '69%',
+      y: '39%',
+      w: '26%',
+      h: '0.25',
+      fontSize: 7,
       fontFace: 'Public Sans',
-      bold: true,
-      color: '363636'
+      color: 'FFFFFF',
+      valign: 'middle',
+      align: 'left'
     });
 
     // Add placeholder key reasons text
     slide.addText('Please add recommendation and rationale', {
-      x: '71%',
-      y: '39%',
-      w: '23%',
-      fontSize: 12,
+      x: '69%',
+      y: '39.5%',
+      w: '26%',
+      h: tableData.length * 0.25 - 40 + '%',
+      fontSize: 7,
       fontFace: 'Public Sans',
       color: '363636',
-      bullet: true
+      bullet: true,
+      valign: 'middle'
     });
 
     return slide;
