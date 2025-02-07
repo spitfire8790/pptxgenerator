@@ -249,7 +249,7 @@ export async function createScoringSlide(pres, feature, developableArea) {
       w: '62%',
       colW: [2, 3.5, 1],
       border: { type: 'solid', color: '363636', pt: 0.5 },
-      rowH: Array(tableData.length).fill(0.25),
+      rowH: 0.25,  // Single value instead of array
       align: 'left',
       valign: 'middle',
       fontSize: 7,
@@ -259,15 +259,12 @@ export async function createScoringSlide(pres, feature, developableArea) {
       margin: 2
     });
 
-    // Calculate the bottom position of the table
-    const tableBottom = '18%' + (0.25 * tableData.length) + '%';
-
     // Move recommendation box to align with table
     const recommendationBox = slide.addShape('rect', {
       x: '68%',
       y: '18%',
       w: '28%',
-      h: tableData.length * 0.25 + '%',
+      h: '70%',  // Fixed height
       fill: { color: 'FFFFFF' },
       line: { color: '363636', width: 0.5 }
     });
@@ -277,7 +274,7 @@ export async function createScoringSlide(pres, feature, developableArea) {
       x: '68%',
       y: '18%',
       w: '28%',
-      h: '0.25',
+      h: '3%',  // Fixed header height
       fill: { color: '002664' },
       line: { color: '363636', width: 0.5 }
     });
@@ -287,33 +284,32 @@ export async function createScoringSlide(pres, feature, developableArea) {
       x: '69%',
       y: '18%',
       w: '26%',
-      h: '0.25',
+      h: '3%',  // Match header height
       fontSize: 7,
       fontFace: 'Public Sans',
       color: 'FFFFFF',
-      valign: 'middle',
+      bold: true,
+      valign: 'middle',  // Center vertically
       align: 'left'
     });
 
     // Add placeholder recommendation text
     slide.addText('Please add recommendation and rationale', {
       x: '69%',
-      y: '18.5%',
+      y: '22%',
       w: '26%',
-      h: '20%',
       fontSize: 7,
       fontFace: 'Public Sans',
       color: '363636',
-      bullet: true,
-      valign: 'middle'
+      bullet: true
     });
 
     // Add key reasons header with blue background
     slide.addShape('rect', {
       x: '68%',
-      y: '39%',
+      y: '45%',
       w: '28%',
-      h: '0.25',
+      h: '3%',
       fill: { color: '002664' },
       line: { color: '363636', width: 0.5 }
     });
@@ -321,27 +317,26 @@ export async function createScoringSlide(pres, feature, developableArea) {
     // Add key reasons title in white text
     slide.addText('Key Reasons', {
       x: '69%',
-      y: '39%',
+      y: '45%',
       w: '26%',
-      h: '0.25',
+      h: '3%',  // Match header height
       fontSize: 7,
       fontFace: 'Public Sans',
       color: 'FFFFFF',
-      valign: 'middle',
+      bold: true,
+      valign: 'middle',  // Center vertically
       align: 'left'
     });
 
     // Add placeholder key reasons text
     slide.addText('Please add recommendation and rationale', {
       x: '69%',
-      y: '39.5%',
+      y: '49%',
       w: '26%',
-      h: tableData.length * 0.25 - 40 + '%',
       fontSize: 7,
       fontFace: 'Public Sans',
       color: '363636',
-      bullet: true,
-      valign: 'middle'
+      bullet: true
     });
 
     return slide;
