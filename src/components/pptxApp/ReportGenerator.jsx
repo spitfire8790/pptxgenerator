@@ -6,6 +6,7 @@ import { addPlanningSlide } from './slides/planningSlide';
 import { addPlanningSlide2 } from './slides/planningSlide2';
 import { addServicingSlide } from './slides/servicingSlide';
 import { createScoringSlide } from './slides/scoringSlide';
+import { checkUserClaims } from './utils/auth/tokenUtils';
 import { 
   captureMapScreenshot, 
   capturePrimarySiteAttributesMap, 
@@ -54,10 +55,13 @@ import {
   AlertTriangle,
   Leaf,
   Skull,
-  LineChart
+  LineChart,
+  Trophy
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import './Timer.css';
+import Leaderboard from './Leaderboard';
+import { recordReportGeneration } from './utils/stats/reportStats';
 
 const slideOptions = [
   { id: 'cover', label: 'Cover Page', addSlide: addCoverSlide, icon: Home },
@@ -216,12 +220,27 @@ const ReportGenerator = ({ selectedFeature }) => {
   const [isCancelling, setIsCancelling] = useState(false);
   const [failedScreenshots, setFailedScreenshots] = useState([]);
   const [showConfetti, setShowConfetti] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [generationStartTime, setGenerationStartTime] = useState(null);
 
   useEffect(() => {
     if (selectedFeature) {
       handleScreenshotCapture();
     }
   }, [selectedFeature]);
+
+  useEffect(() => {
+    // Test JWT claims when component mounts
+    const fetchClaims = async () => {
+      try {
+        const claims = await checkUserClaims();
+        console.log('Successfully retrieved user claims:', claims);
+      } catch (error) {
+        console.error('Failed to get user claims:', error);
+      }
+    };
+    fetchClaims();
+  }, []);
 
   const generatePropertyReport = async () => {
     if (!selectedFeature) return;
@@ -231,6 +250,7 @@ const ReportGenerator = ({ selectedFeature }) => {
     setCurrentStep('screenshots');
     setCompletedSteps([]);
     setFailedScreenshots([]);
+    setGenerationStartTime(Date.now());
     
     // Clear the service cache at the start of report generation
     clearServiceCache();
@@ -402,6 +422,9 @@ const ReportGenerator = ({ selectedFeature }) => {
         ]);
       });
 
+      const generationTime = Date.now() - generationStartTime;
+      await recordReportGeneration(generationTime, selectedSlides, selectedFeature.properties.copiedFrom);
+      
       setCompletedSteps(prev => [...prev, 'finalising']);
       setStatus('success');
     } catch (error) {
@@ -410,6 +433,7 @@ const ReportGenerator = ({ selectedFeature }) => {
     } finally {
       setIsGenerating(false);
       setCurrentStep(null);
+      setGenerationStartTime(null);
     }
   };
 
@@ -498,12 +522,22 @@ const ReportGenerator = ({ selectedFeature }) => {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold">Desktop Due Diligence PowerPoint Report Generator (WIP)</h2>
           
-          <button
-            className="px-4 py-2 rounded text-white font-medium bg-blue-600 hover:bg-blue-700 transition-colors"
-            onClick={() => setShowHowTo(true)}
-          >
-            How to use
-          </button>
+          <div className="flex gap-2">
+            <button
+              className="px-4 py-2 rounded text-white font-medium bg-blue-600 hover:bg-blue-700 transition-colors"
+              onClick={() => setShowHowTo(true)}
+            >
+              How to use
+            </button>
+            
+            <button
+              className="px-4 py-2 rounded text-white font-medium bg-yellow-600 hover:bg-yellow-700 transition-colors flex items-center gap-2"
+              onClick={() => setShowLeaderboard(true)}
+            >
+              <Trophy className="w-4 h-4" />
+              Leaderboard
+            </button>
+          </div>
         </div>
         
         <PlanningMapView 
@@ -550,50 +584,75 @@ const ReportGenerator = ({ selectedFeature }) => {
           </div>
 
           <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-2">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {slideOptions.map((option) => {
                 const isActive = currentStep === option.id;
                 const isCompleted = completedSteps.includes(option.id);
                 const Icon = option.icon;
                 
                 return (
-                  <div key={option.id} className="flex items-center justify-between p-2 rounded hover:bg-gray-50">
-                    <div className={`flex items-center ${isGenerating && !selectedSlides[option.id] ? 'opacity-50' : ''}`}>
+                  <div 
+                    key={option.id} 
+                    className={`
+                      slide-card relative p-4 rounded-lg border-2 transition-all duration-200
+                      ${isGenerating && !selectedSlides[option.id] ? 'opacity-50' : ''}
+                      ${isCompleted ? 'slide-card-completed border-green-200 bg-green-50' : 'border-gray-200 hover:border-blue-400'}
+                      ${isActive ? 'slide-card-active border-blue-400 shadow-lg' : ''}
+                      hover:shadow-md cursor-pointer
+                    `}
+                    onClick={() => {
+                      if (!isGenerating) {
+                        setSelectedSlides(prev => ({
+                          ...prev,
+                          [option.id]: !prev[option.id]
+                        }));
+                      }
+                    }}
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className={`slide-icon p-2 rounded-lg ${isCompleted ? 'bg-green-100' : 'bg-gray-100'}`}>
+                        <Icon 
+                          className={`w-6 h-6 ${isCompleted ? 'text-green-600' : 'text-gray-600'}`} 
+                          strokeWidth={1.5} 
+                        />
+                      </div>
                       <input
                         type="checkbox"
                         id={option.id}
                         checked={selectedSlides[option.id]}
-                        onChange={(e) => setSelectedSlides(prev => ({
-                          ...prev,
-                          [option.id]: e.target.checked
-                        }))}
+                        onChange={(e) => e.stopPropagation()}
                         disabled={isGenerating}
                         className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                       />
-                      <label htmlFor={option.id} className="ml-3 flex items-center text-sm font-medium text-gray-700">
-                        <Icon className="w-5 h-5 mr-2 stroke-current" strokeWidth={1.5} />
-                        {option.label}
-                      </label>
                     </div>
                     
+                    <h3 className="font-medium text-gray-900 mb-2">{option.label}</h3>
+                    
                     {isGenerating && selectedSlides[option.id] && (
-                      <div className="flex items-center space-x-3">
+                      <div className="mt-2">
                         {isCompleted ? (
-                          <div className="flex items-center text-green-600">
-                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                          <div className="flex items-center text-green-600 text-sm">
+                            <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                             </svg>
-                            <span className="ml-2 text-sm">Complete</span>
+                            Complete
                           </div>
                         ) : isActive ? (
-                          <div className="flex items-center space-x-2">
-                            <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                            <span className="text-sm text-blue-500">{getStepDescription(option.id)}</span>
+                          <div className="flex items-center space-x-2 text-sm text-blue-500">
+                            <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                            <span className="truncate">{getStepDescription(option.id)}</span>
                           </div>
                         ) : (
                           <div className="text-sm text-gray-400">Pending</div>
                         )}
                       </div>
+                    )}
+
+                    {isActive && (
+                      <div 
+                        className="absolute inset-0 border-2 border-blue-400 rounded-lg animate-pulse pointer-events-none"
+                        style={{ animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}
+                      />
                     )}
                   </div>
                 );
@@ -679,6 +738,13 @@ const ReportGenerator = ({ selectedFeature }) => {
             </ol>
           </div>
         </div>
+      )}
+
+      {showLeaderboard && (
+        <Leaderboard 
+          isOpen={showLeaderboard} 
+          onClose={() => setShowLeaderboard(false)} 
+        />
       )}
     </div>
   );
