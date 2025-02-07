@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
-import { Trophy, MapPin, X } from 'lucide-react';
+import { Trophy, MapPin, X, AlertCircle } from 'lucide-react';
 
-// Initialize Supabase client
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Initialize Supabase client with error handling
+const supabase = createClient(
+    'https://bgrbegqeoyolkrxjebho.supabase.co',
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJncmJlZ3Flb3lvbGtyeGplYmhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzE4MDkxNjIsImV4cCI6MjA0NzM4NTE2Mn0.r2n1T5ABTbQ2YJaJm21_6AgO8CQsILgb6MJ-pPW7Zv0'
+);
 
 const Leaderboard = ({ isOpen, onClose }) => {
     const [userStats, setUserStats] = useState([]);
     const [suburbStats, setSuburbStats] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
 
     useEffect(() => {
         if (isOpen) {
@@ -21,11 +23,15 @@ const Leaderboard = ({ isOpen, onClose }) => {
 
     const fetchStats = async () => {
         try {
-            const { data, error } = await supabase
+            if (!supabase) {
+                throw new Error('Supabase client is not initialized. Statistics are temporarily unavailable.');
+            }
+
+            const { data, error: supabaseError } = await supabase
                 .from('report_stats')
                 .select('*');
 
-            if (error) throw error;
+            if (supabaseError) throw supabaseError;
 
             // Process user statistics
             const userStatsMap = data.reduce((acc, record) => {
@@ -61,9 +67,11 @@ const Leaderboard = ({ isOpen, onClose }) => {
 
             setUserStats(userStatsArray);
             setSuburbStats(suburbStatsArray);
-            setLoading(false);
+            setError(null);
         } catch (error) {
             console.error('Error fetching stats:', error);
+            setError(error.message);
+        } finally {
             setLoading(false);
         }
     };
@@ -105,6 +113,12 @@ const Leaderboard = ({ isOpen, onClose }) => {
                 {loading ? (
                     <div className="flex justify-center items-center h-64">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+                    </div>
+                ) : error ? (
+                    <div className="flex flex-col items-center justify-center h-64 text-center">
+                        <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
+                        <p className="text-gray-600">{error}</p>
+                        <p className="text-sm text-gray-500 mt-2">Please try again later or contact support if the issue persists.</p>
                     </div>
                 ) : (
                     <div className="space-y-8">
