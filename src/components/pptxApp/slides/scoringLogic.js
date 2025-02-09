@@ -228,13 +228,28 @@ const scoringCriteria = {
       
       const classes = soilsData.LAY_CLASS.split(',').map(c => c.trim());
       
-      // Check for Class 1 or 2 (high risk)
-      if (classes.some(c => c === 'Class 1' || c === 'Class 2')) {
+      // Check for Class 1 or other high risk classifications (high risk)
+      if (classes.some(c => 
+        c === 'Class 1' || 
+        c === 'Class 2' || 
+        c === 'Disturbed terrain' || 
+        c === 'High probability at or near the ground surface'
+      )) {
         return 1;
       }
       
-      // Check for Class 3, 4, or 5 (medium risk)
-      if (classes.some(c => c === 'Class 3' || c === 'Class 4' || c === 'Class 5')) {
+      // Check for Class 3, 4, 5 or other medium risk classifications
+      if (classes.some(c => 
+        c === 'Class 3' || 
+        c === 'Class 4' || 
+        c === 'Class 5' ||
+        c === 'Class 2a' ||
+        c === 'Class 2b' ||
+        c === 'High probability within 1 m of the ground surface' ||
+        c === 'High probability of bottom sediments below water level' ||
+        c === 'Acid Sulfate Soil Area (land up to 5 metres AHD)' ||
+        c === 'Buffer Area (land greater than 5 metres but less then 10 metres AHD or within 170 metres of Acid Su*'
+      )) {
         return 2;
       }
       

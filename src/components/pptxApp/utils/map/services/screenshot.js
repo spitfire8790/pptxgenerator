@@ -2397,45 +2397,67 @@ export async function capturePTALMap(feature, developableArea = null) {
     const canvas = createCanvas(config.width, config.height);
     const ctx = canvas.getContext('2d', { alpha: true });
 
-    try {
-      // 1. Aerial imagery (base)
-      console.log('Loading aerial base layer...');
-      const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];
-      const { bbox } = calculateMercatorParams(centerX, centerY, size);
-      
-      const params = new URLSearchParams({
-        SERVICE: 'WMS',
-        VERSION: '1.3.0',
-        REQUEST: 'GetMap',
-        BBOX: bbox,
-        CRS: 'EPSG:3857',
-        WIDTH: config.width,
-        HEIGHT: config.height,
-        LAYERS: aerialConfig.layers,
-        STYLES: '',
-        FORMAT: 'image/png',
-        DPI: 300,
-        MAP_RESOLUTION: 300,
-        FORMAT_OPTIONS: 'dpi:300'
-      });
+    // Prepare parameters for both layers
+    const { bbox } = calculateMercatorParams(centerX, centerY, size);
+    
+    // Prepare aerial layer parameters
+    const aerialParams = new URLSearchParams({
+      SERVICE: 'WMS',
+      VERSION: '1.3.0',
+      REQUEST: 'GetMap',
+      BBOX: bbox,
+      CRS: 'EPSG:3857',
+      WIDTH: config.width,
+      HEIGHT: config.height,
+      LAYERS: LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL].layers,
+      STYLES: '',
+      FORMAT: 'image/png',
+      DPI: 300,
+      MAP_RESOLUTION: 300,
+      FORMAT_OPTIONS: 'dpi:300'
+    });
 
-      const url = `${aerialConfig.url}?${params.toString()}`;
-      const baseMap = await loadImage(url);
-      drawImage(ctx, baseMap, canvas.width, canvas.height, 0.5);
-    } catch (error) {
-      console.error('Failed to load aerial layer:', error);
-    }
+    // Prepare PTAL layer parameters
+    const ptalConfig = {
+      baseUrl: 'https://portal.data.nsw.gov.au/arcgis/rest/services/Hosted/ptal_dec20_gdb__(1)/FeatureServer/0',
+      layerId: 0
+    };
+    const token = 'JaDx9X6_oaaXF1QR7-6WC98y0w35Aj4ChzPJMiWLZcwTVz378UEHqnNq02zYI84AQ5wICzpGQxS_X_j0fVcUEr4lrEGMv1_vCqCrrKnOTkg9Uts85WkzkhNktj6nKpXO9DeGv4KJnZR9FjHo9ml7Av-JMFn-0NOzY0zgAE_CKh3Jr38WOeCkhSP0D5v2VjuheajKI-ZJcSpqnuPMQnBRkiA9ieOyu9qcBhODmjGzCKPULP0qBlNIjg3Q_xxAbx9l';
+    const ptalParams = new URLSearchParams({
+      where: '1=1',
+      geometry: bbox,
+      geometryType: 'esriGeometryEnvelope',
+      inSR: 3857,
+      spatialRel: 'esriSpatialRelIntersects',
+      outFields: '*',
+      returnGeometry: true,
+      f: 'geojson',
+      token
+    });
 
-    try {
-      // 2. PTAL layer
-      console.log('Loading PTAL layer...');
-      const ptalConfig = {
-        baseUrl: 'https://portal.data.nsw.gov.au/arcgis/rest/services/Hosted/ptal_dec20_gdb__(1)/FeatureServer/0',
-        layerId: 0
-      };
+    // Load both layers in parallel
+    console.log('Loading aerial and PTAL layers in parallel...');
+    const [baseMap, ptalResponse] = await Promise.all([
+      // Load aerial base layer
+      loadImage(`${LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL].url}?${aerialParams.toString()}`),
+      // Load PTAL data
+      proxyRequest(`${ptalConfig.baseUrl}/query?${ptalParams.toString()}`)
+    ]);
 
-      // Use the provided token directly
-      const token = 'XV_xaQkwiRbjCLCBeasq-afrcYm62rsImkoi9vidYpVq-mO3uqD52fvxEvxSy3s_RhicU4C7xpZQZbT_Ad1j4DjTfLPq1f5TbuQfpzqkNQ7qmkTEWoWYZjhwsao0N-Y7-P453oOaZt7kb3XDwzxO0gzh3vpG_iokZCdzrg3E3XaShK4V53jDLMqdKMPMogYCKQQLh58lz28FHVCD3llWmjirNN_0FmE6-P8gIkQj1W-vc39HRqvwq-7GZRU7mZqP';
+    // Draw base map
+    drawImage(ctx, baseMap, canvas.width, canvas.height, 0.5);
+
+    // Process PTAL data if available
+    if (ptalResponse?.features?.length > 0) {
+      console.log(`Drawing ${ptalResponse.features.length} PTAL features...`);
+      ptalFeatures = ptalResponse.features;
+
+      // Store the features in the feature object for scoring
+      if (feature.properties) {
+        feature.properties.ptalValues = ptalFeatures.map(f => f.properties.ptal);
+      } else {
+        feature.properties = { ptalValues: ptalFeatures.map(f => f.properties.ptal) };
+      }
 
       // Color mapping for PTAL values
       const ptalColors = {
@@ -2447,52 +2469,18 @@ export async function capturePTALMap(feature, developableArea = null) {
         '6 - Very High': '#1d960480'
       };
 
-      // Get the PTAL features
-      const { bbox } = calculateMercatorParams(centerX, centerY, size);
-      const params = new URLSearchParams({
-        where: '1=1',
-        geometry: bbox,
-        geometryType: 'esriGeometryEnvelope',
-        inSR: 3857,
-        spatialRel: 'esriSpatialRelIntersects',
-        outFields: '*',
-        returnGeometry: true,
-        f: 'geojson',
-        token
-      });
+      ptalFeatures.forEach((ptalFeature, index) => {
+        console.log(`Drawing PTAL feature ${index + 1}...`);
+        const ptalValue = ptalFeature.properties.ptal;
+        const color = ptalColors[ptalValue] || '#808080';
 
-      const url = `${ptalConfig.baseUrl}/query?${params.toString()}`;
-      console.log('PTAL request URL:', url.replace(token, 'REDACTED'));
-      
-      const ptalResponse = await proxyRequest(url);
-      console.log('PTAL response:', ptalResponse);
-      
-      if (ptalResponse?.features?.length > 0) {
-        console.log(`Drawing ${ptalResponse.features.length} PTAL features...`);
-        ptalFeatures = ptalResponse.features;
-
-        // Store the features in the feature object for scoring
-        if (feature.properties) {
-          feature.properties.ptalValues = ptalFeatures.map(f => f.properties.ptal);
-        } else {
-          feature.properties = { ptalValues: ptalFeatures.map(f => f.properties.ptal) };
-        }
-
-        ptalFeatures.forEach((ptalFeature, index) => {
-          console.log(`Drawing PTAL feature ${index + 1}...`);
-          const ptalValue = ptalFeature.properties.ptal;
-          const color = ptalColors[ptalValue] || '#808080'; // Default gray if value not found
-
-          drawBoundary(ctx, ptalFeature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-            fill: true,
-            strokeStyle: '#000000',
-            fillStyle: color,
-            lineWidth: 2
-          });
+        drawBoundary(ctx, ptalFeature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+          fill: true,
+          strokeStyle: '#000000',
+          fillStyle: color,
+          lineWidth: 2
         });
-      }
-    } catch (error) {
-      console.warn('Failed to load PTAL layer:', error);
+      });
     }
 
     // Draw boundaries

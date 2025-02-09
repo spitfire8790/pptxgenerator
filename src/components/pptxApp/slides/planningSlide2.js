@@ -186,6 +186,11 @@ const styles = {
 
 export async function addPlanningSlide2(pptx, properties) {
   const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
+  let scores = {
+    sepp: 0,
+    biodiversity: 0,
+    aboriginalCulturalHeritage: 0
+  };
 
   try {
     // Add title
@@ -580,7 +585,19 @@ export async function addPlanningSlide2(pptx, properties) {
         wrap: true
       }));
 
-      return slide;
+      // Calculate SEPP score
+      const seppResult = scoringCriteria.sepp.calculateScore(properties.seppData || null);
+      scores.sepp = seppResult.score;
+
+      // Calculate biodiversity score
+      const biodiversityResult = scoringCriteria.biodiversity.calculateScore(properties.biodiversityData || null);
+      scores.biodiversity = biodiversityResult.score;
+
+      // Calculate aboriginal cultural heritage score
+      const aboriginalHeritageResult = scoringCriteria.aboriginalCulturalHeritage.calculateScore(properties.aboriginalHeritageData || null);
+      scores.aboriginalCulturalHeritage = aboriginalHeritageResult.score;
+
+      return { slide, scores };
     } catch (error) {
       console.error('Error generating planning slide 2:', error);
       slide.addText('Error generating planning slide 2: ' + error.message, {
@@ -592,6 +609,6 @@ export async function addPlanningSlide2(pptx, properties) {
         color: 'FF0000',
         align: 'center'
       });
-      return slide;
+      return { slide, scores };
     }
   }

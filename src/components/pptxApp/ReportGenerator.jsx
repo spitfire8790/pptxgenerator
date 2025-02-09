@@ -56,12 +56,15 @@ import {
   Leaf,
   Skull,
   LineChart,
-  Trophy
+  Trophy,
+  Loader2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import './Timer.css';
 import Leaderboard from './Leaderboard';
 import { recordReportGeneration } from './utils/stats/reportStats';
+import './GenerationLog.css';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const slideOptions = [
   { id: 'cover', label: 'Cover Page', addSlide: addCoverSlide, icon: Home },
@@ -222,6 +225,8 @@ const ReportGenerator = ({ selectedFeature }) => {
   const [showConfetti, setShowConfetti] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [generationStartTime, setGenerationStartTime] = useState(null);
+  const [generationLogs, setGenerationLogs] = useState([]);
+  const logCounterRef = useRef(0);
 
   useEffect(() => {
     if (selectedFeature) {
@@ -242,6 +247,17 @@ const ReportGenerator = ({ selectedFeature }) => {
     fetchClaims();
   }, []);
 
+  const addLog = (message, type = 'default') => {
+    const timestamp = new Date().toLocaleTimeString();
+    logCounterRef.current += 1;
+    setGenerationLogs(prev => [...prev, {
+      id: `${logCounterRef.current}-${Date.now()}`,
+      message,
+      type,
+      timestamp
+    }]);
+  };
+
   const generatePropertyReport = async () => {
     if (!selectedFeature) return;
     
@@ -251,6 +267,8 @@ const ReportGenerator = ({ selectedFeature }) => {
     setCompletedSteps([]);
     setFailedScreenshots([]);
     setGenerationStartTime(Date.now());
+    setGenerationLogs([]);
+    logCounterRef.current = 0; // Reset counter when starting new generation
     
     // Clear the service cache at the start of report generation
     clearServiceCache();
@@ -259,23 +277,31 @@ const ReportGenerator = ({ selectedFeature }) => {
       const screenshots = {};
       const failed = [];
       
+      addLog('Starting report generation...', 'default');
+      
       // Only capture screenshots for selected slides
       if (selectedSlides.cover) {
+        addLog('Capturing cover screenshot...', 'image');
         try {
           screenshots.coverScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.COVER);
+          addLog('Cover screenshot captured successfully', 'success');
         } catch (error) {
           console.error('Failed to capture cover screenshot:', error);
           failed.push('coverScreenshot');
+          addLog('Failed to capture cover screenshot', 'error');
         }
       }
       
       if (selectedSlides.snapshot) {
+        addLog('Capturing aerial and snapshot images...', 'image');
         try {
           screenshots.aerialScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.AERIAL);
           screenshots.snapshotScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.SNAPSHOT);
+          addLog('Aerial and snapshot images captured successfully', 'success');
         } catch (error) {
           console.error('Failed to capture snapshot screenshots:', error);
           failed.push('aerialScreenshot', 'snapshotScreenshot');
+          addLog('Failed to capture aerial/snapshot images', 'error');
         }
       }
       
@@ -516,6 +542,11 @@ const ReportGenerator = ({ selectedFeature }) => {
     triggerConfetti();
   };
 
+  // Add this helper to get the latest log
+  const getLatestLog = (logs) => {
+    return logs[logs.length - 1] || null;
+  };
+
   return (
     <div className="h-full overflow-auto">
       <div className="p-4">
@@ -594,7 +625,7 @@ const ReportGenerator = ({ selectedFeature }) => {
                   <div 
                     key={option.id} 
                     className={`
-                      slide-card relative p-4 rounded-lg border-2 transition-all duration-200
+                      slide-card relative p-2.5 rounded-lg border-2 transition-all duration-200
                       ${isGenerating && !selectedSlides[option.id] ? 'opacity-50' : ''}
                       ${isCompleted ? 'slide-card-completed border-green-200 bg-green-50' : 'border-gray-200 hover:border-blue-400'}
                       ${isActive ? 'slide-card-active border-blue-400 shadow-lg' : ''}
@@ -609,10 +640,10 @@ const ReportGenerator = ({ selectedFeature }) => {
                       }
                     }}
                   >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className={`slide-icon p-2 rounded-lg ${isCompleted ? 'bg-green-100' : 'bg-gray-100'}`}>
+                    <div className="flex items-start justify-between mb-1.5">
+                      <div className={`slide-icon p-1.5 rounded-lg ${isCompleted ? 'bg-green-100' : 'bg-gray-100'}`}>
                         <Icon 
-                          className={`w-6 h-6 ${isCompleted ? 'text-green-600' : 'text-gray-600'}`} 
+                          className={`w-4 h-4 ${isCompleted ? 'text-green-600' : 'text-gray-600'}`} 
                           strokeWidth={1.5} 
                         />
                       </div>
@@ -622,28 +653,28 @@ const ReportGenerator = ({ selectedFeature }) => {
                         checked={selectedSlides[option.id]}
                         onChange={(e) => e.stopPropagation()}
                         disabled={isGenerating}
-                        className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                        className="w-3.5 h-3.5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                       />
                     </div>
                     
-                    <h3 className="font-medium text-gray-900 mb-2">{option.label}</h3>
+                    <h3 className="font-medium text-sm text-gray-900">{option.label}</h3>
                     
                     {isGenerating && selectedSlides[option.id] && (
-                      <div className="mt-2">
+                      <div className="mt-1">
                         {isCompleted ? (
-                          <div className="flex items-center text-green-600 text-sm">
-                            <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                          <div className="flex items-center text-green-600 text-xs">
+                            <svg className="w-3 h-3 mr-0.5" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                             </svg>
                             Complete
                           </div>
                         ) : isActive ? (
-                          <div className="flex items-center space-x-2 text-sm text-blue-500">
-                            <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                          <div className="flex items-center space-x-1.5 text-xs text-blue-500">
+                            <div className="w-2.5 h-2.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
                             <span className="truncate">{getStepDescription(option.id)}</span>
                           </div>
                         ) : (
-                          <div className="text-sm text-gray-400">Pending</div>
+                          <div className="text-xs text-gray-400">Pending</div>
                         )}
                       </div>
                     )}
@@ -660,20 +691,48 @@ const ReportGenerator = ({ selectedFeature }) => {
             </div>
 
             <div className="flex gap-4">
-              <button
-                onClick={generatePropertyReport}
-                disabled={!selectedFeature || isGenerating}
-                className={`${isGenerating ? 'w-3/4' : 'w-full'} px-4 py-2 rounded text-white font-medium
-                  ${!selectedFeature || isGenerating 
-                    ? 'bg-gray-400' 
-                    : 'bg-blue-600 hover:bg-blue-700'
-                  } transition-all`}
+              <motion.div
+                className={`${isGenerating ? 'w-3/4' : 'w-full'}`}
+                layout
               >
-                {isGenerating ? 'Generating Report...' : 'Generate Report'}
-              </button>
+                <motion.button
+                  onClick={generatePropertyReport}
+                  disabled={!selectedFeature || isGenerating}
+                  className={`w-full px-4 py-3 rounded text-white font-medium relative overflow-hidden
+                    ${!selectedFeature || isGenerating 
+                      ? 'bg-gray-400' 
+                      : 'bg-blue-600 hover:bg-blue-700'
+                    } transition-all`}
+                >
+                  {isGenerating ? (
+                    <motion.div 
+                      className="flex items-center justify-center gap-3"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                    >
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <AnimatePresence mode="wait">
+                        <motion.span
+                          key={getLatestLog(generationLogs)?.id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          className="text-sm"
+                        >
+                          {getLatestLog(generationLogs)?.message || 'Initializing...'}
+                        </motion.span>
+                      </AnimatePresence>
+                    </motion.div>
+                  ) : (
+                    'Generate Report'
+                  )}
+                </motion.button>
+              </motion.div>
 
               {isGenerating && (
-                <button
+                <motion.button
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
                   onClick={handleCancelGeneration}
                   disabled={isCancelling}
                   className="w-1/4 px-4 py-2 rounded text-white font-medium bg-red-600 hover:bg-red-700 flex items-center justify-center gap-2 transition-colors"
@@ -682,7 +741,7 @@ const ReportGenerator = ({ selectedFeature }) => {
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                   </svg>
                   Cancel
-                </button>
+                </motion.button>
               )}
             </div>
 

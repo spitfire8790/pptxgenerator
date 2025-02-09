@@ -125,6 +125,10 @@ const styles = {
 
 export async function addHazardsSlide(pptx, properties) {
   const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
+  let scores = {
+    flood: 0,
+    bushfire: 0
+  };
 
   try {
     // Add title
@@ -220,13 +224,13 @@ export async function addHazardsSlide(pptx, properties) {
       }
     } else {
       console.warn('No flood map screenshot available');
-      slide.addText('Flood risk map unavailable', convertCmValues({
+      slide.addText('No flood risk identified in this area', convertCmValues({
         x: '5%',
         y: '24%',
         w: '40%',
         h: '50%',
         fontSize: 12,
-        color: 'FF0000',
+        color: '363636',
         align: 'center',
         valign: 'middle'
       }));
@@ -243,29 +247,36 @@ export async function addHazardsSlide(pptx, properties) {
         console.log('Developable area geometry:', JSON.stringify(properties.developableArea[0].geometry));
         console.log(`Processing ${properties.site_suitability__floodFeatures.features.length} flood features...`);
         
-        properties.site_suitability__floodFeatures.features.forEach((feature, index) => {
-          console.log(`\nFlood Feature ${index + 1}:`);
-          console.log('Type:', feature.geometry.type);
-          if (feature.geometry.type === 'MultiPolygon') {
-            console.log('Number of polygons:', feature.geometry.coordinates.length);
-            feature.geometry.coordinates.forEach((polygon, pIndex) => {
-              console.log(`  Polygon ${pIndex + 1} coordinates:`, JSON.stringify(polygon[0].slice(0, 3) + '...'));
-            });
-          } else {
-            console.log('Coordinates:', JSON.stringify(feature.geometry.coordinates[0].slice(0, 3) + '...'));
-          }
-        });
+        if (!properties.site_suitability__floodFeatures.features || properties.site_suitability__floodFeatures.features.length === 0) {
+          floodScore = 3;
+          scores.flood = 3;
+          floodText = 'No flood risk identified in this area. The site is not affected by flooding according to available data.';
+        } else {
+          properties.site_suitability__floodFeatures.features.forEach((feature, index) => {
+            console.log(`\nFlood Feature ${index + 1}:`);
+            console.log('Type:', feature.geometry.type);
+            if (feature.geometry.type === 'MultiPolygon') {
+              console.log('Number of polygons:', feature.geometry.coordinates.length);
+              feature.geometry.coordinates.forEach((polygon, pIndex) => {
+                console.log(`  Polygon ${pIndex + 1} coordinates:`, JSON.stringify(polygon[0].slice(0, 3) + '...'));
+              });
+            } else {
+              console.log('Coordinates:', JSON.stringify(feature.geometry.coordinates[0].slice(0, 3) + '...'));
+            }
+          });
 
-        const result = scoringCriteria.flood.calculateScore(properties.site_suitability__floodFeatures, properties.developableArea);
-        console.log('\nScore Calculation Result:');
-        console.log('- Score:', result.score);
-        console.log('- Distance to nearest flood:', result.minDistance ? `${result.minDistance.toFixed(2)}m` : 'N/A');
-        console.log('- Intersects with flood:', result.minDistance === 0);
-        console.log('- Description:', scoringCriteria.flood.getScoreDescription(result));
-        console.log('=== End Flood Score Calculation ===\n');
-        
-        floodScore = result.score;
-        floodText = scoringCriteria.flood.getScoreDescription(result);
+          const result = scoringCriteria.flood.calculateScore(properties.site_suitability__floodFeatures, properties.developableArea);
+          console.log('\nScore Calculation Result:');
+          console.log('- Score:', result.score);
+          console.log('- Distance to nearest flood:', result.minDistance ? `${result.minDistance.toFixed(2)}m` : 'N/A');
+          console.log('- Intersects with flood:', result.minDistance === 0);
+          console.log('- Description:', scoringCriteria.flood.getScoreDescription(result));
+          console.log('=== End Flood Score Calculation ===\n');
+          
+          floodScore = result.score;
+          scores.flood = result.score;
+          floodText = scoringCriteria.flood.getScoreDescription(result);
+        }
       } catch (error) {
         console.error('Error calculating flood score:', error);
         console.error('Error details:', {
@@ -402,13 +413,13 @@ export async function addHazardsSlide(pptx, properties) {
       }
     } else {
       console.warn('No bushfire map screenshot available');
-      slide.addText('Bushfire risk map unavailable', convertCmValues({
+      slide.addText('No bushfire risk identified in this area', convertCmValues({
         x: '50%',
         y: '24%',
         w: '40%',
         h: '50%',
         fontSize: 12,
-        color: 'FF0000',
+        color: '363636',
         align: 'center',
         valign: 'middle'
       }));
@@ -424,16 +435,23 @@ export async function addHazardsSlide(pptx, properties) {
         console.log('Developable area geometry:', JSON.stringify(properties.developableArea[0].geometry));
         console.log(`Processing bushfire features...`);
         
-        const result = scoringCriteria.bushfire.calculateScore(properties.site_suitability__bushfireFeatures, properties.developableArea);
-        console.log('\nScore Calculation Result:');
-        console.log('- Score:', result.score);
-        console.log('- Distance to nearest bushfire area:', result.minDistance ? `${result.minDistance.toFixed(2)}m` : 'N/A');
-        console.log('- Intersects with bushfire area:', result.minDistance === 0);
-        console.log('- Description:', scoringCriteria.bushfire.getScoreDescription(result));
-        console.log('=== End Bushfire Score Calculation ===\n');
-        
-        bushfireScore = result.score;
-        bushfireText = scoringCriteria.bushfire.getScoreDescription(result);
+        if (!properties.site_suitability__bushfireFeatures.features || properties.site_suitability__bushfireFeatures.features.length === 0) {
+          bushfireScore = 3;
+          scores.bushfire = 3;
+          bushfireText = 'No bushfire risk identified in this area. The site is not within or near bushfire prone land.';
+        } else {
+          const result = scoringCriteria.bushfire.calculateScore(properties.site_suitability__bushfireFeatures, properties.developableArea);
+          console.log('\nScore Calculation Result:');
+          console.log('- Score:', result.score);
+          console.log('- Distance to nearest bushfire area:', result.minDistance ? `${result.minDistance.toFixed(2)}m` : 'N/A');
+          console.log('- Intersects with bushfire area:', result.minDistance === 0);
+          console.log('- Description:', scoringCriteria.bushfire.getScoreDescription(result));
+          console.log('=== End Bushfire Score Calculation ===\n');
+          
+          bushfireScore = result.score;
+          scores.bushfire = result.score;
+          bushfireText = scoringCriteria.bushfire.getScoreDescription(result);
+        }
       } catch (error) {
         console.error('Error calculating bushfire score:', error);
         console.error('Error details:', {
@@ -511,7 +529,7 @@ export async function addHazardsSlide(pptx, properties) {
       wrap: true
     }));
 
-    return slide;
+    return { slide, scores };
   } catch (error) {
     console.error('Error generating hazards slide:', error);
     slide.addText('Error generating hazards slide: ' + error.message, {
@@ -523,6 +541,6 @@ export async function addHazardsSlide(pptx, properties) {
       color: 'FF0000',
       align: 'center'
     });
-    return slide;
+    return { slide, scores };
   }
 } 

@@ -300,9 +300,13 @@ const styles = {
 };
 
 export async function addPlanningSlide(pptx, properties) {
-  // Create slide first
   const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
-  
+  let scores = {
+    zoning: 0,
+    heritage: 0,
+    acidSulfateSoils: 0
+  };
+
   try {
     // Get developable area data if it exists
     let developableAreaZones = [];
@@ -324,6 +328,22 @@ export async function addPlanningSlide(pptx, properties) {
         console.error('Error getting developable area data:', error);
       }
     }
+
+    // Calculate zoning score
+    const zoningResult = scoringCriteria.planning.calculateScore(
+      properties.zones || [],
+      properties.fsr || 0,
+      properties.hob || 0
+    );
+    scores.zoning = zoningResult.score;
+
+    // Calculate heritage score
+    const heritageResult = scoringCriteria.heritage.calculateScore(properties.heritageData || null);
+    scores.heritage = heritageResult.score;
+
+    // Calculate acid sulfate soils score
+    const soilsResult = scoringCriteria.acidSulfateSoils.calculateScore(properties.soilsData || null);
+    scores.acidSulfateSoils = soilsResult.score;
 
     // Add inside the try block after getting developable area data
     const planningScore = scoringCriteria.planning.calculateScore(
@@ -681,23 +701,19 @@ export async function addPlanningSlide(pptx, properties) {
       slide.addText('5', convertCmValues(styles.pageNumber));
 
     console.log('Slide generation completed successfully');
-    return slide;
+    return { slide, scores };
 
   } catch (error) {
     console.error('Error generating planning slide:', error);
-    try {
-      slide.addText('Error generating planning slide: ' + error.message, {
-        x: '10%',
-        y: '45%',
-        w: '80%',
-        h: '10%',
-        fontSize: 14,
-        color: 'FF0000',
-        align: 'center'
-      });
-    } catch (finalError) {
-      console.error('Failed to add error message to slide:', finalError);
-    }
-    return slide;
+    slide.addText('Error generating planning slide: ' + error.message, {
+      x: '10%',
+      y: '45%',
+      w: '80%',
+      h: '10%',
+      fontSize: 14,
+      color: 'FF0000',
+      align: 'center'
+    });
+    return { slide, scores };
   }
 }

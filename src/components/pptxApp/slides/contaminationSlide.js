@@ -159,6 +159,10 @@ const styles = {
 
 export async function addContaminationSlide(pptx, properties) {
   const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
+  let scores = {
+    contamination: 0,
+    siteRemediation: 3  // Default score as per scoring slide
+  };
 
   try {
     // Add title
@@ -276,6 +280,7 @@ export async function addContaminationSlide(pptx, properties) {
         properties.developableArea
       );
       contaminationScore = scoreResult.score;
+      scores.contamination = scoreResult.score;
       contaminationText = scoringCriteria.contamination.getScoreDescription(scoreResult);
           
       // Add additional contamination information if contamination is found
@@ -507,7 +512,7 @@ export async function addContaminationSlide(pptx, properties) {
       wrap: true
     }));
 
-    return slide;
+    return { slide, scores };
   } catch (error) {
     console.error('Error generating contamination slide:', error);
     slide.addText('Error generating contamination slide: ' + error.message, {
@@ -519,6 +524,6 @@ export async function addContaminationSlide(pptx, properties) {
       color: 'FF0000',
       align: 'center'
     });
-    return slide;
+    return { slide, scores };
   }
 }

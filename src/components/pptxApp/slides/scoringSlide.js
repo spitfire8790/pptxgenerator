@@ -73,11 +73,12 @@ const styles = {
   }
 };
 
-export async function createScoringSlide(pres, feature, developableArea) {
+export async function createScoringSlide(pres, feature, developableArea, slideScores = {}) {
   console.log('Creating scoring slide with feature:', {
     feature,
     address: feature?.site__address,
-    allProperties: feature
+    allProperties: feature,
+    importedScores: slideScores
   });
 
   const slide = pres.addSlide({ masterName: 'NSW_MASTER' });
@@ -166,7 +167,7 @@ export async function createScoringSlide(pres, feature, developableArea) {
       };
     };
 
-    // Calculate scores with default values if data is missing
+    // Calculate scores with imported values
     const scores = {
       developableArea: getScoreValue(scoringCriteria.developableArea.calculateScore(feature?.properties?.developableAreaSize || 0)),
       contours: getScoreValue(scoringCriteria.contours.calculateScore(feature?.properties?.elevationChange || 0)),
@@ -183,8 +184,9 @@ export async function createScoringSlide(pres, feature, developableArea) {
       udpPrecincts: getScoreValue(scoringCriteria.udpPrecincts.calculateScore(feature?.properties?.udpPrecincts || [], developableArea || null)),
       ptal: getScoreValue(scoringCriteria.ptal.calculateScore(feature?.properties?.ptalValues || [])),
       geoscape: getScoreValue(scoringCriteria.geoscape.calculateScore(feature?.properties?.geoscapeFeatures || [], developableArea || null)),
-      flood: getScoreValue(scoringCriteria.flood.calculateScore(feature?.properties?.site_suitability__floodFeatures || null, developableArea || null)),
-      bushfire: getScoreValue(scoringCriteria.bushfire.calculateScore(feature?.properties?.site_suitability__bushfireFeatures || null, developableArea || null)),
+      // Use imported scores from hazards slide
+      flood: slideScores.hazards?.flood || 0,
+      bushfire: slideScores.hazards?.bushfire || 0,
       contamination: getScoreValue(scoringCriteria.contamination.calculateScore(feature?.properties?.site_suitability__contaminationFeatures || null, developableArea || null)),
       siteRemediation: 3,
       tec: getScoreValue(scoringCriteria.tec.calculateScore(feature?.properties?.tecFeatures || [], developableArea || null))

@@ -95,6 +95,17 @@ export async function addAccessSlide(pptx, propertyData) {
     const udpScoreResult = scoringCriteria.udpPrecincts.calculateScore(propertyData.udpPrecincts, propertyData.developableArea);
     const udpDescription = scoringCriteria.udpPrecincts.getScoreDescription(udpScoreResult);
 
+    const ptalScoreResult = scoringCriteria.ptal.calculateScore(
+      propertyData.intersectingPtalValues || []
+    );
+
+    // Create scores object
+    const scores = {
+      roads: roadsScoreResult.score,
+      udpPrecincts: udpScoreResult.score,
+      ptal: ptalScoreResult
+    };
+
     // Create slide
     const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
 
@@ -391,12 +402,9 @@ export async function addAccessSlide(pptx, propertyData) {
     }
 
     // PTAL description box
-    const ptalScoreResult = scoringCriteria.ptal.calculateScore(
-      propertyData.intersectingPtalValues || propertyData.ptalValues
-    );
     const ptalDescription = scoringCriteria.ptal.getScoreDescription(
       ptalScoreResult,
-      propertyData.intersectingPtalValues || propertyData.ptalValues
+      propertyData.intersectingPtalValues || []
     );
 
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
@@ -474,7 +482,7 @@ export async function addAccessSlide(pptx, propertyData) {
     slide.addText('Property and Development NSW', convertCmValues(styles.footer));
     slide.addText('8', convertCmValues(styles.pageNumber));
 
-    return slide;
+    return { slide, scores };
   } catch (error) {
     console.error('Error adding access slide:', error);
     try {
@@ -488,10 +496,10 @@ export async function addAccessSlide(pptx, propertyData) {
         color: 'FF0000',
         align: 'center'
       });
-      return errorSlide;
+      return { slide: errorSlide, scores: { roads: 0, udpPrecincts: 0, ptal: 0 } };
     } catch (slideError) {
       console.error('Failed to add error message to slide:', slideError);
-      throw error; // Re-throw the original error
+      throw error;
     }
   }
 }

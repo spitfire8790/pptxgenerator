@@ -115,6 +115,11 @@ const styles = {
 
 export async function addEnviroSlide(pptx, properties) {
   const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
+  let scores = {
+    vegetation: 0,
+    wetlands: 0,
+    coastalManagement: 0
+  };
 
   try {
     // Add title
@@ -782,7 +787,19 @@ export async function addEnviroSlide(pptx, properties) {
       wrap: true
     }));
 
-    return slide;
+    // Calculate vegetation score
+    const vegetationResult = scoringCriteria.vegetation.calculateScore(properties.vegetationData || null);
+    scores.vegetation = vegetationResult.score;
+
+    // Calculate wetlands score
+    const wetlandsResult = scoringCriteria.wetlands.calculateScore(properties.wetlandsData || null);
+    scores.wetlands = wetlandsResult.score;
+
+    // Calculate coastal management score
+    const coastalResult = scoringCriteria.coastalManagement.calculateScore(properties.coastalData || null);
+    scores.coastalManagement = coastalResult.score;
+
+    return { slide, scores };
   } catch (error) {
     console.error('Error generating environmental slide:', error);
     slide.addText('Error generating environmental slide: ' + error.message, {
@@ -794,6 +811,6 @@ export async function addEnviroSlide(pptx, properties) {
       color: 'FF0000',
       align: 'center'
     });
-    return slide;
+    return { slide, scores };
   }
 }
