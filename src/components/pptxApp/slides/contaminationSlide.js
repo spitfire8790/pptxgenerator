@@ -159,10 +159,6 @@ const styles = {
 
 export async function addContaminationSlide(pptx, properties) {
   const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
-  let scores = {
-    contamination: 0,
-    siteRemediation: 3  // Default score as per scoring slide
-  };
 
   try {
     // Add title
@@ -280,7 +276,6 @@ export async function addContaminationSlide(pptx, properties) {
         properties.developableArea
       );
       contaminationScore = scoreResult.score;
-      scores.contamination = scoreResult.score;
       contaminationText = scoringCriteria.contamination.getScoreDescription(scoreResult);
           
       // Add additional contamination information if contamination is found
@@ -303,6 +298,9 @@ export async function addContaminationSlide(pptx, properties) {
     contaminationScore = 3;
     contaminationText = scoringCriteria.contamination.getScoreDescription({ score: 3, minDistance: Infinity });
   }
+
+  // Store the contamination score
+  properties.scores.contamination = contaminationScore;
 
   // Update the box color based on score
   slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
@@ -489,6 +487,9 @@ export async function addContaminationSlide(pptx, properties) {
       align: 'right'
     }));
 
+    // Store the historical imagery score
+    properties.scores.historicalImagery = 3;
+
     // Add line
     slide.addShape(pptx.shapes.LINE, convertCmValues({
       x: '51%',
@@ -512,7 +513,7 @@ export async function addContaminationSlide(pptx, properties) {
       wrap: true
     }));
 
-    return { slide, scores };
+    return slide;
   } catch (error) {
     console.error('Error generating contamination slide:', error);
     slide.addText('Error generating contamination slide: ' + error.message, {
@@ -524,6 +525,6 @@ export async function addContaminationSlide(pptx, properties) {
       color: 'FF0000',
       align: 'center'
     });
-    return { slide, scores };
+    return slide;
   }
 }

@@ -186,11 +186,6 @@ const styles = {
 
 export async function addPlanningSlide2(pptx, properties) {
   const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
-  let scores = {
-    sepp: 0,
-    biodiversity: 0,
-    aboriginalCulturalHeritage: 0
-  };
 
   try {
     // Add title
@@ -360,6 +355,9 @@ export async function addPlanningSlide2(pptx, properties) {
         line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
       }));
 
+      // Store the heritage score in the properties object
+      properties.scores.heritage = heritageScore; 
+
       // Add description text
       slide.addText(heritageText, convertCmValues({
         x: '5%',
@@ -525,6 +523,9 @@ export async function addPlanningSlide2(pptx, properties) {
         }
       }
 
+      // Store the acid sulfate soils score in the properties object
+      properties.scores.acidSulfateSoils = acidSulfateSoilsScore;
+
       // Add description box
       slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
         x: '50%',
@@ -585,19 +586,7 @@ export async function addPlanningSlide2(pptx, properties) {
         wrap: true
       }));
 
-      // Calculate SEPP score
-      const seppResult = scoringCriteria.sepp.calculateScore(properties.seppData || null);
-      scores.sepp = seppResult.score;
-
-      // Calculate biodiversity score
-      const biodiversityResult = scoringCriteria.biodiversity.calculateScore(properties.biodiversityData || null);
-      scores.biodiversity = biodiversityResult.score;
-
-      // Calculate aboriginal cultural heritage score
-      const aboriginalHeritageResult = scoringCriteria.aboriginalCulturalHeritage.calculateScore(properties.aboriginalHeritageData || null);
-      scores.aboriginalCulturalHeritage = aboriginalHeritageResult.score;
-
-      return { slide, scores };
+      return slide;
     } catch (error) {
       console.error('Error generating planning slide 2:', error);
       slide.addText('Error generating planning slide 2: ' + error.message, {
@@ -609,6 +598,6 @@ export async function addPlanningSlide2(pptx, properties) {
         color: 'FF0000',
         align: 'center'
       });
-      return { slide, scores };
+      return slide;
     }
   }

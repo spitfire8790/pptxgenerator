@@ -320,11 +320,11 @@ const scoringCriteria = {
       
       switch (score) {
         case 3:
-          return `Site has good public transport access - High PTAL - ${ptalList}`;
+          return `Site has good public transport access: PTAL (8:00-9:00 AM) = ${ptalList}`;
         case 2:
-          return `Site has moderate public transport access - Medium PTAL - ${ptalList}`;
+          return `Site has moderate public transport access: PTAL (8:00-9:00 AM) = ${ptalList}`;
         case 1:
-          return `Site has low public transport access - Low PTAL - ${ptalList}`;
+          return `Site has low public transport access: PTAL (8:00-9:00 AM) = ${ptalList}`;
         default:
           return "PTAL not assessed";
       }

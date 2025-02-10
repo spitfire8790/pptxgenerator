@@ -64,7 +64,7 @@ const styles = {
   },
   developableAreaIcon: {
     x: '4%',
-    y: '22%',
+    y: '23%',
     w: '0.5',
     h: '0.5'
   },
@@ -221,14 +221,17 @@ const addLegend = (slide, pptx) => {
       style: { line: { color: '00FFFF', width: 1.5, dashType: 'dash' }, fill: 'FFFFFF' }
     },
     { 
-      symbol: 'line', 
+      symbol: 'twoParallelLines', 
       text: 'HV Powerlines',
-      style: { line: { color: '#E41A1C', width: 2 } }
+      style: { color: 'E41A1C', width: 1 }
     },
     { 
-      symbol: 'line', 
+      symbol: 'patternRectangle', 
       text: 'Easements',
-      style: { line: { color: 'FCC3EC', width: 2 } }
+      style: { 
+        fill: { type: 'pattern', pattern: 'diagonalStripe', foreColor: 'FCC3EC', backColor: 'FFFFFF' },
+        line: { color: 'FCC3EC', width: 1 }
+      }
     },
     { 
       symbol: 'rectangle', 
@@ -254,15 +257,31 @@ const addLegend = (slide, pptx) => {
         h: styles.legendItem.iconSize,
         ...item.style
       }));
-    } else if (item.symbol === 'line') {
-      const lineY = iconY + (styles.legendItem.iconSize / 2);
-      
+    } else if (item.symbol === 'patternRectangle') {
+      slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
+        x: `${parseFloat(styles.legendContainer.x) + styles.legendItem.containerPadding}%`,
+        y: `${iconY}%`,
+        w: styles.legendItem.iconSize,
+        h: styles.legendItem.iconSize,
+        ...item.style
+      }));
+    } else if (item.symbol === 'twoParallelLines') {
+      // First line (top)
       slide.addShape(pptx.shapes.LINE, convertCmValues({
         x: `${parseFloat(styles.legendContainer.x) + styles.legendItem.containerPadding}%`,
-        y: `${lineY}%`,
+        y: `${iconY + (styles.legendItem.iconSize * 0.2)}%`,
         w: styles.legendItem.iconSize,
         h: 0,
-        ...item.style
+        line: { color: item.style.color, width: item.style.width }
+      }));
+      
+      // Second line (bottom)
+      slide.addShape(pptx.shapes.LINE, convertCmValues({
+        x: `${parseFloat(styles.legendContainer.x) + styles.legendItem.containerPadding}%`,
+        y: `${iconY + (styles.legendItem.iconSize * 0.8)}%`,
+        w: styles.legendItem.iconSize,
+        h: 0,
+        line: { color: item.style.color, width: item.style.width }
       }));
     }
 
@@ -279,219 +298,188 @@ const addLegend = (slide, pptx) => {
 
 export async function addPrimarySiteAttributesSlide(pptx, properties) {
   const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
-  let scores = {
-    siteArea: 0,
-    developableArea: 0,
-    ownership: 0
-  };
 
-  try {
-    // Add title with line break
-    slide.addText([
-      { text: properties.site__address, options: { color: styles.title.color } },
-      { text: ' ', options: { breakLine: true } },
-      { text: 'Primary Site Attributes', options: { color: styles.subtitle.color } }
-    ], convertCmValues({
-      ...styles.title,
-      color: undefined
-    }));
-    
-    // Add horizontal line under title
-    slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.titleLine));
+  // Add title with line break
+  slide.addText([
+    { text: properties.site__address, options: { color: styles.title.color } },
+    { text: ' ', options: { breakLine: true } },
+    { text: 'Primary Site Attributes', options: { color: styles.subtitle.color } }
+  ], convertCmValues({
+    ...styles.title,
+    color: undefined
+  }));
+  
+  // Add horizontal line under title
+  slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.titleLine));
 
-    // Add header elements
-    slide.addText("SENSITIVE: NSW GOVERNMENT", convertCmValues(styles.sensitiveText));
+  // Add header elements
+  slide.addText("SENSITIVE: NSW GOVERNMENT", convertCmValues(styles.sensitiveText));
+  slide.addImage({
+    path: "/images/NSW-Government-official-logo.jpg",
+    ...convertCmValues(styles.nswLogo)
+  });
+
+  // Add developable area section with score-based color
+  const developableArea = properties.developableArea ? 
+    calculateDevelopableArea(properties.developableArea[0]?.geometry) : 0;
+  
+  // Calculate and store the score
+  properties.scores.developableArea = scoringCriteria.developableArea.calculateScore(developableArea);
+  const score = properties.scores.developableArea;
+
+  slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
+    ...styles.developableAreaBox,
+    fill: scoringCriteria.developableArea.getScoreColor(score).replace('#', '') // Remove # from hex color
+  }));
+
+  slide.addImage({
+    path: "/images/developable-area-icon.svg",
+    ...convertCmValues(styles.developableAreaIcon)
+  });
+
+  slide.addText([
+    { 
+      text: 'Developable Area ', 
+      options: { color: '002664', bold: true } 
+    },
+    { 
+      text: `is approx. ${developableArea.toLocaleString()} sqm.`,
+      options: { color: '363636' } 
+    },
+    {
+      text: `${score}/3 Points`,
+      options: { color: '363636', bold: true, align: 'right' }
+    },
+    { 
+      text: '\n\nNote: The developable area defined is indicative only for the purposes of desktop assessment. The exact developable area is subject to further due diligence.', 
+      options: { fontSize: 7, italic: true, color: '666666', lineSpacing: 10 } 
+    }
+  ], convertCmValues({
+    ...styles.developableAreaText,
+    lineSpacing: 14
+  }));
+
+  // Add attribute sections
+  const attributes = [
+    { 
+      title: 'Flood', 
+      value: properties.floodImpact || 'Please describe any area deducted or else \'Nil area deducted.\'', 
+      icon: icons.flood 
+    },
+    { 
+      title: 'Biodiversity', 
+      value: properties.biodiversityImpact || 'Please describe any area deducted or else \'Nil area deducted.\'', 
+      icon: icons.biodiversity 
+    },
+    { 
+      title: 'Physical Features', 
+      value: properties.physicalFeatures || 'Please describe any area deducted or else \'Nil area deducted.\'', 
+      icon: icons.physical 
+    },
+    { 
+      title: 'Exclusionary Zonings & Attributes', 
+      value: properties.zoningImpact || 'Please describe any area deducted or else \'Nil area deducted.\'', 
+      icon: icons.exclusionaryZoning 
+    },
+    { 
+      title: 'Major Infrastructure', 
+      value: properties.infrastructureImpact || 'Please describe any area deducted or else \'Nil area deducted.\'', 
+      icon: icons.infrastructure 
+    },
+    { 
+      title: 'Existing Built-Form', 
+      value: properties.builtForm || 'Please describe any area deducted or else \'Nil area deducted.\'', 
+      icon: icons.builtForm 
+    }
+  ];
+
+  attributes.forEach((attr, index) => {
+    // Add icon
     slide.addImage({
-      path: "/images/NSW-Government-official-logo.jpg",
-      ...convertCmValues(styles.nswLogo)
+      path: attr.icon,
+      ...convertCmValues({
+        x: '4%',
+        y: `${35 + (index * 9.5)}%`,
+        w: '0.5',
+        h: '0.5'
+      })
     });
 
-    // Add developable area section with score-based color
-    const developableArea = properties.developableArea ? 
-      calculateDevelopableArea(properties.developableArea[0]?.geometry) : 0;
-    const score = scoringCriteria.developableArea.calculateScore(developableArea);
-
+    // Add box
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
-      ...styles.developableAreaBox,
-      fill: scoringCriteria.developableArea.getScoreColor(score).replace('#', '') // Remove # from hex color
+      x: '9%',
+      y: `${34 + (index * 9.5)}%`,
+      w: '35%',
+      h: '8%',
+      fill: 'F0F6FF',
+      line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
     }));
 
-    slide.addImage({
-      path: "/images/developable-area-icon.svg",
-      ...convertCmValues(styles.developableAreaIcon)
-    });
-
+    // Add text with title and placeholder on separate lines
     slide.addText([
+      { text: attr.title, options: { bold: true, breakLine: true } },
       { 
-        text: 'Developable Area ', 
-        options: { color: '002664', bold: true } 
-      },
-      { 
-        text: `is approx. ${developableArea.toLocaleString()} sqm.`,
-        options: { color: '363636' } 
-      },
-      {
-        text: `${score}/3 Points`,
-        options: { color: '363636', bold: true, align: 'right' }
-      },
-      { 
-        text: '\n\nNote: The developable area defined is indicative only for the purposes of desktop assessment. The exact developable area is subject to further due diligence.', 
-        options: { fontSize: 7, italic: true, color: '666666', lineSpacing: 10 } 
+        text: attr.value, 
+        options: { 
+          italic: !properties[attr.key],
+          color: properties[attr.key] ? '363636' : '808080',
+          breakLine: true
+        } 
       }
     ], convertCmValues({
-      ...styles.developableAreaText,
+      x: '9%',
+      y: `${34 + (index * 9.5)}%`,
+      w: '34%',
+      h: '8%',
+      fontSize: 8,
+      fontFace: 'Public Sans',
       lineSpacing: 14
     }));
+  });
 
-    // Calculate site area score
-    const siteAreaResult = scoringCriteria.siteArea.calculateScore(properties.site__area || 0);
-    scores.siteArea = siteAreaResult.score;
+  // Add before the map section
+  console.log('Map screenshot data:', properties.compositeMapScreenshot ? 'Present' : 'Missing');
 
-    // Calculate developable area score
-    const developableAreaResult = scoringCriteria.developableArea.calculateScore(
-      properties.developableArea ? properties.developableArea[0]?.geometry : null,
-      properties.site__area || 0
-    );
-    scores.developableArea = developableAreaResult.score;
-
-    // Calculate ownership score
-    const ownershipResult = scoringCriteria.ownership.calculateScore(properties.ownership || null);
-    scores.ownership = ownershipResult.score;
-
-    // Add attribute sections
-    const attributes = [
-      { 
-        title: 'Flood', 
-        value: properties.floodImpact || 'Please describe any area deducted or else \'Nil area deducted.\'', 
-        icon: icons.flood 
-      },
-      { 
-        title: 'Biodiversity', 
-        value: properties.biodiversityImpact || 'Please describe any area deducted or else \'Nil area deducted.\'', 
-        icon: icons.biodiversity 
-      },
-      { 
-        title: 'Physical Features', 
-        value: properties.physicalFeatures || 'Please describe any area deducted or else \'Nil area deducted.\'', 
-        icon: icons.physical 
-      },
-      { 
-        title: 'Exclusionary Zonings & Attributes', 
-        value: properties.zoningImpact || 'Please describe any area deducted or else \'Nil area deducted.\'', 
-        icon: icons.exclusionaryZoning 
-      },
-      { 
-        title: 'Major Infrastructure', 
-        value: properties.infrastructureImpact || 'Please describe any area deducted or else \'Nil area deducted.\'', 
-        icon: icons.infrastructure 
-      },
-      { 
-        title: 'Existing Built-Form', 
-        value: properties.builtForm || 'Please describe any area deducted or else \'Nil area deducted.\'', 
-        icon: icons.builtForm 
-      }
-    ];
-
-    attributes.forEach((attr, index) => {
-      // Add icon
-      slide.addImage({
-        path: attr.icon,
-        ...convertCmValues({
-          x: '4%',
-          y: `${35 + (index * 9.5)}%`,
-          w: '0.5',
-          h: '0.5'
-        })
-      });
-
-      // Add box
+  // Update map section with error handling
+  if (properties.compositeMapScreenshot) {
+    try {
       slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
-        x: '9%',
-        y: `${34 + (index * 9.5)}%`,
-        w: '35%',
-        h: '8%',
-        fill: 'F0F6FF',
-        line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
+        x: '45%',
+        y: '20%',
+        w: '39%',
+        h: '70%',
+        fill: 'FFFFFF',
+        line: { color: '002664', width: 1.5 }
       }));
 
-      // Add text with title and placeholder on separate lines
-      slide.addText([
-        { text: attr.title, options: { bold: true, breakLine: true } },
-        { 
-          text: attr.value, 
-          options: { 
-            italic: !properties[attr.key],
-            color: properties[attr.key] ? '363636' : '808080',
-            breakLine: true
-          } 
-        }
-      ], convertCmValues({
-        x: '9%',
-        y: `${34 + (index * 9.5)}%`,
-        w: '34%',
-        h: '8%',
-        fontSize: 8,
-        fontFace: 'Public Sans',
-        lineSpacing: 14
-      }));
-    });
-
-    // Add before the map section
-    console.log('Map screenshot data:', properties.compositeMapScreenshot ? 'Present' : 'Missing');
-
-    // Update map section with error handling
-    if (properties.compositeMapScreenshot) {
-      try {
-        slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
+      slide.addImage({
+        data: properties.compositeMapScreenshot,
+        ...convertCmValues({
           x: '45%',
           y: '20%',
           w: '39%',
           h: '70%',
-          fill: 'FFFFFF',
-          line: { color: '002664', width: 1.5 }
-        }));
-
-        slide.addImage({
-          data: properties.compositeMapScreenshot,
-          ...convertCmValues({
-            x: '45%',
-            y: '20%',
-            w: '39%',
-            h: '70%',
-            sizing: {
-              type: 'contain',
-              align: 'center',
-              valign: 'middle'
-            }
-          })
-        });
-      } catch (error) {
-        console.error('Error adding map image:', error);
-      }
-    } else {
-      console.warn('No composite map screenshot available - check if capturePrimarySiteAttributesMap was called');
+          sizing: {
+            type: 'contain',
+            align: 'center',
+            valign: 'middle'
+          }
+        })
+      });
+    } catch (error) {
+      console.error('Error adding map image:', error);
     }
-
-    // Add map legend
-    addLegend(slide, pptx);
-
-    // Add footer elements
-    slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.footerLine));
-    slide.addText('Property and Development NSW', convertCmValues(styles.footer));
-    slide.addText('3', convertCmValues(styles.pageNumber));
-
-    return { slide, scores };
-  } catch (error) {
-    console.error('Error generating primary site attributes slide:', error);
-    slide.addText('Error generating primary site attributes slide: ' + error.message, {
-      x: '10%',
-      y: '45%',
-      w: '80%',
-      h: '10%',
-      fontSize: 14,
-      color: 'FF0000',
-      align: 'center'
-    });
-    return { slide, scores };
+  } else {
+    console.warn('No composite map screenshot available - check if capturePrimarySiteAttributesMap was called');
   }
+
+  // Add map legend
+  addLegend(slide, pptx);
+
+  // Add footer elements
+  slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.footerLine));
+  slide.addText('Property and Development NSW', convertCmValues(styles.footer));
+  slide.addText('3', convertCmValues(styles.pageNumber));
+
+  return slide;
 } 

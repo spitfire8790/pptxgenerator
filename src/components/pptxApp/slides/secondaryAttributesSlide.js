@@ -162,10 +162,6 @@ const styles = {
 
 export async function addSecondaryAttributesSlide(pptx, properties) {
   const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
-  let scores = {
-    contours: 0,
-    siteRegularity: 0
-  };
   
   try {
     // Add title
@@ -283,12 +279,10 @@ export async function addSecondaryAttributesSlide(pptx, properties) {
       if (elevationData === null) {
         // No contours found - site is flat
         contourScore = 3;
-        scores.contours = 3;
         elevationText = 'The developable area is flat with no change in elevation.';
       } else {
         elevationChange = elevationData.max - elevationData.min;
         contourScore = scoringCriteria.contours.calculateScore(elevationChange);
-        scores.contours = contourScore;
         elevationText = `The developable area has a minimum elevation of ${elevationData.min} metres, maximum elevation of ${elevationData.max} metres, and change in elevation of ${elevationChange} metres.`;
       }
     } else if (properties.site__geometry) {
@@ -300,15 +294,16 @@ export async function addSecondaryAttributesSlide(pptx, properties) {
       if (elevationData === null) {
         // No contours found - site is flat
         contourScore = 3;
-        scores.contours = 3;
         elevationText = 'The site is flat with no change in elevation.';
       } else {
         elevationChange = elevationData.max - elevationData.min;
         contourScore = scoringCriteria.contours.calculateScore(elevationChange);
-        scores.contours = contourScore;
         elevationText = `The site has a minimum elevation of ${elevationData.min} metres, maximum elevation of ${elevationData.max} metres, and change in elevation of ${elevationChange} metres.`;
       }
     }
+
+    // Store the contour score
+    properties.scores.contours = contourScore;
 
     // Update the box color based on score
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
@@ -465,7 +460,6 @@ export async function addSecondaryAttributesSlide(pptx, properties) {
         vertexCount: geometry.geometry.coordinates[0].length
       });
       regularityScore = scoringCriteria.siteRegularity.calculateScore(geometry);
-      scores.siteRegularity = regularityScore;
       regularityText = `The developable area is ${regularityScore === 3 ? 'highly regular' : regularityScore === 2 ? 'moderately regular' : 'irregular'} in shape.`;
     } else if (properties.site__geometry) {
       const geometry = {
@@ -476,9 +470,11 @@ export async function addSecondaryAttributesSlide(pptx, properties) {
         }
       };
       regularityScore = scoringCriteria.siteRegularity.calculateScore(geometry);
-      scores.siteRegularity = regularityScore;
       regularityText = `The site is ${regularityScore === 3 ? 'highly regular' : regularityScore === 2 ? 'moderately regular' : 'irregular'} in shape.`;
     }
+
+    // Store the regularity score
+    properties.scores.siteRegularity = regularityScore;
 
     // Add right description box with gap
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
@@ -540,7 +536,7 @@ export async function addSecondaryAttributesSlide(pptx, properties) {
       wrap: true
     }));
 
-    return { slide, scores };
+    return slide;
 
   } catch (error) {
     console.error('Error generating secondary attributes slide:', error);
@@ -553,6 +549,6 @@ export async function addSecondaryAttributesSlide(pptx, properties) {
       color: 'FF0000',
       align: 'center'
     });
-    return { slide, scores };
+    return slide;
   }
 } 

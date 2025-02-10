@@ -125,10 +125,6 @@ const styles = {
 
 export async function addHazardsSlide(pptx, properties) {
   const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
-  let scores = {
-    flood: 0,
-    bushfire: 0
-  };
 
   try {
     // Add title
@@ -237,20 +233,28 @@ export async function addHazardsSlide(pptx, properties) {
     }
 
     // Calculate flood score using the same flood features from primary site attributes
-    let floodScore = 0;
-    let floodText = 'Flood data unavailable.';
+    let floodScore = 3;  // Default to 3
+    let floodText = 'No flood risk identified in this area. The site is not affected by flooding according to available data.';
+
+    // Initialize scores object if it doesn't exist
+    if (!properties.scores) {
+      properties.scores = {};
+    }
+    
+    // Store the default score immediately
+    properties.scores.flood = floodScore;
 
     // Use the flood features that were already captured for the primary site attributes
     if (properties.developableArea && properties.site_suitability__floodFeatures) {
       try {
         console.log('=== Starting Flood Score Calculation ===');
         console.log('Developable area geometry:', JSON.stringify(properties.developableArea[0].geometry));
-        console.log(`Processing ${properties.site_suitability__floodFeatures.features.length} flood features...`);
+        console.log(`Processing ${properties.site_suitability__floodFeatures.features?.length || 0} flood features...`);
         
         if (!properties.site_suitability__floodFeatures.features || properties.site_suitability__floodFeatures.features.length === 0) {
-          floodScore = 3;
-          scores.flood = 3;
-          floodText = 'No flood risk identified in this area. The site is not affected by flooding according to available data.';
+          // Already defaulted to 3 above
+          // floodScore = 3;
+          // floodText already set above
         } else {
           properties.site_suitability__floodFeatures.features.forEach((feature, index) => {
             console.log(`\nFlood Feature ${index + 1}:`);
@@ -274,8 +278,9 @@ export async function addHazardsSlide(pptx, properties) {
           console.log('=== End Flood Score Calculation ===\n');
           
           floodScore = result.score;
-          scores.flood = result.score;
           floodText = scoringCriteria.flood.getScoreDescription(result);
+          // Update the score in properties
+          properties.scores.flood = floodScore;
         }
       } catch (error) {
         console.error('Error calculating flood score:', error);
@@ -292,6 +297,7 @@ export async function addHazardsSlide(pptx, properties) {
         developableArea: properties.developableArea ? 'exists' : 'missing',
         floodFeatures: properties.site_suitability__floodFeatures ? 'exists' : 'missing'
       });
+      // Score and text already defaulted to 3 and no risk message
     }
 
     // Update the box color based on score
@@ -426,8 +432,11 @@ export async function addHazardsSlide(pptx, properties) {
     }
 
     // Calculate bushfire score
-    let bushfireScore = 0;
-    let bushfireText = 'Bushfire data unavailable.';
+    let bushfireScore = 3;  // Default to 3
+    let bushfireText = 'No bushfire risk identified in this area. The site is not within or near bushfire prone land.';
+
+    // Store the default score
+    properties.scores.bushfire = bushfireScore;
 
     if (properties.developableArea && properties.site_suitability__bushfireFeatures) {
       try {
@@ -436,9 +445,9 @@ export async function addHazardsSlide(pptx, properties) {
         console.log(`Processing bushfire features...`);
         
         if (!properties.site_suitability__bushfireFeatures.features || properties.site_suitability__bushfireFeatures.features.length === 0) {
-          bushfireScore = 3;
-          scores.bushfire = 3;
-          bushfireText = 'No bushfire risk identified in this area. The site is not within or near bushfire prone land.';
+          // Already defaulted to 3 above
+          // bushfireScore = 3;
+          // bushfireText already set above
         } else {
           const result = scoringCriteria.bushfire.calculateScore(properties.site_suitability__bushfireFeatures, properties.developableArea);
           console.log('\nScore Calculation Result:');
@@ -449,8 +458,9 @@ export async function addHazardsSlide(pptx, properties) {
           console.log('=== End Bushfire Score Calculation ===\n');
           
           bushfireScore = result.score;
-          scores.bushfire = result.score;
           bushfireText = scoringCriteria.bushfire.getScoreDescription(result);
+          // Update the score in properties
+          properties.scores.bushfire = bushfireScore;
         }
       } catch (error) {
         console.error('Error calculating bushfire score:', error);
@@ -467,6 +477,7 @@ export async function addHazardsSlide(pptx, properties) {
         developableArea: properties.developableArea ? 'exists' : 'missing',
         bushfireFeatures: properties.site_suitability__bushfireFeatures ? 'exists' : 'missing'
       });
+      // Score and text already defaulted to 3 and no risk message
     }
 
     // Update the box color based on score
@@ -529,7 +540,7 @@ export async function addHazardsSlide(pptx, properties) {
       wrap: true
     }));
 
-    return { slide, scores };
+    return slide;
   } catch (error) {
     console.error('Error generating hazards slide:', error);
     slide.addText('Error generating hazards slide: ' + error.message, {
@@ -541,6 +552,6 @@ export async function addHazardsSlide(pptx, properties) {
       color: 'FF0000',
       align: 'center'
     });
-    return { slide, scores };
+    return slide;
   }
 } 

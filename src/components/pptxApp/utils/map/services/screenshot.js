@@ -9,6 +9,7 @@ import { loadImage } from '../utils/image';
 import { giraffeState } from '@gi-nx/iframe-sdk';
 import proj4 from 'proj4';
 import { getPTALToken } from './tokenService';
+import * as turf from '@turf/turf';
 
 
 console.log('Aerial config:', LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL]);
@@ -109,7 +110,7 @@ export async function capturePrimarySiteAttributesMap(feature, developableArea =
     try {
       // 1. Aerial imagery (base)
       const baseMap = await getWMSImage(LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL], centerX, centerY, size);
-      drawImage(ctx, baseMap, canvas.width, canvas.height, 1.0);
+      drawImage(ctx, baseMap, canvas.width, canvas.height, 0.7);
     } catch (error) {
       console.warn('Failed to load aerial layer:', error);
     }
@@ -117,7 +118,7 @@ export async function capturePrimarySiteAttributesMap(feature, developableArea =
     try {
       // 2. Zoning
       const zoningLayer = await getArcGISImage(LAYER_CONFIGS[SCREENSHOT_TYPES.ZONING], centerX, centerY, size);
-      drawImage(ctx, zoningLayer, canvas.width, canvas.height, 0.4);
+      drawImage(ctx, zoningLayer, canvas.width, canvas.height, 0.3);
     } catch (error) {
       console.warn('Failed to load zoning layer:', error);
     }
@@ -137,15 +138,16 @@ export async function capturePrimarySiteAttributesMap(feature, developableArea =
         transparent: 'true',
         size: `${easementsConfig.size},${easementsConfig.size}`,
         bbox: `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`,
-        bboxSR: 3857,  // Changed to Web Mercator since the service is in 3857
+        bboxSR: 4326,
         imageSR: 3857,
         layers: `show:${easementsConfig.layerId}`,
         dpi: 96
       });
 
-      // Direct request without proxy since it's a UAT environment
-      const easementsLayer = await loadImage(`${easementsConfig.url}/export?${params.toString()}`);
-      drawImage(ctx, easementsLayer, canvas.width, canvas.height, 0.7);
+      // Use proxy service to avoid CORS issues
+      const easementsUrl = await proxyRequest(`${easementsConfig.url}/export?${params.toString()}`);
+      const easementsLayer = await loadImage(easementsUrl);
+      drawImage(ctx, easementsLayer, canvas.width, canvas.height, 1);
     } catch (error) {
       console.warn('Failed to load easements layer:', error);
     }
@@ -2422,7 +2424,7 @@ export async function capturePTALMap(feature, developableArea = null) {
       baseUrl: 'https://portal.data.nsw.gov.au/arcgis/rest/services/Hosted/ptal_dec20_gdb__(1)/FeatureServer/0',
       layerId: 0
     };
-    const token = 'JaDx9X6_oaaXF1QR7-6WC98y0w35Aj4ChzPJMiWLZcwTVz378UEHqnNq02zYI84AQ5wICzpGQxS_X_j0fVcUEr4lrEGMv1_vCqCrrKnOTkg9Uts85WkzkhNktj6nKpXO9DeGv4KJnZR9FjHo9ml7Av-JMFn-0NOzY0zgAE_CKh3Jr38WOeCkhSP0D5v2VjuheajKI-ZJcSpqnuPMQnBRkiA9ieOyu9qcBhODmjGzCKPULP0qBlNIjg3Q_xxAbx9l';
+    const token = 'f9vx2REQQ7Dg4dOrOYNN5f1Qgn5T6KFieeALnG0mgqQyfSexB3RbegefMzlEeXfDOda9f2Qh2MA6Xhm9SDybZshjwFc4aZ9ZRMlQWInUIomS_G5YZj4WM4jT_VnuWSyQymchgIaO0yOfXwbIBNGLihSXfyawRy3sG60ujo9JnXc5dWcdT_GipAJm5NzBaoVeG957zfcnDLmRnDkm9nDgR7b22JFMPXlb-Li9g7iGBElIGn5eurvymbGKe_td2rk4';
     const ptalParams = new URLSearchParams({
       where: '1=1',
       geometry: bbox,
@@ -2452,11 +2454,30 @@ export async function capturePTALMap(feature, developableArea = null) {
       console.log(`Drawing ${ptalResponse.features.length} PTAL features...`);
       ptalFeatures = ptalResponse.features;
 
-      // Store the features in the feature object for scoring
+      // Create developable area polygon for intersection check if provided
+      let developablePolygon = null;
+      if (developableArea?.features?.[0]) {
+        developablePolygon = turf.polygon(developableArea.features[0].geometry.coordinates);
+      }
+
+      // Filter PTAL features to only those intersecting with developable area
+      const intersectingPtalFeatures = developablePolygon 
+        ? ptalFeatures.filter(ptalFeature => {
+            try {
+              const ptalPolygon = turf.polygon(ptalFeature.geometry.coordinates);
+              return turf.booleanIntersects(developablePolygon, ptalPolygon);
+            } catch (error) {
+              console.error('Error checking PTAL intersection:', error);
+              return false;
+            }
+          })
+        : ptalFeatures;
+
+      // Store only the intersecting features in the feature object for scoring
       if (feature.properties) {
-        feature.properties.ptalValues = ptalFeatures.map(f => f.properties.ptal);
+        feature.properties.ptalValues = intersectingPtalFeatures.map(f => f.properties.ptal_desc || f.properties.ptal);
       } else {
-        feature.properties = { ptalValues: ptalFeatures.map(f => f.properties.ptal) };
+        feature.properties = { ptalValues: intersectingPtalFeatures.map(f => f.properties.ptal_desc || f.properties.ptal) };
       }
 
       // Color mapping for PTAL values
@@ -2469,7 +2490,7 @@ export async function capturePTALMap(feature, developableArea = null) {
         '6 - Very High': '#1d960480'
       };
 
-      ptalFeatures.forEach((ptalFeature, index) => {
+      intersectingPtalFeatures.forEach((ptalFeature, index) => {
         console.log(`Drawing PTAL feature ${index + 1}...`);
         const ptalValue = ptalFeature.properties.ptal;
         const color = ptalColors[ptalValue] || '#808080';

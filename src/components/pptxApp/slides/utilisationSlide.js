@@ -128,11 +128,6 @@ const styles = {
 
 export async function addUtilisationSlide(pptx, properties) {
     const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
-    let scores = {
-        currentUse: 0,
-        leaseStatus: 0,
-        vacancyStatus: 0
-    };
 
     try {
         // Add title
@@ -292,6 +287,9 @@ export async function addUtilisationSlide(pptx, properties) {
                 valign: 'middle'
             }));
         }
+
+        // Store the geoscape score in the properties object
+        properties.scores.geoscape = geoscapeScore;
 
         // Right section - Street View
         slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
@@ -481,19 +479,8 @@ export async function addUtilisationSlide(pptx, properties) {
             wrap: true
         }));
 
-        // Calculate current use score
-        const currentUseResult = scoringCriteria.currentUse.calculateScore(properties.currentUse || null);
-        scores.currentUse = currentUseResult.score;
+        return slide;
 
-        // Calculate lease status score
-        const leaseStatusResult = scoringCriteria.leaseStatus.calculateScore(properties.leaseStatus || null);
-        scores.leaseStatus = leaseStatusResult.score;
-
-        // Calculate vacancy status score
-        const vacancyStatusResult = scoringCriteria.vacancyStatus.calculateScore(properties.vacancyStatus || null);
-        scores.vacancyStatus = vacancyStatusResult.score;
-
-        return { slide, scores };
     } catch (error) {
         console.error('Error generating utilisation slide:', error);
         slide.addText('Error generating utilisation slide: ' + error.message, {
@@ -505,6 +492,6 @@ export async function addUtilisationSlide(pptx, properties) {
             color: 'FF0000',
             align: 'center'
         });
-        return { slide, scores };
+        return slide;
     }
 }

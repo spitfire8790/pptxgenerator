@@ -4,13 +4,6 @@ import scoringCriteria from './scoringLogic';
 
 export async function addServicingSlide(pptx, propertyData) {
   let slide;
-  let scores = {
-    water: 0,
-    sewer: 0,
-    power: 0,
-    servicing: 0
-  };
-
   try {
     console.log('Starting to add servicing slide...');
     slide = pptx.addSlide();
@@ -169,27 +162,30 @@ export async function addServicingSlide(pptx, propertyData) {
     const powerResult = scoringCriteria.power.calculateScore(propertyData.powerFeatures, propertyData.developableArea);
 
     // Store scores
-    scores.water = waterResult.score;
-    scores.sewer = sewerResult.score;
-    scores.power = powerResult.score;
+    const waterScore = waterResult.score;
+    const sewerScore = sewerResult.score;
+    const powerScore = powerResult.score;
 
     // Calculate overall servicing score
-    scores.servicing = scoringCriteria.servicing.calculateScore(scores.water, scores.sewer, scores.power);
-    const scoreDescription = scoringCriteria.servicing.getScoreDescription(scores.water, scores.sewer, scores.power);
+    const servicingScore = scoringCriteria.servicing.calculateScore(waterScore, sewerScore, powerScore);
+    const scoreDescription = scoringCriteria.servicing.getScoreDescription(waterScore, sewerScore, powerScore);
 
     // Store scores in properties
     propertyData.scores = {
       ...propertyData.scores,
-      water: scores.water,
-      sewer: scores.sewer,
-      power: scores.power,
-      servicing: scores.servicing
+      water: waterScore,
+      sewer: sewerScore,
+      power: powerScore,
+      servicing: servicingScore
     };
 
+    // Store the servicing score in the properties object
+    propertyData.scores.servicing = servicingScore;
+
     // Update the text descriptions with distances
-    const waterDescription = scoringCriteria.water.getScoreDescription(scores.water, waterResult.minDistance);
-    const sewerDescription = scoringCriteria.sewer.getScoreDescription(scores.sewer, sewerResult.minDistance);
-    const powerDescription = scoringCriteria.power.getScoreDescription(scores.power, powerResult.minDistance);
+    const waterDescription = scoringCriteria.water.getScoreDescription(waterScore, waterResult.minDistance);
+    const sewerDescription = scoringCriteria.sewer.getScoreDescription(sewerScore, sewerResult.minDistance);
+    const powerDescription = scoringCriteria.power.getScoreDescription(powerScore, powerResult.minDistance);
 
     // Water Text Box
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
@@ -197,7 +193,7 @@ export async function addServicingSlide(pptx, propertyData) {
       y: '75%',
       w: '28%',
       h: '9%',
-      fill: scores.water === 1 ? 'E6F2DE' : 'FFE6EA',  // Light green if 1, light red if 0
+      fill: waterScore === 1 ? 'E6F2DE' : 'FFE6EA',  // Light green if 1, light red if 0
       line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
     }));
 
@@ -244,7 +240,7 @@ export async function addServicingSlide(pptx, propertyData) {
       y: '75%',
       w: '28%',
       h: '9%',
-      fill: scores.sewer === 1 ? 'E6F2DE' : 'FFE6EA',  // Light green if 1, light red if 0
+      fill: sewerScore === 1 ? 'E6F2DE' : 'FFE6EA',  // Light green if 1, light red if 0
       line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
     }));
 
@@ -291,7 +287,7 @@ export async function addServicingSlide(pptx, propertyData) {
       y: '75%',
       w: '28%',
       h: '9%',
-      fill: scores.power === 1 ? 'E6F2DE' : 'FFE6EA',  // Light green if 1, light red if 0
+      fill: powerScore === 1 ? 'E6F2DE' : 'FFE6EA',  // Light green if 1, light red if 0
       line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
     }));
 
@@ -335,13 +331,13 @@ export async function addServicingSlide(pptx, propertyData) {
     // Add score container with dynamic color based on score
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
       ...styles.scoreContainer,
-      fill: scoringCriteria.servicing.getScoreColor(scores.servicing)
+      fill: scoringCriteria.servicing.getScoreColor(servicingScore)
     }));
 
     // Add score text
     slide.addText([
       { text: 'Servicing Score: ', options: { bold: true } },
-      { text: `${scores.servicing}/3`, options: { bold: true } },
+      { text: `${servicingScore}/3`, options: { bold: true } },
       { text: ' - ' },
       { text: scoreDescription }
     ], convertCmValues(styles.scoreText));
@@ -353,9 +349,11 @@ export async function addServicingSlide(pptx, propertyData) {
     slide.addText('Property and Development NSW', convertCmValues(styles.footer));
     slide.addText('7', convertCmValues(styles.pageNumber));
 
-    return { slide, scores };
+    return slide;
+
   } catch (error) {
     console.error('Error generating servicing slide:', error);
+    // Create an error slide if we haven't created one yet
     if (!slide) {
       slide = pptx.addSlide();
       slide.addText('Error generating servicing slide: ' + error.message, {
@@ -368,7 +366,7 @@ export async function addServicingSlide(pptx, propertyData) {
         align: 'center'
       });
     }
-    return { slide, scores };
+    return slide;
   }
 }
 

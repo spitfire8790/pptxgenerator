@@ -7,6 +7,8 @@ import { addPlanningSlide2 } from './slides/planningSlide2';
 import { addServicingSlide } from './slides/servicingSlide';
 import { createScoringSlide } from './slides/scoringSlide';
 import { checkUserClaims } from './utils/auth/tokenUtils';
+import scoringCriteria from './slides/scoringLogic';
+import { area } from '@turf/area';
 import { 
   captureMapScreenshot, 
   capturePrimarySiteAttributesMap, 
@@ -115,6 +117,12 @@ const getStepDescription = (stepId) => {
     default:
       return 'Processing...';
   }
+};
+
+const calculateDevelopableArea = (geometry) => {
+  if (!geometry) return 0;
+  const areaInSqMeters = area(geometry);
+  return Math.round(areaInSqMeters);
 };
 
 const ScreenshotProgress = ({ screenshots, failedScreenshots }) => {
@@ -393,7 +401,7 @@ const ReportGenerator = ({ selectedFeature }) => {
         selectedSlides,
         site__geometry: selectedFeature.geometry.coordinates[0],
         developableArea: developableArea?.features || null,
-        scores: {},
+        scores: {}, // Initialize empty scores object that will be populated by each slide
         screenshot: screenshots.coverScreenshot,
         ...screenshots,
         // Include any features stored during screenshot capture

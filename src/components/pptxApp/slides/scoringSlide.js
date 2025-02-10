@@ -73,12 +73,10 @@ const styles = {
   }
 };
 
-export async function createScoringSlide(pres, feature, developableArea, slideScores = {}) {
-  console.log('Creating scoring slide with feature:', {
-    feature,
-    address: feature?.site__address,
-    allProperties: feature,
-    importedScores: slideScores
+export async function createScoringSlide(pres, propertyData) {
+  console.log('Creating scoring slide with propertyData:', {
+    address: propertyData?.site__address,
+    scores: propertyData?.scores
   });
 
   const slide = pres.addSlide({ masterName: 'NSW_MASTER' });
@@ -86,7 +84,7 @@ export async function createScoringSlide(pres, feature, developableArea, slideSc
   try {
     // Add title with fallback for missing address
     slide.addText([
-      { text: feature?.site__address || 'Address not available', options: { color: styles.title.color } },
+      { text: propertyData?.site__address || 'Address not available', options: { color: styles.title.color } },
       { text: ' ', options: { breakLine: true } },
       { text: 'Scoring', options: { color: styles.subtitle.color } }
     ], styles.title);
@@ -167,29 +165,24 @@ export async function createScoringSlide(pres, feature, developableArea, slideSc
       };
     };
 
-    // Calculate scores with imported values
+    // Calculate scores with default values if data is missing
     const scores = {
-      developableArea: getScoreValue(scoringCriteria.developableArea.calculateScore(feature?.properties?.developableAreaSize || 0)),
-      contours: getScoreValue(scoringCriteria.contours.calculateScore(feature?.properties?.elevationChange || 0)),
-      siteRegularity: getScoreValue(scoringCriteria.siteRegularity.calculateScore(feature || {})),
-      zoning: getScoreValue(scoringCriteria.planning.calculateScore(feature?.properties?.zones || [], feature?.properties?.fsr || 0, feature?.properties?.hob || 0)),
-      heritage: getScoreValue(scoringCriteria.heritage.calculateScore(feature?.properties?.heritageData || null)),
-      acidSulfateSoils: getScoreValue(scoringCriteria.acidSulfateSoils.calculateScore(feature?.properties?.soilsData || null)),
-      servicing: getScoreValue(scoringCriteria.servicing.calculateScore(
-        getScoreValue(scoringCriteria.water.calculateScore(feature?.properties?.waterFeatures || [], developableArea || null)),
-        getScoreValue(scoringCriteria.sewer.calculateScore(feature?.properties?.sewerFeatures || [], developableArea || null)),
-        getScoreValue(scoringCriteria.power.calculateScore(feature?.properties?.powerFeatures || [], developableArea || null))
-      )),
-      roads: getScoreValue(scoringCriteria.roads.calculateScore(feature?.properties?.roadFeatures || [], developableArea || null)),
-      udpPrecincts: getScoreValue(scoringCriteria.udpPrecincts.calculateScore(feature?.properties?.udpPrecincts || [], developableArea || null)),
-      ptal: getScoreValue(scoringCriteria.ptal.calculateScore(feature?.properties?.ptalValues || [])),
-      geoscape: getScoreValue(scoringCriteria.geoscape.calculateScore(feature?.properties?.geoscapeFeatures || [], developableArea || null)),
-      // Use imported scores from hazards slide
-      flood: slideScores.hazards?.flood || 0,
-      bushfire: slideScores.hazards?.bushfire || 0,
-      contamination: getScoreValue(scoringCriteria.contamination.calculateScore(feature?.properties?.site_suitability__contaminationFeatures || null, developableArea || null)),
-      siteRemediation: 3,
-      tec: getScoreValue(scoringCriteria.tec.calculateScore(feature?.properties?.tecFeatures || [], developableArea || null))
+      developableArea: getScoreValue(propertyData.scores.developableArea),
+      contours: getScoreValue(propertyData.scores.contours),
+      siteRegularity: getScoreValue(propertyData.scores.siteRegularity),
+      zoning: getScoreValue(propertyData.scores.zoning),
+      heritage: getScoreValue(propertyData.scores.heritage),
+      acidSulfateSoils: getScoreValue(propertyData.scores.acidSulfateSoils),
+      servicing: getScoreValue(propertyData.scores.servicing),
+      roads: getScoreValue(propertyData.scores.roads),
+      udpPrecincts: getScoreValue(propertyData.scores.udpPrecincts),
+      ptal: getScoreValue(propertyData.scores.ptal),
+      geoscape: getScoreValue(propertyData.scores.geoscape),
+      flood: getScoreValue(propertyData.scores.flood),
+      bushfire: getScoreValue(propertyData.scores.bushfire),
+      contamination: getScoreValue(propertyData.scores.contamination),
+      siteRemediation: getScoreValue(propertyData.scores.siteRemediation),
+      tec: getScoreValue(propertyData.scores.tec)
     };
 
     // Calculate total score
@@ -249,7 +242,7 @@ export async function createScoringSlide(pres, feature, developableArea, slideSc
       x: '5%',
       y: '18%',
       w: '62%',
-      colW: [2, 3.5, 1],
+      colW: [2, 5, 1],
       border: { type: 'solid', color: '363636', pt: 0.5 },
       rowH: 0.25,  // Single value instead of array
       align: 'left',
@@ -263,44 +256,44 @@ export async function createScoringSlide(pres, feature, developableArea, slideSc
 
     // Move recommendation box to align with table
     const recommendationBox = slide.addShape('rect', {
-      x: '68%',
+      x: '69%',
       y: '18%',
-      w: '28%',
-      h: '70%',  // Fixed height
+      w: '27%',
+      h: '69%',  // Match scoring table height
       fill: { color: 'FFFFFF' },
       line: { color: '363636', width: 0.5 }
     });
 
     // Add recommendation header with blue background
     slide.addShape('rect', {
-      x: '68%',
+      x: '69%',
       y: '18%',
-      w: '28%',
-      h: '3%',  // Fixed header height
+      w: '27%',
+      h: '4%',  // Slightly taller header
       fill: { color: '002664' },
       line: { color: '363636', width: 0.5 }
     });
 
     // Add recommendation title in white text
     slide.addText('Recommendation', {
-      x: '69%',
+      x: '70%',
       y: '18%',
-      w: '26%',
-      h: '3%',  // Match header height
-      fontSize: 7,
+      w: '25%',
+      h: '4%',  // Match header height
+      fontSize: 9,  // Increased font size
       fontFace: 'Public Sans',
       color: 'FFFFFF',
       bold: true,
-      valign: 'middle',  // Center vertically
+      valign: 'middle',
       align: 'left'
     });
 
     // Add placeholder recommendation text
     slide.addText('Please add recommendation and rationale', {
-      x: '69%',
-      y: '22%',
-      w: '26%',
-      fontSize: 7,
+      x: '70%',
+      y: '24%',
+      w: '25%',
+      fontSize: 9,  // Increased font size
       fontFace: 'Public Sans',
       color: '363636',
       bullet: true
@@ -308,34 +301,34 @@ export async function createScoringSlide(pres, feature, developableArea, slideSc
 
     // Add key reasons header with blue background
     slide.addShape('rect', {
-      x: '68%',
+      x: '69%',
       y: '45%',
-      w: '28%',
-      h: '3%',
+      w: '27%',
+      h: '4%',
       fill: { color: '002664' },
       line: { color: '363636', width: 0.5 }
     });
 
     // Add key reasons title in white text
     slide.addText('Key Reasons', {
-      x: '69%',
+      x: '70%',
       y: '45%',
-      w: '26%',
-      h: '3%',  // Match header height
-      fontSize: 7,
+      w: '25%',
+      h: '4%',  // Match header height
+      fontSize: 9,  // Increased font size
       fontFace: 'Public Sans',
       color: 'FFFFFF',
       bold: true,
-      valign: 'middle',  // Center vertically
+      valign: 'middle',
       align: 'left'
     });
 
     // Add placeholder key reasons text
     slide.addText('Please add recommendation and rationale', {
-      x: '69%',
-      y: '49%',
-      w: '26%',
-      fontSize: 7,
+      x: '70%',
+      y: '51%',
+      w: '25%',
+      fontSize: 9,  // Increased font size
       fontFace: 'Public Sans',
       color: '363636',
       bullet: true

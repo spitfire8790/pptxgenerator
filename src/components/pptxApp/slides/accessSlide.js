@@ -95,17 +95,28 @@ export async function addAccessSlide(pptx, propertyData) {
     const udpScoreResult = scoringCriteria.udpPrecincts.calculateScore(propertyData.udpPrecincts, propertyData.developableArea);
     const udpDescription = scoringCriteria.udpPrecincts.getScoreDescription(udpScoreResult);
 
-    const ptalScoreResult = scoringCriteria.ptal.calculateScore(
-      propertyData.intersectingPtalValues || []
-    );
-
-    // Create scores object
-    const scores = {
-      roads: roadsScoreResult.score,
-      udpPrecincts: udpScoreResult.score,
-      ptal: ptalScoreResult
+    // Get PTAL values from the map capture if they exist
+    const ptalMapFeature = {
+      geometry: {
+        coordinates: [propertyData.site__geometry]
+      },
+      properties: propertyData
     };
+    const ptalScreenshot = await capturePTALMap(ptalMapFeature, formattedDevelopableArea);
+    
+    // Get PTAL values from the updated feature after map capture
+    const ptalValues = ptalMapFeature.properties?.ptalValues || [];
+    const ptalScoreResult = scoringCriteria.ptal.calculateScore(ptalValues);
+    const ptalDescription = scoringCriteria.ptal.getScoreDescription(ptalScoreResult, ptalValues);
 
+    // Ensure scores object exists and store the scores
+    if (!propertyData.scores) {
+        propertyData.scores = {};
+    }
+    propertyData.scores.roads = roadsScoreResult.score;
+    propertyData.scores.udpPrecincts = udpScoreResult.score;
+    propertyData.scores.ptal = ptalScoreResult;
+    
     // Create slide
     const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
 
@@ -382,12 +393,6 @@ export async function addAccessSlide(pptx, propertyData) {
     }));
 
     // Add PTAL map
-    const ptalScreenshot = await capturePTALMap({
-      geometry: {
-        coordinates: [propertyData.site__geometry]
-      },
-      properties: propertyData
-    }, formattedDevelopableArea);
     if (ptalScreenshot) {
       slide.addImage({
         data: ptalScreenshot,
@@ -399,14 +404,54 @@ export async function addAccessSlide(pptx, propertyData) {
           sizing: { type: 'contain', align: 'center', valign: 'middle' }
         })
       });
+
+      // Add PTAL legend background
+      slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
+        x: '85%',
+        y: '64%',
+        w: '9%',
+        h: '9%',
+        fill: 'FFFFFF',
+        line: { color: '363636', width: 0.5 }
+      }));
+
+      // Add PTAL legend items
+      const ptalLegendItems = [
+        { label: 'Very High', color: '1d9604' },
+        { label: 'High', color: 'a8ff7f' },
+        { label: 'Medium-High', color: '0e9aff' },
+        { label: 'Medium', color: 'f2ff00' },
+        { label: 'Low-Medium', color: 'ff7f0e' },
+        { label: 'Low', color: 'ff0000' }
+      ];
+
+      ptalLegendItems.forEach((item, index) => {
+        // Add colored square
+        slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
+          x: '85.5%',
+          y: `${64.5 + (index * 1.5)}%`,
+          w: '1%',
+          h: '1%',
+          fill: item.color,
+          line: { color: '363636', width: 0.5 }
+        }));
+
+        // Add label
+        slide.addText(item.label, convertCmValues({
+          x: '87%',
+          y: `${64.5 + (index * 1.5)}%`,
+          w: '6.5%',
+          h: '1%',
+          fontSize: 5,
+          color: '363636',
+          fontFace: 'Public Sans',
+          align: 'left',
+          valign: 'middle'
+        }));
+      });
     }
 
     // PTAL description box
-    const ptalDescription = scoringCriteria.ptal.getScoreDescription(
-      ptalScoreResult,
-      propertyData.intersectingPtalValues || []
-    );
-
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
       x: '67%',
       y: '75%',
@@ -482,7 +527,7 @@ export async function addAccessSlide(pptx, propertyData) {
     slide.addText('Property and Development NSW', convertCmValues(styles.footer));
     slide.addText('8', convertCmValues(styles.pageNumber));
 
-    return { slide, scores };
+    return slide;
   } catch (error) {
     console.error('Error adding access slide:', error);
     try {
@@ -496,10 +541,10 @@ export async function addAccessSlide(pptx, propertyData) {
         color: 'FF0000',
         align: 'center'
       });
-      return { slide: errorSlide, scores: { roads: 0, udpPrecincts: 0, ptal: 0 } };
+      return errorSlide;
     } catch (slideError) {
       console.error('Failed to add error message to slide:', slideError);
-      throw error;
+      throw error; // Re-throw the original error
     }
   }
 }
