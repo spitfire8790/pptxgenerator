@@ -181,13 +181,13 @@ export async function createScoringSlide(pres, propertyData) {
       flood: getScoreValue(propertyData.scores.flood),
       bushfire: getScoreValue(propertyData.scores.bushfire),
       contamination: getScoreValue(propertyData.scores.contamination),
-      siteRemediation: getScoreValue(propertyData.scores.siteRemediation),
-      tec: getScoreValue(propertyData.scores.tec)
+      tec: getScoreValue(propertyData.site_suitability__scores?.tec),
+      historicalImagery: getScoreValue(propertyData.site_suitability__scores?.historicalImagery)
     };
 
     // Calculate total score
     const totalScore = Object.values(scores).reduce((sum, score) => sum + (parseInt(score) || 0), 0);
-    const maxScore = 48;
+    const maxScore = 51;  // Updated to include historical imagery score
     const percentage = Math.round((totalScore / maxScore) * 100);
 
     console.log('Creating table with scores:', scores);
@@ -226,7 +226,7 @@ export async function createScoringSlide(pres, propertyData) {
       // Site Contamination
       [{ text: 'Site Contamination\n\n', options: { rowspan: 2, valign: 'middle' }}, 
        'Contaminated sites Register', formatScoreWithColor(scores.contamination)],
-      ['Usage & potential site remediation', formatScoreWithColor(scores.siteRemediation)],
+      ['Usage & potential site remediation', formatScoreWithColor(scores.historicalImagery)],
       // Environmental
       [{ text: 'Environmental\n\n', options: { rowspan: 1, valign: 'middle' }}, 
        'Threatened Ecological Communities', formatScoreWithColor(scores.tec)],

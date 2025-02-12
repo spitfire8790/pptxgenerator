@@ -515,34 +515,58 @@ const ReportGenerator = ({ selectedFeature }) => {
 
   const triggerConfetti = () => {
     setShowConfetti(true);
-    const end = Date.now() + 3000;
+    const end = Date.now() + 5000; // Increased duration to 5 seconds
 
-    const colors = ['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF'];
+    const colors = ['#002664', '#363636', '#FFD700', '#4CAF50', '#2196F3'];
 
-    (function frame() {
+    const frame = () => {
       confetti({
-        particleCount: 7,
+        particleCount: 3,
         angle: 60,
-        spread: 55,
-        origin: { x: 0 },
-        colors: colors
+        spread: 70,
+        origin: { x: 0, y: 0.8 },
+        colors: colors,
+        shapes: ['circle', 'square'],
+        gravity: 0.7,
+        scalar: 1.5,
+        drift: 0,
+        ticks: 300
       });
       confetti({
-        particleCount: 7,
+        particleCount: 3,
         angle: 120,
-        spread: 55,
-        origin: { x: 1 },
-        colors: colors
+        spread: 70,
+        origin: { x: 1, y: 0.8 },
+        colors: colors,
+        shapes: ['circle', 'square'],
+        gravity: 0.7,
+        scalar: 1.5,
+        drift: 0,
+        ticks: 300
       });
 
       if (Date.now() < end) {
         requestAnimationFrame(frame);
       }
-    }());
+    };
+
+    frame();
+
+    // Fire a few bursts for more impact
+    setTimeout(() => {
+      confetti({
+        particleCount: 100,
+        spread: 100,
+        origin: { x: 0.5, y: 0.8 },
+        colors: colors,
+        shapes: ['circle', 'square'],
+        scalar: 1.5
+      });
+    }, 500);
 
     setTimeout(() => {
       setShowConfetti(false);
-    }, 3000);
+    }, 5000);
   };
 
   const handleTimerComplete = (time) => {

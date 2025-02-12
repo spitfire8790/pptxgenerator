@@ -247,6 +247,13 @@ export async function addEnviroSlide(pptx, properties) {
         
         tecScore = result.score;
         tecText = scoringCriteria.tec.getScoreDescription(result);
+
+        // Store the TEC score in site_suitability properties
+        if (!properties.site_suitability__scores) {
+          properties.site_suitability__scores = {};
+        }
+        properties.site_suitability__scores.tec = tecScore;
+
       } catch (error) {
         console.error('Error calculating TEC score:', error);
         console.error('Error details:', {

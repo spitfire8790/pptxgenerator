@@ -498,8 +498,11 @@ export async function addContaminationSlide(pptx, properties) {
       align: 'right'
     }));
 
-    // Store the historical imagery score
-    properties.scores.historicalImagery = 3;
+    // Store the historical imagery score in site_suitability properties
+    if (!properties.site_suitability__scores) {
+      properties.site_suitability__scores = {};
+    }
+    properties.site_suitability__scores.historicalImagery = 3;
 
     // Add line
     slide.addShape(pptx.shapes.LINE, convertCmValues({
