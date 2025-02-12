@@ -63,7 +63,7 @@ export async function captureMapScreenshot(feature, type = SCREENSHOT_TYPES.SNAP
   }
 }
 
-function calculateBounds(feature, padding, developableArea = null) {
+export function calculateBounds(feature, padding, developableArea = null) {
   // Start with property bounds
   let coordinates = feature.geometry.coordinates[0];
   

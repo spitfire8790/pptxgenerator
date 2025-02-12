@@ -9,6 +9,7 @@ import { createScoringSlide } from './slides/scoringSlide';
 import { checkUserClaims } from './utils/auth/tokenUtils';
 import scoringCriteria from './slides/scoringLogic';
 import { area } from '@turf/area';
+import { addContextSlide } from './slides/contextSlide';
 import { 
   captureMapScreenshot, 
   capturePrimarySiteAttributesMap, 
@@ -30,6 +31,7 @@ import {
   captureBiodiversityMap,
   captureHistoricalImagery
 } from './utils/map/services/screenshot';
+import { captureGPRMap } from './utils/map/services/screenshots/contextScreenshot';
 import { clearServiceCache } from './utils/map/services/wmsService';
 import { SCREENSHOT_TYPES } from './utils/map/config/screenshotTypes';
 import SlidePreview from './SlidePreview';
@@ -59,7 +61,8 @@ import {
   Skull,
   LineChart,
   Trophy,
-  Loader2
+  Loader2,
+  Globe2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import './Timer.css';
@@ -81,6 +84,7 @@ const slideOptions = [
   { id: 'hazards', label: 'Natural Hazards', addSlide: addHazardsSlide, icon: AlertTriangle },
   { id: 'environmental', label: 'Environmental', addSlide: addEnviroSlide, icon: Leaf },
   { id: 'contamination', label: 'Site Contamination', addSlide: addContaminationSlide, icon: Skull },
+  { id: 'context', label: 'Site Context', addSlide: addContextSlide, icon: Globe2 },
   { id: 'scoring', label: 'Scoring', addSlide: createScoringSlide, icon: LineChart }
 ];
 
@@ -112,6 +116,8 @@ const getStepDescription = (stepId) => {
       return 'Checking environmental constraints...';
     case 'contamination':
       return 'Analysing potential contamination...';
+    case 'context':
+      return 'Analysing site context and nearby services...';
     case 'scoring':
       return 'Calculating final site scores...';
     default:
@@ -481,10 +487,15 @@ const ReportGenerator = ({ selectedFeature }) => {
       // For other slides, keep boundary and use AERIAL type
       const snapshotScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.AERIAL, true);
       
+      // Capture GPR map for context slide
+      const gprResult = await captureGPRMap(selectedFeature, developableArea);
+      
       setPreviewScreenshot(coverScreenshot);
       setScreenshots({
         coverScreenshot,
-        snapshotScreenshot
+        snapshotScreenshot,
+        GPRScreenshot: gprResult?.image,
+        gprFeatures: gprResult?.features
       });
     }
   };

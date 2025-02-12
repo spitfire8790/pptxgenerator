@@ -15,11 +15,24 @@ import { addHazardsSlide } from '../components/pptxApp/slides/hazardsSlide';
 import { addContaminationSlide } from '../components/pptxApp/slides/contaminationSlide';
 import { addEnviroSlide } from '../components/pptxApp/slides/enviroSlide';
 import { createScoringSlide } from '../components/pptxApp/slides/scoringSlide';
+import { addContextSlide } from '../components/pptxApp/slides/contextSlide';
 
 export async function generateReport(properties, onProgress) {
   try {
     const pptx = new pptxgen();
-    let progress = 0;
+    
+    // Calculate total number of selected slides
+    const selectedSlideCount = Object.values(properties.selectedSlides)
+      .filter(Boolean).length;
+    
+    let completedSlides = 0;
+    
+    // Function to update progress based on completed slides
+    const updateProgress = () => {
+      completedSlides++;
+      const progress = Math.round((completedSlides / selectedSlideCount) * 100);
+      onProgress?.(progress);
+    };
     
     // Register fonts and setup
     registerFonts(pptx);
@@ -32,93 +45,86 @@ export async function generateReport(properties, onProgress) {
     // Add slides with progress updates
     if (properties.selectedSlides.cover !== false) {
       await addCoverSlide(pptx, properties);
-      progress = 20;
-      onProgress?.(progress);
+      updateProgress();
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 
     if (properties.selectedSlides.snapshot !== false) {
       await addPropertySnapshotSlide(pptx, properties);
-      progress = 40;
-      onProgress?.(progress);
+      updateProgress();
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 
     if (properties.selectedSlides.primaryAttributes !== false) {
       await addPrimarySiteAttributesSlide(pptx, properties);
-      progress = 60;
-      onProgress?.(progress);
+      updateProgress();
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 
     if (properties.selectedSlides.secondaryAttributes !== false) {
       await addSecondaryAttributesSlide(pptx, properties);
-      progress = 80;
-      onProgress?.(progress);
+      updateProgress();
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 
     if (properties.selectedSlides.planning !== false) {
       await addPlanningSlide(pptx, properties);
-      progress = 90;
-      onProgress?.(progress);
+      updateProgress();
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 
     if (properties.selectedSlides.planningTwo !== false) {
       await addPlanningSlide2(pptx, properties);
-      progress = 95;
-      onProgress?.(progress);
+      updateProgress();
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 
     if (properties.selectedSlides.servicing !== false) {
       await addServicingSlide(pptx, properties);
-      progress = 98;
-      onProgress?.(progress);
+      updateProgress();
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 
     if (properties.selectedSlides.utilisation !== false) {
       await addUtilisationSlide(pptx, properties);
-      progress = 90;
-      onProgress?.(progress);
+      updateProgress();
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 
     if (properties.selectedSlides.access !== false) {
       await addAccessSlide(pptx, properties);
-      progress = 95;
-      onProgress?.(progress);
+      updateProgress();
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 
     if (properties.selectedSlides.hazards !== false) {
       await addHazardsSlide(pptx, properties);
-      progress = 98;
-      onProgress?.(progress);
+      updateProgress();
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 
     if (properties.selectedSlides.environmental !== false) {
       await addEnviroSlide(pptx, properties);
-      progress = 99;
-      onProgress?.(progress);
+      updateProgress();
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 
     if (properties.selectedSlides.contamination !== false) {
       await addContaminationSlide(pptx, properties);
-      progress = 99.5;
-      onProgress?.(progress);
+      updateProgress();
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    if (properties.selectedSlides.context !== false) {
+      await addContextSlide(pptx, properties);
+      updateProgress();
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 
     // Add scoring slide last
     if (properties.selectedSlides.scoring !== false) {
       await createScoringSlide(pptx, properties, properties.developableArea);
-      progress = 100;
-      onProgress?.(progress);
+      updateProgress();
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 
@@ -126,8 +132,8 @@ export async function generateReport(properties, onProgress) {
     const filename = properties.site__address.replace(/[^a-zA-Z0-9]/g, '_');
     await pptx.writeFile({ fileName: `${filename}_Desktop_DD_Report.pptx` });
     
-    progress = 100;
-    onProgress?.(progress);
+    // Ensure we show 100% at the end
+    onProgress?.(100);
     
     return `${filename}_Desktop_DD_Report.pptx`;
   } catch (error) {
