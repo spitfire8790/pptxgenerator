@@ -1439,6 +1439,7 @@ const scoringCriteria = {
         console.log('Developable coordinates:', developableCoords);
         
         const developablePolygon = turf.polygon([developableCoords]);
+        const developableCenter = turf.center(developablePolygon);
         console.log('Created developable polygon:', JSON.stringify(developablePolygon, null, 2));
 
         // Handle both direct features array and FeatureCollection format
@@ -1450,13 +1451,30 @@ const scoringCriteria = {
         // First check if developable area intersects with any contamination features
         let intersectionFound = false;
         let minDistance = Infinity;
+        let nearestFeature = null;
 
         features.forEach((feature, index) => {
-          if (!feature.geometry) return;
-
           try {
-            if (feature.geometry.type === 'MultiPolygon') {
-              // For MultiPolygon, check each polygon
+            // Handle point features from lat/long coordinates
+            if (!feature.geometry && feature.properties?.Latitude && feature.properties?.Longitude) {
+              const featurePoint = turf.point([
+                parseFloat(feature.properties.Longitude),
+                parseFloat(feature.properties.Latitude)
+              ]);
+              console.log(`Created point from lat/long for feature ${index}:`, featurePoint);
+
+              // Calculate distance from point to developable area
+              const distance = turf.distance(developableCenter, featurePoint, { units: 'meters' });
+              console.log(`Distance to point feature ${index}:`, distance.toFixed(2), 'm');
+
+              if (distance < minDistance) {
+                minDistance = distance;
+                nearestFeature = feature;
+                console.log('New minimum distance found:', minDistance.toFixed(2), 'm');
+              }
+            }
+            // Handle polygon features
+            else if (feature.geometry?.type === 'MultiPolygon') {
               feature.geometry.coordinates.forEach((polygonCoords, polyIndex) => {
                 console.log(`\nProcessing polygon ${polyIndex + 1} of MultiPolygon ${index + 1}`);
                 const polygon = turf.polygon(polygonCoords);
@@ -1466,62 +1484,55 @@ const scoringCriteria = {
                 if (intersects) {
                   intersectionFound = true;
                   minDistance = 0;
+                  nearestFeature = feature;
                   console.log('Found intersection - setting minDistance to 0');
                   return;
                 }
 
                 // Calculate minimum distance between polygon boundaries
                 try {
-                  // Create points along the boundaries of both polygons
-                  const developablePoints = turf.explode(developablePolygon);
-                  const contaminationPoints = turf.explode(polygon);
-                  
-                  // Find the nearest points between the two sets of points
-                  developablePoints.features.forEach(dPoint => {
-                    contaminationPoints.features.forEach(cPoint => {
-                      const distance = turf.distance(dPoint, cPoint, { units: 'meters' });
-                      if (distance < minDistance) {
-                        minDistance = distance;
-                        console.log('New minimum distance found:', minDistance.toFixed(2), 'm');
-                      }
-                    });
-                  });
+                  const distance = turf.distance(
+                    turf.center(developablePolygon),
+                    turf.center(polygon),
+                    { units: 'meters' }
+                  );
+                  if (distance < minDistance) {
+                    minDistance = distance;
+                    nearestFeature = feature;
+                    console.log('New minimum distance found:', minDistance.toFixed(2), 'm');
+                  }
                 } catch (distError) {
-                  console.error('Error calculating distance:', distError);
+                  console.error('Error calculating polygon distance:', distError);
                 }
               });
-            } else if (feature.geometry.type === 'Polygon') {
-              // For regular Polygon
-              console.log(`\nProcessing regular polygon ${index + 1}`);
-              const contaminationPolygon = turf.polygon(feature.geometry.coordinates);
-              const intersects = turf.booleanIntersects(developablePolygon, contaminationPolygon);
-              console.log(`Polygon ${index + 1} intersects:`, intersects);
+            }
+            else if (feature.geometry?.type === 'Polygon') {
+              const polygon = turf.polygon(feature.geometry.coordinates);
+              const intersects = turf.booleanIntersects(developablePolygon, polygon);
+              console.log(`Polygon ${index} intersects:`, intersects);
               
               if (intersects) {
                 intersectionFound = true;
                 minDistance = 0;
+                nearestFeature = feature;
                 console.log('Found intersection - setting minDistance to 0');
                 return;
               }
 
               // Calculate minimum distance between polygon boundaries
               try {
-                // Create points along the boundaries of both polygons
-                const developablePoints = turf.explode(developablePolygon);
-                const contaminationPoints = turf.explode(contaminationPolygon);
-                
-                // Find the nearest points between the two sets of points
-                developablePoints.features.forEach(dPoint => {
-                  contaminationPoints.features.forEach(cPoint => {
-                    const distance = turf.distance(dPoint, cPoint, { units: 'meters' });
-                    if (distance < minDistance) {
-                      minDistance = distance;
-                      console.log('New minimum distance found:', minDistance.toFixed(2), 'm');
-                    }
-                  });
-                });
+                const distance = turf.distance(
+                  turf.center(developablePolygon),
+                  turf.center(polygon),
+                  { units: 'meters' }
+                );
+                if (distance < minDistance) {
+                  minDistance = distance;
+                  nearestFeature = feature;
+                  console.log('New minimum distance found:', minDistance.toFixed(2), 'm');
+                }
               } catch (distError) {
-                console.error('Error calculating distance:', distError);
+                console.error('Error calculating polygon distance:', distError);
               }
             }
           } catch (error) {
@@ -1530,106 +1541,26 @@ const scoringCriteria = {
         });
 
         let score;
-        let nearestFeature = null;
-        if (intersectionFound) {
-          score = 1; // Developable area is impacted by contamination
-          console.log('Intersection found - setting score to 1');
-          // Use the intersecting feature
-          nearestFeature = features.find(f => {
-            if (f.geometry.type === 'MultiPolygon') {
-              return f.geometry.coordinates.some(polygonCoords => {
-                const polygon = turf.polygon(polygonCoords);
-                return turf.booleanIntersects(developablePolygon, polygon);
-              });
-            } else if (f.geometry.type === 'Polygon') {
-              const polygon = turf.polygon(f.geometry.coordinates);
-              return turf.booleanIntersects(developablePolygon, polygon);
-            }
-            return false;
-          });
-        } else if (minDistance <= 20) {
-          score = 2; // Within 20m of contaminated site
-          console.log(`Distance ${minDistance.toFixed(2)}m is within 20m - setting score to 2`);
-          // Find the feature with the minimum distance
-          nearestFeature = features[0]; // Default to first feature
-          let currentMinDistance = Infinity;
-          features.forEach(feature => {
-            if (feature.geometry.type === 'MultiPolygon') {
-              feature.geometry.coordinates.forEach(polygonCoords => {
-                const polygon = turf.polygon(polygonCoords);
-                const developablePoints = turf.explode(developablePolygon);
-                const contaminationPoints = turf.explode(polygon);
-                developablePoints.features.forEach(dPoint => {
-                  contaminationPoints.features.forEach(cPoint => {
-                    const distance = turf.distance(dPoint, cPoint, { units: 'meters' });
-                    if (distance < currentMinDistance) {
-                      currentMinDistance = distance;
-                      nearestFeature = feature;
-                    }
-                  });
-                });
-              });
-            } else if (feature.geometry.type === 'Polygon') {
-              const polygon = turf.polygon(feature.geometry.coordinates);
-              const developablePoints = turf.explode(developablePolygon);
-              const contaminationPoints = turf.explode(polygon);
-              developablePoints.features.forEach(dPoint => {
-                contaminationPoints.features.forEach(cPoint => {
-                  const distance = turf.distance(dPoint, cPoint, { units: 'meters' });
-                  if (distance < currentMinDistance) {
-                    currentMinDistance = distance;
-                    nearestFeature = feature;
-                  }
-                });
-              });
-            }
-          });
+        if (intersectionFound || minDistance <= 20) {
+          score = 1; // Developable area is impacted by contamination or within 20m
+          console.log('Site is impacted by contamination or within 20m - setting score to 1');
+        } else if (minDistance <= 100) {
+          score = 2; // Within 100m of contaminated site
+          console.log(`Distance ${minDistance.toFixed(2)}m is within 100m - setting score to 2`);
         } else {
-          score = 3; // Further than 20m from contaminated site
-          console.log(`Distance ${minDistance.toFixed(2)}m is beyond 20m - setting score to 3`);
-          // Find the nearest feature even when beyond 20m
-          nearestFeature = features[0]; // Default to first feature
-          let currentMinDistance = Infinity;
-          features.forEach(feature => {
-            if (feature.geometry.type === 'MultiPolygon') {
-              feature.geometry.coordinates.forEach(polygonCoords => {
-                const polygon = turf.polygon(polygonCoords);
-                const developablePoints = turf.explode(developablePolygon);
-                const contaminationPoints = turf.explode(polygon);
-                developablePoints.features.forEach(dPoint => {
-                  contaminationPoints.features.forEach(cPoint => {
-                    const distance = turf.distance(dPoint, cPoint, { units: 'meters' });
-                    if (distance < currentMinDistance) {
-                      currentMinDistance = distance;
-                      nearestFeature = feature;
-                    }
-                  });
-                });
-              });
-            } else if (feature.geometry.type === 'Polygon') {
-              const polygon = turf.polygon(feature.geometry.coordinates);
-              const developablePoints = turf.explode(developablePolygon);
-              const contaminationPoints = turf.explode(polygon);
-              developablePoints.features.forEach(dPoint => {
-                contaminationPoints.features.forEach(cPoint => {
-                  const distance = turf.distance(dPoint, cPoint, { units: 'meters' });
-                  if (distance < currentMinDistance) {
-                    currentMinDistance = distance;
-                    nearestFeature = feature;
-                  }
-                });
-              });
-            }
-          });
+          score = 3; // Further than 100m from contaminated site
+          console.log(`Distance ${minDistance.toFixed(2)}m is beyond 100m - setting score to 3`);
         }
 
-        console.log('\nFinal result:', { 
-          score, 
-          minDistance: minDistance.toFixed(2),
-          features: nearestFeature ? [nearestFeature] : []
+        console.log('=== Final Result ===');
+        console.log({
+          score,
+          minDistance,
+          nearestFeature
         });
-        return { 
-          score, 
+
+        return {
+          score,
           minDistance,
           features: nearestFeature ? [nearestFeature] : []
         };
@@ -1639,13 +1570,29 @@ const scoringCriteria = {
         return { score: 0, minDistance: Infinity };
       }
     },
-    getScoreDescription: (scoreObj) => {
+    getScoreDescription: (scoreObj, developableArea) => {
       const { score, minDistance, features } = scoreObj;
       
       // Get site name from the nearest feature if available
       let siteName = '';
       if (features?.[0]?.properties?.SiteName) {
         siteName = ` (${features[0].properties.SiteName})`;
+      }
+
+      // If we have a point feature, check if it's inside the developable area
+      if (features?.[0] && features[0].properties?.Latitude && features[0].properties?.Longitude) {
+        const point = turf.point([
+          parseFloat(features[0].properties.Longitude),
+          parseFloat(features[0].properties.Latitude)
+        ]);
+        
+        // If we have a developable area polygon, check if point is inside
+        if (developableArea?.[0]?.geometry?.coordinates) {
+          const polygon = turf.polygon(developableArea[0].geometry.coordinates);
+          if (turf.booleanPointInPolygon(point, polygon)) {
+            return `Developable area contains a contaminated site${siteName}.`;
+          }
+        }
       }
       
       switch (score) {
@@ -1654,7 +1601,10 @@ const scoringCriteria = {
         case 2:
           return `Developable area is not impacted by contamination but is ${minDistance.toFixed(0)}m from the nearest contaminated site${siteName}.`;
         case 1:
-          return `Developable area is within a contaminated site${siteName}.`;
+          if (minDistance === 0) {
+            return `Developable area is impacted by a contaminated site${siteName}.`;
+          }
+          return `Developable area is within ${minDistance.toFixed(0)}m of a contaminated site${siteName}.`;
         default:
           return "Contamination risk not assessed";
       }

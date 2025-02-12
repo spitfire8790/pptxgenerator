@@ -1,39 +1,7 @@
 import { convertCmValues } from '../utils/units';
 import scoringCriteria from './scoringLogic';
-import { proxyRequest } from '../utils/services/proxyService';
 import { captureContaminationMap, captureOpenStreetMap } from '../utils/map/services/screenshot';
-
-const makeGeometryRequest = async (url, params) => {
-  try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-      const response = await proxyRequest(`${url}?${params}`);
-      clearTimeout(timeoutId);
-
-      if (response.features?.[0]) {
-          return response.features[0].attributes;
-      }
-      return null;
-  } catch (error) {
-      console.error('Error querying geometry data:', error);
-      return null;
-  }
-};
-
-const getContaminationData = async (geometry) => {
-  const url = 'https://maptest2.environment.nsw.gov.au/arcgis/rest/services/EPA/EPACS/MapServer/1';
-  const params = new URLSearchParams({
-    f: 'json',
-    geometryType: 'esriGeometryPolygon',
-    geometry: JSON.stringify(geometry),
-    spatialRel: 'esriSpatialRelIntersects',
-    outFields: 'SiteName, Comment',
-    returnGeometry: false
-  });
-
-  return makeGeometryRequest(url,params);
-};
+import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
 
 const styles = {
   title: {
@@ -268,24 +236,67 @@ export async function addContaminationSlide(pptx, properties) {
   let contaminationScore = 0;
 
   // Use the contamination features that were already captured
-  if (properties.contaminationFeatures?.length > 0) {
+  if (properties.contaminationFeatures?.length > 0 || properties.site_suitability__additionalContaminationFeatures?.features?.length > 0) {
     try {
+      // Combine both sets of contamination features
+      const allContaminationFeatures = [
+        ...(properties.contaminationFeatures || []),
+        ...(properties.site_suitability__additionalContaminationFeatures?.features || [])
+      ];
+
       // Calculate contamination score using the new method
       const scoreResult = scoringCriteria.contamination.calculateScore(
-        properties.contaminationFeatures,
+        allContaminationFeatures,
         properties.developableArea
       );
       contaminationScore = scoreResult.score;
-      contaminationText = scoringCriteria.contamination.getScoreDescription(scoreResult);
+      contaminationText = scoringCriteria.contamination.getScoreDescription(scoreResult, properties.developableArea);
           
       // Add additional contamination information if contamination is found
-      if (contaminationScore === 1) {
-        const feature = properties.contaminationFeatures[0];
-        if (feature.properties?.SiteName) {
+      if (contaminationScore === 1 && scoreResult.nearestFeature) {
+        const feature = scoreResult.nearestFeature;
+        
+        // Create a point from the feature's coordinates
+        const point = {
+          type: 'Feature',
+          geometry: {
+            type: 'Point',
+            coordinates: [
+              feature.properties.Longitude,
+              feature.properties.Latitude
+            ]
+          }
+        };
+
+        // Get the developable area polygon
+        const polygon = properties.developableArea?.features?.[0];
+        
+        console.log('Checking point in polygon:', {
+          point: point.geometry.coordinates,
+          polygonCoords: polygon?.geometry?.coordinates?.[0],
+          hasValidPolygon: !!polygon?.geometry?.coordinates?.[0]?.length
+        });
+
+        // Check if the point is within the developable area polygon
+        const isWithin = polygon?.geometry?.coordinates?.[0]?.length > 0 && 
+          booleanPointInPolygon(point, polygon);
+        
+        console.log('Point in polygon result:', {
+          isWithin,
+          siteName: feature.properties.SiteName
+        });
+        
+        if (isWithin) {
+          contaminationText += `\n\nDevelopable area contains a contaminated site "${feature.properties.SiteName}"`;
+        } else {
           contaminationText += `\n\nSite Name: ${feature.properties.SiteName}`;
-        }
-        if (feature.properties?.Comment) {
-          contaminationText += `\nComments: ${feature.properties.Comment}`;
+          
+          if (feature.properties?.Comment) {
+            contaminationText += `\nComments: ${feature.properties.Comment}`;
+          }
+          if (feature.properties?.ContaminationActivityType) {
+            contaminationText += `\nType: ${feature.properties.ContaminationActivityType}`;
+          }
         }
       }
     } catch (error) {
