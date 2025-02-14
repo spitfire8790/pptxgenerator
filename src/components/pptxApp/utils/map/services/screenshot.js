@@ -2424,7 +2424,7 @@ export async function capturePTALMap(feature, developableArea = null) {
       baseUrl: 'https://portal.data.nsw.gov.au/arcgis/rest/services/Hosted/ptal_dec20_gdb__(1)/FeatureServer/0',
       layerId: 0
     };
-    const token = 'cMjcs6K32ykwH9RIfwH6t0VGMlGymiMcc4eHVwL16I3ogZgT_ZSvNLui-aGHk80hrtyhBlsQPe4AFGRHTG9Xj8d3cqqn2pdPSWWTtXJ3mcp0_HIY95CV8lg2l72ckWvFvXOb3xNosTMmNsXGD0DeaxsnkQqXRl-Sg24kHaj1XJ7g-66OGRsZUorqWDVZkIbDVCHEVOr-stqXeDEtoBVztqg1BtufP8jYgzZXnxYplUAYMEW6oUkIa_QJfvvM2dHO';
+    const token = 'x-fPdL98xBDOmpxkDt3Rs8OQtK6sGJ51trkPiQqwEmjOmavKafI8e3FyEZr3mqn_CnW_aQcyJB7Hn1MWI6EKEpsKYkd9NQoQ-k9Ah3-V2ib19zms6sQ9T8yKMxbhsHC_X_axQvMiUdguEQFWs8lsKm4WV_xQBWMoAM0JKVdLevtRpAi4VoCPXfzKdKk-MqQUf_c2WcIsW9Ls7lVcuNiS9u7uqCgvZcDrrc-_hCPgeMYDmDV3jp1ShrH9nmcysxpL';
     const ptalParams = new URLSearchParams({
       where: '1=1',
       geometry: bbox,
