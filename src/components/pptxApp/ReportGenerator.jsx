@@ -84,8 +84,8 @@ const slideOptions = [
   { id: 'hazards', label: 'Natural Hazards', addSlide: addHazardsSlide, icon: AlertTriangle },
   { id: 'environmental', label: 'Environmental', addSlide: addEnviroSlide, icon: Leaf },
   { id: 'contamination', label: 'Site Contamination', addSlide: addContaminationSlide, icon: Skull },
-  { id: 'context', label: 'Site Context', addSlide: addContextSlide, icon: Globe2 },
-  { id: 'scoring', label: 'Scoring', addSlide: createScoringSlide, icon: LineChart }
+  { id: 'scoring', label: 'Scoring', addSlide: createScoringSlide, icon: LineChart },
+  { id: 'context', label: 'Site Context', addSlide: addContextSlide, icon: Globe2 }
 ];
 
 const getStepDescription = (stepId) => {
@@ -226,7 +226,8 @@ const ReportGenerator = ({ selectedFeature }) => {
     hazards: true,
     environmental: true,
     contamination: true,
-    scoring: true
+    scoring: true,
+    context: true
   });
   const [developableArea, setDevelopableArea] = useState(null);
   const planningMapRef = useRef();
@@ -439,7 +440,8 @@ const ReportGenerator = ({ selectedFeature }) => {
           ...(selectedSlides.hazards ? ['hazards'] : []),
           ...(selectedSlides.environmental ? ['environmental'] : []),
           ...(selectedSlides.contamination ? ['contamination'] : []),
-          ...(selectedSlides.scoring ? ['scoring'] : [])
+          ...(selectedSlides.scoring ? ['scoring'] : []),
+          ...(selectedSlides.context ? ['context'] : [])
         ];
 
         if (selectedSteps.length === 0) return;

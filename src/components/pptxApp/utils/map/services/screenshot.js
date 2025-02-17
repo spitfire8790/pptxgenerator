@@ -10,6 +10,7 @@ import { giraffeState } from '@gi-nx/iframe-sdk';
 import proj4 from 'proj4';
 import { getPTALToken } from './tokenService';
 import * as turf from '@turf/turf';
+import { HISTORICAL_LAYERS, METROMAP_CONFIG } from '../config/historicalLayers';
 
 
 console.log('Aerial config:', LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL]);
@@ -2382,8 +2383,16 @@ export async function captureUDPPrecinctMap(feature, developableArea) {
 }
 
 export async function capturePTALMap(feature, developableArea = null) {
-  if (!feature) return null;
-  console.log('Starting PTAL map capture...');
+  if (!feature) {
+    console.log('No feature provided, returning null');
+    return null;
+  }
+  console.log('Starting PTAL map capture with feature:', {
+    featureId: feature.id,
+    featureType: feature.geometry?.type,
+    coordinates: feature.geometry?.coordinates?.length,
+    developableArea: developableArea ? 'provided' : 'not provided'
+  });
 
   try {
     const config = {
@@ -2391,16 +2400,21 @@ export async function capturePTALMap(feature, developableArea = null) {
       height: 2048,
       padding: 1 
     };
+    console.log('Using config:', config);
     
     const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    console.log('Calculated bounds:', { centerX, centerY, size });
+    
     let ptalFeatures = [];
     
     // Create base canvas
     const canvas = createCanvas(config.width, config.height);
     const ctx = canvas.getContext('2d', { alpha: true });
+    console.log('Created canvas with dimensions:', { width: canvas.width, height: canvas.height });
 
     // Prepare parameters for both layers
     const { bbox } = calculateMercatorParams(centerX, centerY, size);
+    console.log('Calculated Mercator bbox:', bbox);
     
     // Prepare aerial layer parameters
     const aerialParams = new URLSearchParams({
@@ -2418,13 +2432,72 @@ export async function capturePTALMap(feature, developableArea = null) {
       MAP_RESOLUTION: 300,
       FORMAT_OPTIONS: 'dpi:300'
     });
+    console.log('Prepared aerial parameters:', Object.fromEntries(aerialParams.entries()));
 
     // Prepare PTAL layer parameters
     const ptalConfig = {
-      baseUrl: 'https://portal.data.nsw.gov.au/arcgis/rest/services/Hosted/ptal_dec20_gdb__(1)/FeatureServer/0',
-      layerId: 0
+      layerId: 28919
     };
-    const token = 'x-fPdL98xBDOmpxkDt3Rs8OQtK6sGJ51trkPiQqwEmjOmavKafI8e3FyEZr3mqn_CnW_aQcyJB7Hn1MWI6EKEpsKYkd9NQoQ-k9Ah3-V2ib19zms6sQ9T8yKMxbhsHC_X_axQvMiUdguEQFWs8lsKm4WV_xQBWMoAM0JKVdLevtRpAi4VoCPXfzKdKk-MqQUf_c2WcIsW9Ls7lVcuNiS9u7uqCgvZcDrrc-_hCPgeMYDmDV3jp1ShrH9nmcysxpL';
+    console.log('Using PTAL config:', ptalConfig);
+
+    // Get the PTAL layer data from Giraffe
+    console.log('Fetching project layers from Giraffe...');
+    const projectLayers = await giraffeState.get('projectLayers');
+    console.log('Retrieved project layers count:', projectLayers?.length);
+    
+    const ptalLayer = projectLayers?.find(layer => layer.layer === ptalConfig.layerId);
+    console.log('Found PTAL layer:', {
+      found: !!ptalLayer,
+      id: ptalLayer?.layer,
+      name: ptalLayer?.layer_full?.name,
+      defaultGroup: ptalLayer?.layer_full?.default_group,
+      vectorSource: ptalLayer?.layer_full?.vector_source ? 'present' : 'missing'
+    });
+    
+    if (!ptalLayer) {
+      console.error('PTAL layer not found in project layers');
+      return null;
+    }
+
+    // Color mapping for PTAL values
+    const ptalColors = {
+      '1 - Low': '#ff000080',
+      '2 - Low-Medium': '#ff7f0e80',
+      '3 - Medium': '#f2ff0080',
+      '4 - Medium-High': '#0e9aff80',
+      '5 - High': '#a8ff7f80',
+      '6 - Very High': '#1d960480'
+    };
+
+    // Extract the actual service URL and token from the vector tiles URL
+    const vectorTileUrl = ptalLayer.layer_full?.vector_source?.tiles?.[0];
+    console.log('Vector tile URL:', vectorTileUrl);
+    
+    if (!vectorTileUrl) {
+      console.error('No vector tile URL found in PTAL layer');
+      return null;
+    }
+
+    const decodedUrl = decodeURIComponent(vectorTileUrl.split('/featureServer/{z}/{x}/{y}/')?.[1] || '');
+    console.log('Decoded URL:', decodedUrl);
+    
+    // Extract the base URL from the decoded URL - it's everything before the query parameters
+    const urlMatch = decodedUrl.match(/(https:\/\/[^?]+)/);
+    if (!urlMatch) {
+      console.error('Could not extract base URL from decoded URL');
+      return null;
+    }
+    const baseUrl = urlMatch[1];
+    console.log('Using exact URL from vector tiles:', baseUrl);
+    
+    const extractedToken = decodedUrl.split('token=')?.[1]?.split('&')?.[0];
+    console.log('Extracted token:', extractedToken ? `${extractedToken.substring(0, 10)}...` : 'null');
+
+    if (!extractedToken) {
+      console.error('Could not extract token from vector tile URL');
+      return null;
+    }
+
     const ptalParams = new URLSearchParams({
       where: '1=1',
       geometry: bbox,
@@ -2434,7 +2507,17 @@ export async function capturePTALMap(feature, developableArea = null) {
       outFields: '*',
       returnGeometry: true,
       f: 'geojson',
-      token
+      token: extractedToken
+    });
+    console.log('Prepared PTAL parameters:', {
+      ...Object.fromEntries(ptalParams.entries()),
+      token: '***redacted***'
+    });
+
+    // Log the full URLs we're about to request
+    console.log('Preparing to request:', {
+      aerialUrl: `${LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL].url}?${aerialParams.toString()}`,
+      ptalUrl: `${baseUrl}/query?${ptalParams.toString().replace(extractedToken, '***redacted***')}`
     });
 
     // Load both layers in parallel
@@ -2443,57 +2526,66 @@ export async function capturePTALMap(feature, developableArea = null) {
       // Load aerial base layer
       loadImage(`${LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL].url}?${aerialParams.toString()}`),
       // Load PTAL data
-      proxyRequest(`${ptalConfig.baseUrl}/query?${ptalParams.toString()}`)
+      proxyRequest(`${baseUrl}/query?${ptalParams.toString()}`)
     ]);
+    console.log('Loaded both layers:', {
+      baseMapLoaded: !!baseMap,
+      ptalResponseFeatures: ptalResponse?.features?.length
+    });
 
     // Draw base map
     drawImage(ctx, baseMap, canvas.width, canvas.height, 0.5);
+    console.log('Drew base map');
 
     // Process PTAL data if available
     if (ptalResponse?.features?.length > 0) {
-      console.log(`Drawing ${ptalResponse.features.length} PTAL features...`);
+      console.log(`Processing ${ptalResponse.features.length} PTAL features...`);
       ptalFeatures = ptalResponse.features;
 
       // Create developable area polygon for intersection check if provided
       let developablePolygon = null;
       if (developableArea?.features?.[0]) {
         developablePolygon = turf.polygon(developableArea.features[0].geometry.coordinates);
+        console.log('Created developable area polygon for intersection checks');
       }
 
-      // Filter PTAL features to only those intersecting with developable area
+      // Find intersecting features for scoring only
       const intersectingPtalFeatures = developablePolygon 
         ? ptalFeatures.filter(ptalFeature => {
             try {
               const ptalPolygon = turf.polygon(ptalFeature.geometry.coordinates);
-              return turf.booleanIntersects(developablePolygon, ptalPolygon);
+              const intersects = turf.booleanIntersects(developablePolygon, ptalPolygon);
+              return intersects;
             } catch (error) {
               console.error('Error checking PTAL intersection:', error);
               return false;
             }
           })
         : ptalFeatures;
+      
+      console.log('Filtered PTAL features for scoring:', {
+        total: ptalFeatures.length,
+        intersecting: intersectingPtalFeatures.length
+      });
 
       // Store only the intersecting features in the feature object for scoring
+      const ptalValues = intersectingPtalFeatures.map(f => f.properties.legend || f.properties.ptal_desc || f.properties.ptal);
       if (feature.properties) {
-        feature.properties.ptalValues = intersectingPtalFeatures.map(f => f.properties.ptal_desc || f.properties.ptal);
+        feature.properties.ptalValues = ptalValues;
       } else {
-        feature.properties = { ptalValues: intersectingPtalFeatures.map(f => f.properties.ptal_desc || f.properties.ptal) };
+        feature.properties = { ptalValues };
       }
+      console.log('Stored PTAL values:', ptalValues);
 
-      // Color mapping for PTAL values
-      const ptalColors = {
-        '1 - Low': '#ff000080',
-        '2 - Low-Medium': '#ff7f0e80',
-        '3 - Medium': '#f2ff0080',
-        '4 - Medium-High': '#0e9aff80',
-        '5 - High': '#a8ff7f80',
-        '6 - Very High': '#1d960480'
-      };
-
-      intersectingPtalFeatures.forEach((ptalFeature, index) => {
-        console.log(`Drawing PTAL feature ${index + 1}...`);
-        const ptalValue = ptalFeature.properties.ptal;
+      // Draw ALL PTAL features, not just intersecting ones
+      console.log('Drawing all PTAL features...');
+      ptalFeatures.forEach((ptalFeature, index) => {
+        const ptalValue = ptalFeature.properties.legend || ptalFeature.properties.ptal_desc || ptalFeature.properties.ptal;
         const color = ptalColors[ptalValue] || '#808080';
+        console.log(`Drawing PTAL feature ${index + 1}/${ptalFeatures.length}:`, {
+          value: ptalValue,
+          color
+        });
 
         drawBoundary(ctx, ptalFeature.geometry.coordinates[0], centerX, centerY, size, config.width, {
           fill: true,
@@ -2502,15 +2594,19 @@ export async function capturePTALMap(feature, developableArea = null) {
           lineWidth: 2
         });
       });
+    } else {
+      console.log('No PTAL features found in response');
     }
 
     // Draw boundaries
+    console.log('Drawing site boundary...');
     drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
       strokeStyle: '#FF0000',
       lineWidth: 6
     });
 
     if (developableArea?.features?.[0]) {
+      console.log('Drawing developable area boundary...');
       drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
         strokeStyle: '#02d1b8',
         lineWidth: 12,
@@ -2518,9 +2614,59 @@ export async function capturePTALMap(feature, developableArea = null) {
       });
     }
 
+    // Add legend
+    const legendHeight = 200;
+    const legendWidth = 400;
+    const padding = 20;
+    const legendX = canvas.width - legendWidth - padding;
+    const legendY = canvas.height - legendHeight - padding;
+
+    // Draw legend background with border
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.strokeStyle = '#002664';
+    ctx.lineWidth = 2;
+    ctx.fillRect(legendX, legendY, legendWidth, legendHeight);
+    ctx.strokeRect(legendX, legendY, legendWidth, legendHeight);
+
+    // Legend title
+    ctx.font = 'bold 28px Public Sans';
+    ctx.fillStyle = '#002664';
+    ctx.textBaseline = 'top';
+    ctx.fillText('Public Transport Access Level', legendX + padding, legendY + padding);
+
+    // Legend items
+    const legendItems = [
+      { color: '#1d9604', label: 'Very High' },
+      { color: '#a8ff7f', label: 'High' },
+      { color: '#0e9aff', label: 'Medium-High' },
+      { color: '#f2ff00', label: 'Medium' },
+      { color: '#ff7f0e', label: 'Low-Medium' },
+      { color: '#ff0000', label: 'Low' }
+    ];
+
+    ctx.textBaseline = 'middle';
+    ctx.font = '22px Public Sans';
+
+    legendItems.forEach((item, index) => {
+      const y = legendY + padding + 60 + (index * 30); // Reduced spacing between items
+      
+      // Draw color box
+      ctx.fillStyle = item.color;
+      ctx.fillRect(legendX + padding, y - 10, 20, 20);
+      ctx.strokeStyle = '#363636';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(legendX + padding, y - 10, 20, 20);
+      
+      // Draw label
+      ctx.fillStyle = '#363636';
+      ctx.fillText(item.label, legendX + padding + 35, y);
+    });
+
+    console.log('PTAL map capture completed successfully');
     return canvas.toDataURL('image/png', 1.0);
   } catch (error) {
     console.error('Failed to capture PTAL map:', error);
+    console.error('Error stack:', error.stack);
     return null;
   }
 }
@@ -3353,239 +3499,7 @@ function mercatorToWGS84(x, y) {
   return [lon, lat];
 }
 
-async function getBestImageryForDecade(decade, centerX, centerY, size, feature) {
-  const config = {
-    // Match PowerPoint slide dimensions (16:9 aspect ratio)
-    width: 2048,
-    height: 1152,
-    padding: 0.2
-  };
 
-  const decadeLayers = {
-    '1940s': [
-      { type: 'metromap', year: 1948, layer: 'Illawarra_1948_GM_JPEG' },
-      { type: 'metromap', year: 1943, layer: 'Sydney_1943_1_GM_JPEG' },
-      { type: 'nsw', year: 1947, layer: 'HistoricalImagery1947' },
-      { type: 'nsw', year: 1944, layer: 'HistoricalImagery1944' },
-      { type: 'nsw', year: 1943, layer: 'HistoricalImagery1943' }
-    ],
-    '1950s': [
-      { type: 'nsw', year: 1955, layer: 'HistoricalImagery1955' },
-      { type: 'nsw', year: 1954, layer: 'HistoricalImagery1954' },
-      { type: 'nsw', year: 1951, layer: 'HistoricalImagery1951' }
-    ],
-    '1960s': [
-      { type: 'metromap', year: 1961, layer: 'Sydney_1961_GM_JPEG' },
-      { type: 'nsw', year: 1969, layer: 'HistoricalImagery1969' },
-      { type: 'nsw', year: 1966, layer: 'HistoricalImagery1966' },
-      { type: 'nsw', year: 1965, layer: 'HistoricalImagery1965' }
-    ],
-    '1970s': [
-      { type: 'nsw', year: 1979, layer: 'HistoricalImagery1979' },
-      { type: 'nsw', year: 1978, layer: 'HistoricalImagery1978' },
-      { type: 'nsw', year: 1976, layer: 'HistoricalImagery1976' },
-      { type: 'nsw', year: 1975, layer: 'HistoricalImagery1975' },
-      { type: 'nsw', year: 1974, layer: 'HistoricalImagery1974' },
-      { type: 'nsw', year: 1972, layer: 'HistoricalImagery1972' },
-      { type: 'nsw', year: 1971, layer: 'HistoricalImagery1971' },
-      { type: 'nsw', year: 1970, layer: 'HistoricalImagery1970' }
-    ],
-    '1980s': [
-      { type: 'metromap', year: 1982, layer: 'Sydney_1982_GM_JPEG' },
-      { type: 'nsw', year: 1989, layer: 'HistoricalImagery1988' },
-      { type: 'nsw', year: 1987, layer: 'HistoricalImagery1987' },
-      { type: 'nsw', year: 1986, layer: 'HistoricalImagery1986' },
-      { type: 'nsw', year: 1984, layer: 'HistoricalImagery1984' },
-      { type: 'nsw', year: 1983, layer: 'HistoricalImagery1983' },
-      { type: 'nsw', year: 1982, layer: 'HistoricalImagery1982' },
-      { type: 'nsw', year: 1980, layer: 'HistoricalImagery1980' }
-    ],
-    '1990s': [
-      { type: 'nsw', year: 1998, layer: 'HistoricalImagery1998' },
-      { type: 'nsw', year: 1996, layer: 'HistoricalImagery1996' },
-      { type: 'nsw', year: 1994, layer: 'HistoricalImagery1994' },
-      { type: 'nsw', year: 1993, layer: 'HistoricalImagery1993' },
-      { type: 'nsw', year: 1991, layer: 'HistoricalImagery1991' },
-      { type: 'nsw', year: 1990, layer: 'HistoricalImagery1990' }
-    ]
-  };
-
-  const layers = decadeLayers[decade];
-  if (!layers) return null;
-
-  console.log(`Trying to get imagery for ${decade}...`);
-  
-  const successfulResults = [];
-
-  for (const layerInfo of layers) {
-    try {
-      console.log(`Attempting to load ${layerInfo.type} layer from ${layerInfo.year}: ${layerInfo.layer}`);
-      
-      // Create new canvas for this attempt
-      const canvas = createCanvas(config.width, config.height);
-      const ctx = canvas.getContext('2d', { alpha: true });
-      
-      // Fill with white background
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, config.width, config.height);
-      
-      const { bbox } = calculateMercatorParams(centerX, centerY, size);
-      
-      if (layerInfo.type === 'metromap') {
-        const params = new URLSearchParams({
-          SERVICE: 'WMS',
-          VERSION: '1.3.0',
-          REQUEST: 'GetMap',
-          BBOX: bbox,
-          CRS: 'EPSG:3857',
-          WIDTH: config.width,
-          HEIGHT: config.height,
-          LAYERS: layerInfo.layer,
-          STYLES: '',
-          FORMAT: 'image/png',
-          DPI: 300,
-          MAP_RESOLUTION: 300,
-          FORMAT_OPTIONS: 'dpi:300',
-          TRANSPARENT: 'TRUE'
-        });
-        
-        const url = `https://api.metromap.com.au/ogc/gda2020/key/cstti1v27eq9nu61qu4g5hmzziouk84x211rfim0mb35cujvqpt1tufytqk575pe/service?${params.toString()}`;
-        console.log(`Requesting Metromap imagery: ${layerInfo.layer}`);
-        
-        const image = await loadImage(url);
-        
-        // Create a temporary canvas to check image content
-        const tempCanvas = createCanvas(config.width, config.height);
-        const tempCtx = tempCanvas.getContext('2d');
-        tempCtx.drawImage(image, 0, 0, config.width, config.height);
-        
-        // Get image data to check if it's not empty/transparent
-        const imageData = tempCtx.getImageData(0, 0, config.width, config.height).data;
-        let hasContent = false;
-        
-        for (let i = 0; i < imageData.length; i += 4) {
-          if (imageData[i + 3] > 0) {
-            hasContent = true;
-            break;
-          }
-        }
-        
-        if (!hasContent) {
-          console.log(`Metromap layer ${layerInfo.layer} returned empty/transparent image`);
-          continue;
-        }
-        
-        drawImage(ctx, image, canvas.width, canvas.height, 1.0);
-      } else {
-        const zoom = 18;
-        const [minLon, minLat, maxLon, maxLat] = bbox.split(',').map(Number);
-        const [centerLon, centerLat] = mercatorToWGS84(
-          (minLon + maxLon) / 2,
-          (minLat + maxLat) / 2
-        );
-
-        const tileCol = long2tile(centerLon, zoom);
-        const tileRow = lat2tile(centerLat, zoom);
-
-        const url = `https://portal.spatial.nsw.gov.au/tileservices/Hosted/${layerInfo.layer}/MapServer/WMTS/tile/1.0.0/${layerInfo.layer}/default/default028mm/${zoom}/${tileRow}/${tileCol}`;
-        console.log(`Requesting NSW historical imagery: ${layerInfo.layer}`);
-        
-        const proxyUrl = await proxyRequest(url);
-        if (!proxyUrl) {
-          throw new Error('Failed to get proxy URL for NSW imagery');
-        }
-        const image = await loadImage(proxyUrl);
-        
-        // Create a temporary canvas to check image content
-        const tempCanvas = createCanvas(config.width, config.height);
-        const tempCtx = tempCanvas.getContext('2d');
-        tempCtx.drawImage(image, 0, 0, config.width, config.height);
-        
-        // Get image data to check if it's not empty/transparent
-        const imageData = tempCtx.getImageData(0, 0, config.width, config.height).data;
-        let hasContent = false;
-        
-        for (let i = 0; i < imageData.length; i += 4) {
-          if (imageData[i + 3] > 0 && (imageData[i] > 0 || imageData[i + 1] > 0 || imageData[i + 2] > 0)) {
-            hasContent = true;
-            break;
-          }
-        }
-        
-        if (!hasContent) {
-          console.log(`NSW layer ${layerInfo.layer} returned empty/transparent image`);
-          continue;
-        }
-        
-        drawImage(ctx, image, canvas.width, canvas.height, 1.0);
-      }
-      
-      // Draw property boundary
-      drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-        strokeStyle: '#FF0000',
-        lineWidth: 3
-      });
-
-      // Add source attribution
-      ctx.font = 'bold 24px Arial';
-      ctx.fillStyle = '#002664';
-      const source = layerInfo.type === 'metromap' ? 'Metromap' : 'NSW Spatial Services';
-      const sourceText = `Source: ${source}`;
-      const textWidth = ctx.measureText(sourceText).width;
-      const padding = 20;
-      
-      // Draw semi-transparent background for text
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-      ctx.fillRect(
-        canvas.width - textWidth - padding * 2,
-        canvas.height - 40 - padding,
-        40,
-        40
-      );
-      
-      // Draw text
-      ctx.fillStyle = '#002664';
-      ctx.fillText(sourceText, canvas.width - textWidth - padding, canvas.height - padding - 10);
-
-      successfulResults.push({
-        image: canvas.toDataURL('image/png', 1.0),
-        year: layerInfo.year,
-        type: layerInfo.type,
-        layer: layerInfo.layer,
-        source: source
-      });
-
-      console.log(`Successfully loaded ${layerInfo.type} layer from ${layerInfo.year} with valid image content`);
-    } catch (error) {
-      console.warn(`Failed to load ${layerInfo.type} layer from ${layerInfo.year} (${layerInfo.layer}):`, error.message);
-      continue;
-    }
-  }
-
-  if (successfulResults.length > 0) {
-    console.log(`Found ${successfulResults.length} successful layers with valid content for ${decade}`);
-    
-    successfulResults.sort((a, b) => {
-      if (a.type === 'metromap' && b.type !== 'metromap') return -1;
-      if (a.type !== 'metromap' && b.type === 'metromap') return 1;
-      return b.year - a.year;
-    });
-
-    const bestResult = successfulResults[0];
-    console.log(`Selected best layer for ${decade}: ${bestResult.type} from ${bestResult.year}`);
-    
-    return {
-      image: bestResult.image,
-      year: bestResult.year,
-      type: bestResult.type,
-      layer: bestResult.layer,
-      source: bestResult.source
-    };
-  }
-
-  console.log(`No successful layers found with valid content for ${decade}`);
-  return null;
-}
 
 export async function captureHistoricalImagery(feature, developableArea = null) {
   if (!feature) return null;
@@ -3594,25 +3508,18 @@ export async function captureHistoricalImagery(feature, developableArea = null) 
   try {
     const config = {
       width: 2048,
-      height: 2048,  // Match other screenshots
-      padding: 0.2
+      height: 2048,
+      padding: 0.4
     };
 
     const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
     const { bbox } = calculateMercatorParams(centerX, centerY, size);
 
-    // Available Metromap historical layers
-    const metromapLayers = [
-      { year: 1982, layer: 'Sydney_1982_GM_JPEG' },
-      { year: 1961, layer: 'Sydney_1961_GM_JPEG' },
-      { year: 1948, layer: 'Illawarra_1948_GM_JPEG' },
-      { year: 1943, layer: 'Sydney_1943_1_GM_JPEG' }
-    ];
-
-    // Try each layer in order (most recent first) until we find one with content
-    for (const layerInfo of metromapLayers) {
+    // Try each layer in order from oldest to newest
+    const layersToTry = [...HISTORICAL_LAYERS].reverse();
+    for (const layerInfo of layersToTry) {
       try {
-        console.log(`Trying Metromap layer from ${layerInfo.year}: ${layerInfo.layer}`);
+        console.log(`Trying Metromap layer from ${layerInfo.year} (${layerInfo.region}): ${layerInfo.layer}`);
         
         const canvas = createCanvas(config.width, config.height);
         const ctx = canvas.getContext('2d', { alpha: true });
@@ -3622,24 +3529,15 @@ export async function captureHistoricalImagery(feature, developableArea = null) 
         ctx.fillRect(0, 0, config.width, config.height);
 
         const params = new URLSearchParams({
-          SERVICE: 'WMS',
-          VERSION: '1.3.0',
-          REQUEST: 'GetMap',
+          ...METROMAP_CONFIG.defaultParams,
           BBOX: bbox,
-          CRS: 'EPSG:3857',
           WIDTH: config.width,
           HEIGHT: config.height,
-          LAYERS: layerInfo.layer,
-          STYLES: '',
-          FORMAT: 'image/png',
-          DPI: 300,
-          MAP_RESOLUTION: 300,
-          FORMAT_OPTIONS: 'dpi:300',
-          TRANSPARENT: 'TRUE'
+          LAYERS: layerInfo.layer
         });
 
-        const url = `https://api.metromap.com.au/ogc/gda2020/key/cstti1v27eq9nu61qu4g5hmzziouk84x211rfim0mb35cujvqpt1tufytqk575pe/service?${params.toString()}`;
-        console.log(`Requesting Metromap imagery for ${layerInfo.year}`);
+        const url = `${METROMAP_CONFIG.baseUrl}?${params.toString()}`;
+        console.log(`Requesting Metromap imagery for ${layerInfo.year} (${layerInfo.region})`);
         
         const image = await loadImage(url);
         
@@ -3665,7 +3563,7 @@ export async function captureHistoricalImagery(feature, developableArea = null) 
         }
 
         // If we get here, we found a valid layer with content
-        console.log(`Found valid historical imagery from ${layerInfo.year}`);
+        console.log(`Found valid historical imagery from ${layerInfo.year} (${layerInfo.region})`);
         
         // Draw the image
         drawImage(ctx, image, canvas.width, canvas.height, 1.0);
@@ -3687,7 +3585,7 @@ export async function captureHistoricalImagery(feature, developableArea = null) 
         // Add source attribution
         ctx.font = 'bold 24px Arial';
         ctx.fillStyle = '#002664';
-        const sourceText = `Source: Metromap (${layerInfo.year})`;
+        const sourceText = `Source: Metromap ${layerInfo.region} (${layerInfo.year})`;
         const textWidth = ctx.measureText(sourceText).width;
         const padding = 20;
         
@@ -3710,10 +3608,11 @@ export async function captureHistoricalImagery(feature, developableArea = null) 
           year: layerInfo.year,
           type: 'metromap',
           layer: layerInfo.layer,
+          region: layerInfo.region,
           source: 'Metromap'
         }];
       } catch (error) {
-        console.warn(`Failed to load ${layerInfo.year} layer:`, error.message);
+        console.warn(`Failed to load ${layerInfo.year} ${layerInfo.region} layer:`, error.message);
         continue;
       }
     }

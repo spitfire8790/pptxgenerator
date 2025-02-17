@@ -431,7 +431,7 @@ export async function addContextSlide(pptx, properties) {
     y: '80%',
     w: '40%',
     h: '8%',
-    fontSize: 7,
+    fontSize: 6,
     color: '363636',
     fontFace: 'Public Sans',
     align: 'left',

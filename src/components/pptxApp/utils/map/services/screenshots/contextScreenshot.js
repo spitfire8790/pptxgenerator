@@ -104,7 +104,7 @@ export async function captureGPRMap(feature, developableArea = null) {
     const config = {
       width: 2048,
       height: 2048,
-      padding: 0.2  // Increased padding for more context
+      padding: 0.8  // Increased padding for more context
     };
     
     console.log('Calculating bounds...');
@@ -295,7 +295,7 @@ export async function captureGPRMap(feature, developableArea = null) {
 
       // Convert Web Mercator coordinates to pixel coordinates
       const pixelX = Math.round(((mercX - (centerX - size/2)) / size) * config.width),
-            pixelY = Math.round(config.height - ((mercY - (centerY - size/2)) / size) * config.height);
+            pixelY = Math.round(config.height - ((mercY - (centerY - size/2)) / size) * config.height)
       
       console.log('Drawing map pin at:', { 
         pixelX, 
@@ -369,7 +369,7 @@ export async function captureServicesAndAmenitiesMap(feature, developableArea = 
     const config = {
       width: 2048,
       height: 2048,
-      padding: 0.3  // Increased padding for more context
+      padding: 3  // Increased padding for more context
     };
     
     console.log('Calculating bounds...');
@@ -433,7 +433,7 @@ export async function captureServicesAndAmenitiesMap(feature, developableArea = 
         inSR: 4283,
         outSR: 4283,
         spatialRel: 'esriSpatialRelIntersects',
-        outFields: 'poiname,poitype,poigroup',
+        outFields: 'poilabel,poitype,poigroup',
         returnGeometry: true,
         f: 'json'
       });
@@ -461,13 +461,37 @@ export async function captureServicesAndAmenitiesMap(feature, developableArea = 
           console.log(`Found ${parsedResponse.features.length} POI features`);
           
           // Draw each POI point on the canvas
-          parsedResponse.features.forEach(feature => {
+          parsedResponse.features.forEach((feature, index) => {
+            // Log the raw feature data
+            console.log(`Processing POI feature ${index}:`, {
+              geometry: feature.geometry,
+              attributes: feature.attributes,
+              type: feature.geometry?.type
+            });
+
             // The coordinates are already in GDA94, convert them to Web Mercator
             const [mercX, mercY] = proj4(GDA94, 'EPSG:3857', [feature.geometry.x, feature.geometry.y]);
             
-            // Convert mercator coordinates to pixel coordinates
-            const pixelX = Math.round(((mercX - (centerX - size/2)) / size) * config.width),
-                  pixelY = Math.round(config.height - ((mercY - (centerY - size/2)) / size) * config.height);
+            // Convert center coordinates to Web Mercator as well
+            const [centerMercX, centerMercY] = proj4(GDA94, 'EPSG:3857', [centerX, centerY]);
+            
+            // Calculate size in Web Mercator units (approximate)
+            const mercatorSize = size * (20037508.34 / 180); // Convert degrees to meters (approximate)
+            
+            // Calculate pixel coordinates
+            const xOffset = mercX - (centerMercX - mercatorSize/2);
+            const yOffset = mercY - (centerMercY - mercatorSize/2);
+            const pixelX = Math.round((xOffset / mercatorSize) * config.width);
+            const pixelY = Math.round(config.height - (yOffset / mercatorSize) * config.height);
+            
+            // Log the coordinate transformations
+            console.log(`POI ${index} coordinate transformation:`, {
+              original: [feature.geometry.x, feature.geometry.y],
+              mercator: [mercX, mercY],
+              centerMercator: [centerMercX, centerMercY],
+              mercatorSize,
+              pixelCoords: [pixelX, pixelY]
+            });
             
             // Get color based on POI group
             let color;
@@ -488,46 +512,49 @@ export async function captureServicesAndAmenitiesMap(feature, developableArea = 
                 color = '#666666';
             }
             
-            console.log('Drawing POI:', {
-              name: feature.attributes.poiname || '(Unnamed)',
-              type: feature.attributes.poitype,
-              group: feature.attributes.poigroup,
-              color,
-              coords: [feature.geometry.x, feature.geometry.y],
-              mercator: [mercX, mercY],
-              pixel: [pixelX, pixelY]
-            });
-            
             // Draw POI marker
             if (pixelX >= 0 && pixelX <= config.width && pixelY >= 0 && pixelY <= config.height) {
-              drawMapPin(ctx, pixelX, pixelY, color, 60);
+              console.log(`Drawing POI ${index} at (${pixelX}, ${pixelY}) with color ${color}`);
+              try {
+                drawMapPin(ctx, pixelX, pixelY, color, 60);
+                console.log(`Successfully drew POI ${index}`);
+              } catch (drawError) {
+                console.error(`Failed to draw POI ${index}:`, drawError);
+              }
               
               // Add label if name exists
-              if (feature.attributes.poiname) {
-                ctx.save();
-                ctx.font = 'bold 24px Public Sans';
-                ctx.fillStyle = '#000000';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'top';
-                
-                // Draw text background
-                const text = feature.attributes.poiname;
-                const metrics = ctx.measureText(text);
-                const padding = 4;
-                
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-                ctx.fillRect(
-                  pixelX - metrics.width/2 - padding,
-                  pixelY - 80,
-                  metrics.width + padding * 2,
-                  30
-                );
-                
-                // Draw text
-                ctx.fillStyle = '#000000';
-                ctx.fillText(text, pixelX, pixelY - 75);
-                ctx.restore();
+              if (feature.attributes.poilabel) {
+                try {
+                  ctx.save();
+                  ctx.font = 'bold 24px Public Sans';
+                  ctx.fillStyle = '#000000';
+                  ctx.textAlign = 'center';
+                  ctx.textBaseline = 'top';
+                  
+                  // Draw text background
+                  const text = feature.attributes.poilabel;
+                  const metrics = ctx.measureText(text);
+                  const padding = 4;
+                  
+                  ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                  ctx.fillRect(
+                    pixelX - metrics.width/2 - padding,
+                    pixelY - 80,
+                    metrics.width + padding * 2,
+                    30
+                  );
+                  
+                  // Draw text
+                  ctx.fillStyle = '#000000';
+                  ctx.fillText(text, pixelX, pixelY - 75);
+                  ctx.restore();
+                  console.log(`Successfully drew label for POI ${index}: ${text}`);
+                } catch (labelError) {
+                  console.error(`Failed to draw label for POI ${index}:`, labelError);
+                }
               }
+            } else {
+              console.warn(`POI ${index} coordinates out of bounds:`, { pixelX, pixelY });
             }
           });
 
@@ -539,7 +566,7 @@ export async function captureServicesAndAmenitiesMap(feature, developableArea = 
               coordinates: [feature.geometry.x, feature.geometry.y]
             },
             properties: {
-              poiname: feature.attributes.poiname || '(Unnamed)',
+              poilabel: feature.attributes.poilabel || '(Unnamed)',
               poitype: feature.attributes.poitype,
               poigroup: feature.attributes.poigroup
             }
@@ -551,8 +578,8 @@ export async function captureServicesAndAmenitiesMap(feature, developableArea = 
             if (!acc[type]) {
               acc[type] = [];
             }
-            if (feature.properties.poiname) {
-              acc[type].push(feature.properties.poiname);
+            if (feature.properties.poilabel) {
+              acc[type].push(feature.properties.poilabel);
             } else {
               // For unnamed POIs, just increment a counter
               acc[type].unnamed = (acc[type].unnamed || 0) + 1;

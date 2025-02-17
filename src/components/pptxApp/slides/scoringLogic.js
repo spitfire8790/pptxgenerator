@@ -431,9 +431,9 @@ const scoringCriteria = {
         if (coverage === 0) {
           score = 3;
           console.log('No coverage (0%) - Score: 3');
-        } else if (coverage < 50) {
+        } else if (coverage < 20) {
           score = 2;
-          console.log('Coverage < 50% - Score: 2');
+          console.log('Coverage < 20% - Score: 2');
         } else {
           score = 1;
           console.log('Coverage >= 50% - Score: 1');
