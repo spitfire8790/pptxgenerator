@@ -1,5 +1,6 @@
 // Import necessary React library and components
 import React from 'react';
+import { Analytics } from '@vercel/analytics/react';
 // Import MapView which handles Giraffe SDK map interactions
 import MapView from './components/pptxApp/MapView';
 // Import ReportGenerator which handles the PowerPoint generation UI and logic
@@ -48,6 +49,7 @@ function App() {
         - Triggers handleFeatureSelect when user selects a property
       */}
       <MapView onFeatureSelect={handleFeatureSelect} />
+      <Analytics />
     </div>
   );
 }
