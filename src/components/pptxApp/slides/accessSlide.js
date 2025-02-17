@@ -407,10 +407,10 @@ export async function addAccessSlide(pptx, propertyData) {
 
       // Add PTAL legend background
       slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
-        x: '85%',
+        x: '87%',
         y: '64%',
-        w: '9%',
-        h: '9%',
+        w: '7%',
+        h: '10%',
         fill: 'FFFFFF',
         line: { color: '363636', width: 0.5 }
       }));
@@ -428,9 +428,9 @@ export async function addAccessSlide(pptx, propertyData) {
       ptalLegendItems.forEach((item, index) => {
         // Add colored square
         slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
-          x: '85.5%',
+          x: '87.5%',
           y: `${64.5 + (index * 1.5)}%`,
-          w: '1%',
+          w: '0.56%',
           h: '1%',
           fill: item.color,
           line: { color: '363636', width: 0.5 }
@@ -438,11 +438,11 @@ export async function addAccessSlide(pptx, propertyData) {
 
         // Add label
         slide.addText(item.label, convertCmValues({
-          x: '87%',
+          x: '88%',
           y: `${64.5 + (index * 1.5)}%`,
           w: '6.5%',
           h: '1%',
-          fontSize: 5,
+          fontSize: 4,
           color: '363636',
           fontFace: 'Public Sans',
           align: 'left',

@@ -153,7 +153,7 @@ export async function addContextSlide(pptx, properties) {
     // Add footer elements
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.footerLine));
     slide.addText('Property and Development NSW', convertCmValues(styles.footer));
-    slide.addText('13', convertCmValues(styles.pageNumber));
+    slide.addText('12', convertCmValues(styles.pageNumber));
 
     // Add left map container (Government Property Register)
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({

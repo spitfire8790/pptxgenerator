@@ -269,6 +269,41 @@ export async function captureGPRMap(feature, developableArea = null) {
       });
     }
 
+    // Add GPR legend
+    try {
+      console.log('Loading GPR legend...');
+      const legendImage = await loadImage('./public/legends/gpr-legend.png');
+      
+      // Calculate position for bottom right corner with padding
+      const padding = 20;
+      const legendWidth = 600; // Doubled size for larger legend
+      const aspectRatio = legendImage.height / legendImage.width;
+      const legendHeight = legendWidth * aspectRatio;
+      
+      // Draw the legend with white background
+      ctx.save();
+      // Draw white background
+      ctx.fillStyle = 'white';
+      ctx.fillRect(
+        config.width - legendWidth - padding,
+        config.height - legendHeight - padding,
+        legendWidth,
+        legendHeight
+      );
+      // Draw the legend image
+      ctx.drawImage(
+        legendImage,
+        config.width - legendWidth - padding,
+        config.height - legendHeight - padding,
+        legendWidth,
+        legendHeight
+      );
+      ctx.restore();
+      console.log('GPR legend added successfully');
+    } catch (error) {
+      console.error('Failed to add GPR legend:', error);
+    }
+
     // Calculate centroid of developable area and draw pin - moved to end and fixed CRS
     if (developableArea?.features?.[0]?.geometry?.coordinates?.[0]) {
       console.log('Calculating developable area centroid...');
@@ -369,7 +404,7 @@ export async function captureServicesAndAmenitiesMap(feature, developableArea = 
     const config = {
       width: 2048,
       height: 2048,
-      padding: 3  // Increased padding for more context
+      padding: 1  // Increased padding for more context
     };
     
     console.log('Calculating bounds...');
@@ -629,6 +664,57 @@ export async function captureServicesAndAmenitiesMap(feature, developableArea = 
         lineWidth: 12,
         dashArray: [20, 10]
       });
+    }
+
+    // Calculate centroid of developable area and draw pin - moved to end and fixed CRS
+    if (developableArea?.features?.[0]?.geometry?.coordinates?.[0]) {
+      console.log('Calculating developable area centroid...');
+      // First transform the coordinates from Web Mercator to GDA94
+      const coordinates = developableArea.features[0].geometry.coordinates[0].map(coord => {
+        return proj4('EPSG:3857', GDA94, coord);
+      });
+      
+      // Create polygon with GDA94 coordinates
+      const polygon = turf.polygon([coordinates]);
+      const centroid = turf.centroid(polygon);
+      
+      // Transform centroid back to Web Mercator
+      const [mercX, mercY] = proj4(GDA94, 'EPSG:3857', centroid.geometry.coordinates);
+      
+      console.log('Coordinate debug:', {
+        originalCoords: developableArea.features[0].geometry.coordinates[0][0],
+        gda94Coords: coordinates[0],
+        centroidGDA94: centroid.geometry.coordinates,
+        centroidMercator: [mercX, mercY],
+        mapCenter: [centerX, centerY],
+        mapSize: size
+      });
+
+      // Convert Web Mercator coordinates to pixel coordinates
+      const pixelX = Math.round(((mercX - (centerX - size/2)) / size) * config.width),
+            pixelY = Math.round(config.height - ((mercY - (centerY - size/2)) / size) * config.height)
+      
+      console.log('Drawing map pin at:', { 
+        pixelX, 
+        pixelY,
+        canvasSize: { width: config.width, height: config.height }
+      });
+
+      // Only draw if the coordinates are within the canvas
+      if (pixelX >= 0 && pixelX <= config.width && pixelY >= 0 && pixelY <= config.height) {
+        // Clear a small area around the pin to ensure visibility
+        ctx.save();
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.beginPath();
+        ctx.arc(pixelX, pixelY - 100, 100, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        
+        // Draw the pin with shadow and white outline
+        drawMapPin(ctx, pixelX, pixelY, '#FF0000', 120);
+      } else {
+        console.warn('Pin coordinates outside canvas bounds:', { pixelX, pixelY });
+      }
     }
 
     console.log('Converting canvas to image...');

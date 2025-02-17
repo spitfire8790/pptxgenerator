@@ -1,6 +1,7 @@
 // Import necessary React library and components
 import React from 'react';
 import { Analytics } from '@vercel/analytics/react';
+import { track } from '@vercel/analytics';
 // Import MapView which handles Giraffe SDK map interactions
 import MapView from './components/pptxApp/MapView';
 // Import ReportGenerator which handles the PowerPoint generation UI and logic
@@ -25,6 +26,12 @@ function App() {
       geometry: feature.geometry
     };
     setSelectedFeature(transformedFeature);
+    
+    // Track feature selection event
+    track('feature_selected', {
+      propertyId: feature.properties?.copiedFrom?.id || 'unknown',
+      propertyType: feature.properties?.copiedFrom?.type || 'unknown'
+    });
   };
 
   return (
@@ -49,7 +56,23 @@ function App() {
         - Triggers handleFeatureSelect when user selects a property
       */}
       <MapView onFeatureSelect={handleFeatureSelect} />
-      <Analytics />
+      <Analytics 
+        debug={process.env.NODE_ENV === 'development'}
+        beforeSend={(event) => {
+          // You can modify or filter events before they're sent
+          if (event.type === 'pageview') {
+            // Add custom properties to all pageview events
+            return {
+              ...event,
+              properties: {
+                ...event.properties,
+                appVersion: process.env.REACT_APP_VERSION,
+              },
+            };
+          }
+          return event;
+        }}
+      />
     </div>
   );
 }

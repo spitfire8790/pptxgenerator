@@ -42,6 +42,41 @@ export async function captureMapScreenshot(feature, type = SCREENSHOT_TYPES.SNAP
     
     drawImage(ctx, mainImage, canvas.width, canvas.height, config.layerId ? 0.7 : 1.0);
 
+    // Add cadastre layer only for property snapshot
+    if (type === SCREENSHOT_TYPES.SNAPSHOT) {
+      try {
+        const cadastreConfig = {
+          url: 'https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Cadastre/MapServer',
+          layerId: 9,
+          size: config.width || config.size,
+          padding: config.padding
+        };
+
+        const params = new URLSearchParams({
+          f: 'image',
+          format: 'png32',
+          transparent: 'true',
+          size: `${cadastreConfig.size},${cadastreConfig.size}`,
+          bbox: bbox,  // Use the mercator bbox we already calculated
+          bboxSR: 3857,
+          imageSR: 3857,
+          layers: `show:${cadastreConfig.layerId}`,
+          dpi: 300
+        });
+
+        const cadastreUrl = `${cadastreConfig.url}/export?${params.toString()}`;
+        const cadastreProxyUrl = await proxyRequest(cadastreUrl);
+        
+        if (cadastreProxyUrl) {
+          const cadastreLayer = await loadImage(cadastreProxyUrl);
+          // Draw cadastre with reduced opacity to not overwhelm other layers
+          drawImage(ctx, cadastreLayer, canvas.width, canvas.height, 1);
+        }
+      } catch (error) {
+        console.warn('Failed to load cadastre layer:', error);
+      }
+    }
+
     if (developableArea?.features?.[0]) {
       drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width || config.size, {
         strokeStyle: '#02d1b8',
@@ -566,6 +601,30 @@ export async function captureHeritageMap(feature, developableArea = null) {
       });
     }
 
+    try {
+      // Load and draw the legend image
+      const legendImage = await loadImage('/legends/heritage-layer-legend.png');
+      
+      // Position the legend in the bottom right with padding
+      const padding = 30;
+      const legendWidth = 450;  // Match the width from the image
+      const legendHeight = 600; // Match the height from the image
+      const legendX = canvas.width - legendWidth - padding;
+      const legendY = canvas.height - legendHeight - padding;
+
+      // Draw legend background
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 2;
+      ctx.fillRect(legendX, legendY, legendWidth, legendHeight);
+      ctx.strokeRect(legendX, legendY, legendWidth, legendHeight);
+
+      // Draw the legend image
+      ctx.drawImage(legendImage, legendX, legendY, legendWidth, legendHeight);
+    } catch (error) {
+      console.warn('Failed to load or draw legend image:', error);
+    }
+
     return canvas.toDataURL('image/png', 1.0);
   } catch (error) {
     console.error('Failed to capture heritage map:', error);
@@ -657,6 +716,85 @@ export async function captureAcidSulfateMap(feature, developableArea = null) {
         dashArray: [20, 10]
       });
     }
+
+    // Add legend
+    const legendHeight = 380; // Reduced height to remove extra space
+    const legendWidth = 400;
+    const padding = 30;
+    const lineHeight = 40; // Reduced line height for tighter spacing
+    const legendX = canvas.width - legendWidth - padding;
+    const legendY = canvas.height - legendHeight - padding;
+    const swatchSize = 30;
+
+    // Legend items with their colors (using the exact colors from the renderer)
+    const legendItems = [
+      { label: 'Class 1', color: 'rgba(0, 197, 255, 255)' },
+      { label: 'Class 2', color: 'rgba(255, 0, 197, 255)' },
+      { label: 'Class 2b', color: 'rgba(255, 0, 120, 255)' },
+      { label: 'Class 3', color: 'rgba(255, 190, 232, 255)' },
+      { label: 'Class 4', color: 'rgba(223, 115, 255, 255)' },
+      { label: 'Class 5', color: 'rgba(255, 255, 190, 255)' },
+      { label: 'Non Standard Values', color: 'rgba(110, 110, 110, 255)', pattern: true }
+    ];
+
+    // Draw legend background with border
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2;
+    ctx.fillRect(legendX, legendY, legendWidth, legendHeight);
+    ctx.strokeRect(legendX, legendY, legendWidth, legendHeight);
+
+    // Legend title
+    ctx.font = 'bold 32px Public Sans';
+    ctx.fillStyle = '#000000';
+    ctx.textBaseline = 'top';
+    ctx.fillText('Acid Sulfate Soil Risk', legendX + padding, legendY + padding);
+
+    // Draw legend items
+    ctx.textBaseline = 'middle';
+    ctx.font = '24px Public Sans';
+
+    legendItems.forEach((item, index) => {
+      const y = legendY + padding + 60 + (index * lineHeight);
+      
+      // Draw color swatch
+      ctx.fillStyle = item.color;
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 1;
+      ctx.fillRect(legendX + padding, y - swatchSize/2, swatchSize, swatchSize);
+      ctx.strokeRect(legendX + padding, y - swatchSize/2, swatchSize, swatchSize);
+
+      // Add diagonal pattern for non-standard values
+      if (item.pattern) {
+        ctx.beginPath();
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 1;
+        
+        // Save the current clip region
+        ctx.save();
+        
+        // Create a clipping region that matches the square exactly
+        ctx.beginPath();
+        ctx.rect(legendX + padding, y - swatchSize/2, swatchSize, swatchSize);
+        ctx.clip();
+        
+        // Draw diagonal lines
+        const spacing = 6; // Slightly reduced spacing for more lines
+        for (let i = -swatchSize; i <= swatchSize * 2; i += spacing) {
+          const x = legendX + padding + i;
+          ctx.moveTo(x, y - swatchSize/2);
+          ctx.lineTo(x + swatchSize, y + swatchSize/2);
+        }
+        ctx.stroke();
+        
+        // Restore the original clip region
+        ctx.restore();
+      }
+      
+      // Draw label
+      ctx.fillStyle = '#000000';
+      ctx.fillText(item.label, legendX + padding + swatchSize + 20, y);
+    });
 
     return canvas.toDataURL('image/png', 1.0);
   } catch (error) {
@@ -2613,54 +2751,6 @@ export async function capturePTALMap(feature, developableArea = null) {
         dashArray: [20, 10]
       });
     }
-
-    // Add legend
-    const legendHeight = 200;
-    const legendWidth = 400;
-    const padding = 20;
-    const legendX = canvas.width - legendWidth - padding;
-    const legendY = canvas.height - legendHeight - padding;
-
-    // Draw legend background with border
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-    ctx.strokeStyle = '#002664';
-    ctx.lineWidth = 2;
-    ctx.fillRect(legendX, legendY, legendWidth, legendHeight);
-    ctx.strokeRect(legendX, legendY, legendWidth, legendHeight);
-
-    // Legend title
-    ctx.font = 'bold 28px Public Sans';
-    ctx.fillStyle = '#002664';
-    ctx.textBaseline = 'top';
-    ctx.fillText('Public Transport Access Level', legendX + padding, legendY + padding);
-
-    // Legend items
-    const legendItems = [
-      { color: '#1d9604', label: 'Very High' },
-      { color: '#a8ff7f', label: 'High' },
-      { color: '#0e9aff', label: 'Medium-High' },
-      { color: '#f2ff00', label: 'Medium' },
-      { color: '#ff7f0e', label: 'Low-Medium' },
-      { color: '#ff0000', label: 'Low' }
-    ];
-
-    ctx.textBaseline = 'middle';
-    ctx.font = '22px Public Sans';
-
-    legendItems.forEach((item, index) => {
-      const y = legendY + padding + 60 + (index * 30); // Reduced spacing between items
-      
-      // Draw color box
-      ctx.fillStyle = item.color;
-      ctx.fillRect(legendX + padding, y - 10, 20, 20);
-      ctx.strokeStyle = '#363636';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(legendX + padding, y - 10, 20, 20);
-      
-      // Draw label
-      ctx.fillStyle = '#363636';
-      ctx.fillText(item.label, legendX + padding + 35, y);
-    });
 
     console.log('PTAL map capture completed successfully');
     return canvas.toDataURL('image/png', 1.0);
