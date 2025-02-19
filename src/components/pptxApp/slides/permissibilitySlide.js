@@ -634,7 +634,7 @@ export async function addPermissibilitySlide(pptx, properties) {
 
       // Add footer text
       slide.addText('Property and Development NSW', convertCmValues(styles.footer));
-      slide.addText('13', convertCmValues(styles.pageNumber));
+      slide.addText('15', convertCmValues(styles.pageNumber));
 
       return slide;
     } catch (error) {

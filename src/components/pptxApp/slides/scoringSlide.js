@@ -104,7 +104,7 @@ export async function createScoringSlide(pres, propertyData) {
     // Add footer elements
     slide.addShape(pres.shapes.RECTANGLE, styles.footerLine);
     slide.addText('Property and Development NSW', styles.footer);
-    slide.addText('14', styles.pageNumber);
+    slide.addText('13', styles.pageNumber);
 
     // Helper function to extract score value with better error handling
     const getScoreValue = (scoreResult) => {

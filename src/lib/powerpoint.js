@@ -116,8 +116,8 @@ export async function generateReport(properties, onProgress) {
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 
-    if (properties.selectedSlides.permissibility !== false) {
-      await addPermissibilitySlide(pptx, properties);
+    if (properties.selectedSlides.scoring !== false) {
+      await createScoringSlide(pptx, properties, properties.developableArea);
       updateProgress();
       await new Promise(resolve => setTimeout(resolve, 300));
     }
@@ -128,9 +128,8 @@ export async function generateReport(properties, onProgress) {
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 
-    // Add scoring slide last
-    if (properties.selectedSlides.scoring !== false) {
-      await createScoringSlide(pptx, properties, properties.developableArea);
+    if (properties.selectedSlides.permissibility !== false) {
+      await addPermissibilitySlide(pptx, properties);
       updateProgress();
       await new Promise(resolve => setTimeout(resolve, 300));
     }
