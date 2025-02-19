@@ -24,9 +24,9 @@ export async function addPermissibilitySlide(pptx, properties) {
     try {
       const API_BASE_URL = process.env.NODE_ENV === 'development' 
         ? 'http://localhost:5173'
-        : 'https://desktopddpptx.vercel.app';
+        : 'https://proxy-server.jameswilliamstrutt.workers.dev';
 
-      const response = await fetch(`${API_BASE_URL}/api/proxy`, {
+      const response = await fetch(`${API_BASE_URL}${process.env.NODE_ENV === 'development' ? '/api/proxy' : ''}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
