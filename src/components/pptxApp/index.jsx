@@ -74,10 +74,32 @@ const MapScreenshotApp = () => {
       <div className="w-48 border-r border-gray-200 bg-white flex flex-col flex-shrink-0">
         <div className="p-4">
           <h1 className="text-xl font-bold mb-4 text-gray-900 break-words">
+            Desktop Due Diligence PowerPoint Report Generator
+          </h1>
+          <div className="flex space-x-2 mb-4">
+            <button
+              className="px-4 py-2 bg-blue-500 text-white rounded-md text-sm hover:bg-blue-600"
+            >
+              How to use
+            </button>
+            <button
+              className="px-4 py-2 bg-amber-600 text-white rounded-md text-sm hover:bg-amber-700"
+            >
+              Leaderboard
+            </button>
+            <button
+              onClick={() => setIsIssueModalOpen(true)}
+              className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-md flex items-center justify-center text-sm"
+            >
+              <AlertCircle className="w-4 h-4 mr-1" />
+              Log Issue
+            </button>
+          </div>
+          <h2 className="text-lg font-semibold mb-2">
             {selectedFeature 
               ? selectedFeature.properties.copiedFrom.site__address 
               : 'Select a Property'}
-          </h1>
+          </h2>
         </div>
         <nav className="flex flex-col flex-1">
           {tabs.map((tab) => (
@@ -96,17 +118,6 @@ const MapScreenshotApp = () => {
             </button>
           ))}
         </nav>
-
-        {/* Log Issue Button */}
-        <div className="mt-auto p-4 border-t border-gray-200">
-          <button
-            onClick={() => setIsIssueModalOpen(true)}
-            className="w-full py-2 px-4 bg-red-50 text-red-600 hover:bg-red-100 rounded-md flex items-center justify-center text-sm font-medium"
-          >
-            <AlertCircle className="w-4 h-4 mr-2" />
-            Log Issue
-          </button>
-        </div>
 
         {/* Width Controls */}
         <div className="p-4 border-t border-gray-200">
