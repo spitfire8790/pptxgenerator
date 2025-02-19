@@ -17,10 +17,34 @@
   "routes": [
     {
       "src": "/api/proxy",
+      "headers": {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "EpiName, ZoneCode, Content-Type, Accept"
+      },
+      "continue": true
+    },
+    {
+      "src": "/api/proxy",
+      "methods": ["OPTIONS"],
+      "status": 204,
+      "headers": {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "EpiName, ZoneCode, Content-Type, Accept"
+      }
+    },
+    {
+      "src": "/api/proxy",
       "dest": "proxy-server/server.js"
     },
     {
       "src": "/api/eplanning/(.*)",
+      "headers": {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "EpiName, ZoneCode, Content-Type, Accept"
+      },
       "dest": "https://api.apps1.nsw.gov.au/eplanning/$1"
     },
     {

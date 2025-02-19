@@ -23,16 +23,24 @@ export async function addPermissibilitySlide(pptx, properties) {
     // Make API request to get permissible uses via proxy
     try {
       const API_BASE_URL = process.env.NODE_ENV === 'development' 
-        ? ''  // Empty for development as we use Vite's proxy
-        : 'https://api.apps1.nsw.gov.au';
+        ? 'http://localhost:5173'
+        : 'https://desktopddpptx.vercel.app';
 
-      const response = await fetch(`${API_BASE_URL}/eplanning/data/v0/FetchEPILandUsePermissibility`, {
-        method: 'GET',
+      const response = await fetch(`${API_BASE_URL}/api/proxy`, {
+        method: 'POST',
         headers: {
-          'EpiName': lgaName,
-          'ZoneCode': zoneCode,
+          'Content-Type': 'application/json',
           'Accept': 'application/json'
-        }
+        },
+        body: JSON.stringify({
+          url: 'https://api.apps1.nsw.gov.au/eplanning/data/v0/FetchEPILandUsePermissibility',
+          method: 'GET',
+          headers: {
+            'EpiName': lgaName,
+            'ZoneCode': zoneCode,
+            'Accept': 'application/json'
+          }
+        })
       });
 
       const responseText = await response.text();
