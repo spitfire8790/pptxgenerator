@@ -13,8 +13,8 @@ import AreaOverview from './AreaOverview';
 import LayerDrawing from './LayerDrawing';
 import ReportGenerator from './ReportGenerator';
 import IssueModal from './IssueModal';
+import { AlertCircle } from 'lucide-react';
 import { setNewWidthInPixels } from '../../lib/sidebarWidth';
-import { AlertCircle } from 'react-feather';
 
 const MapScreenshotApp = () => {
   const [selectedFeature, setSelectedFeature] = React.useState(null);
@@ -95,15 +95,19 @@ const MapScreenshotApp = () => {
               {tab.label}
             </button>
           ))}
-          {/* Log Issue Button */}
+        </nav>
+
+        {/* Log Issue Button */}
+        <div className="mt-auto p-4 border-t border-gray-200">
           <button
             onClick={() => setIsIssueModalOpen(true)}
-            className="mt-4 mx-4 py-2 px-4 bg-red-50 text-red-600 hover:bg-red-100 rounded-md flex items-center justify-center text-sm font-medium"
+            className="w-full py-2 px-4 bg-red-50 text-red-600 hover:bg-red-100 rounded-md flex items-center justify-center text-sm font-medium"
           >
             <AlertCircle className="w-4 h-4 mr-2" />
             Log Issue
           </button>
-        </nav>
+        </div>
+
         {/* Width Controls */}
         <div className="p-4 border-t border-gray-200">
           <div className="flex items-center justify-between space-x-2">
