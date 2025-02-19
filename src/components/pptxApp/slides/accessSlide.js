@@ -525,7 +525,7 @@ export async function addAccessSlide(pptx, propertyData) {
 
     // Add footer text and page number
     slide.addText('Property and Development NSW', convertCmValues(styles.footer));
-    slide.addText('8', convertCmValues(styles.pageNumber));
+    slide.addText('9', convertCmValues(styles.pageNumber));
 
     return slide;
   } catch (error) {

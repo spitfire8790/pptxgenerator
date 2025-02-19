@@ -19,52 +19,46 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api/eplanning': {
-        target: 'https://api.apps1.nsw.gov.au/eplanning',
+      '/eplanning': {
+        target: 'https://api.apps1.nsw.gov.au',
         changeOrigin: true,
-        secure: false,
-        rewrite: (path) => path.replace(/^\/api\/eplanning/, ''),
+        secure: true,
+        rewrite: (path) => path.replace(/^\/eplanning/, '/eplanning'),
         configure: (proxy, _options) => {
           proxy.on('error', (err, _req, _res) => {
-            console.log('proxy error', err);
+            console.error('ePlanning proxy error:', {
+              error: err.message,
+              stack: err.stack
+            });
           });
           proxy.on('proxyReq', (proxyReq, req, _res) => {
-            // Clear existing headers to prevent duplicates
-            proxyReq.removeHeader('PageSize');
-            proxyReq.removeHeader('PageNumber');
-            proxyReq.removeHeader('filters');
-
-            // Set headers with correct casing as per API documentation
-            if (req.headers.pagesize) {
-              proxyReq.setHeader('PageSize', req.headers.pagesize);
+            // Pass through all headers from the original request
+            if (req.headers.epiname) {
+              proxyReq.setHeader('EpiName', req.headers.epiname);
             }
-            if (req.headers.pagenumber) {
-              proxyReq.setHeader('PageNumber', req.headers.pagenumber);
+            if (req.headers.zonecode) {
+              proxyReq.setHeader('ZoneCode', req.headers.zonecode);
             }
-            if (req.headers.filters) {
-              proxyReq.setHeader('filters', req.headers.filters);
+            if (req.headers.zonedescription) {
+              proxyReq.setHeader('ZoneDescription', req.headers.zonedescription);
             }
 
-            // Set required headers for the NSW Planning Portal API
+            // Set required headers
             proxyReq.setHeader('Accept', 'application/json');
-            proxyReq.setHeader('Content-Type', 'application/json');
 
-            // Log the outgoing request for debugging
-            console.log('Proxying request:', {
+            console.log('Proxying ePlanning request:', {
               method: req.method,
               url: req.url,
-              headers: proxyReq.getHeaders(),
-              targetUrl: `${proxy.options.target}${req.url.replace('/api/eplanning', '')}`
+              headers: proxyReq.getHeaders()
             });
           });
           proxy.on('proxyRes', (proxyRes, req, _res) => {
             // Set CORS headers
             proxyRes.headers['Access-Control-Allow-Origin'] = '*';
             proxyRes.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS';
-            proxyRes.headers['Access-Control-Allow-Headers'] = 'PageSize, PageNumber, filters, Content-Type, Accept';
+            proxyRes.headers['Access-Control-Allow-Headers'] = 'EpiName, ZoneCode, ZoneDescription, Accept';
 
-            // Log the response for debugging
-            console.log('Received response:', {
+            console.log('Received ePlanning response:', {
               method: req.method,
               url: req.url,
               status: proxyRes.statusCode,

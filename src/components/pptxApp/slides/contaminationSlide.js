@@ -154,7 +154,7 @@ export async function addContaminationSlide(pptx, properties) {
     // Add footer elements
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.footerLine));
     slide.addText('Property and Development NSW', convertCmValues(styles.footer));
-    slide.addText('11', convertCmValues(styles.pageNumber));
+    slide.addText('12', convertCmValues(styles.pageNumber));
 
     // Add left map container (Contaminated Sites Register)
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({

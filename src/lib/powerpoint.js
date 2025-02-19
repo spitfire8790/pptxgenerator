@@ -16,6 +16,7 @@ import { addContaminationSlide } from '../components/pptxApp/slides/contaminatio
 import { addEnviroSlide } from '../components/pptxApp/slides/enviroSlide';
 import { createScoringSlide } from '../components/pptxApp/slides/scoringSlide';
 import { addContextSlide } from '../components/pptxApp/slides/contextSlide';
+import { addPermissibilitySlide } from '../components/pptxApp/slides/permissibilitySlide';
 
 export async function generateReport(properties, onProgress) {
   try {
@@ -111,6 +112,12 @@ export async function generateReport(properties, onProgress) {
 
     if (properties.selectedSlides.contamination !== false) {
       await addContaminationSlide(pptx, properties);
+      updateProgress();
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    if (properties.selectedSlides.permissibility !== false) {
+      await addPermissibilitySlide(pptx, properties);
       updateProgress();
       await new Promise(resolve => setTimeout(resolve, 300));
     }

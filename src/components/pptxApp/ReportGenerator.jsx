@@ -10,6 +10,7 @@ import { checkUserClaims } from './utils/auth/tokenUtils';
 import scoringCriteria from './slides/scoringLogic';
 import { area } from '@turf/area';
 import { addContextSlide } from './slides/contextSlide';
+import { addPermissibilitySlide } from './slides/permissibilitySlide';
 import { 
   captureMapScreenshot, 
   capturePrimarySiteAttributesMap, 
@@ -84,6 +85,7 @@ const slideOptions = [
   { id: 'hazards', label: 'Natural Hazards', addSlide: addHazardsSlide, icon: AlertTriangle },
   { id: 'environmental', label: 'Environmental', addSlide: addEnviroSlide, icon: Leaf },
   { id: 'contamination', label: 'Site Contamination', addSlide: addContaminationSlide, icon: Skull },
+  { id: 'permissibility', label: 'Permissible Uses', addSlide: addPermissibilitySlide, icon: ListTodo },
   { id: 'scoring', label: 'Scoring', addSlide: createScoringSlide, icon: LineChart },
   { id: 'context', label: 'Site Context', addSlide: addContextSlide, icon: Globe2 }
 ];
@@ -226,6 +228,7 @@ const ReportGenerator = ({ selectedFeature }) => {
     hazards: true,
     environmental: true,
     contamination: true,
+    permissibility: true,
     scoring: true,
     context: true
   });
