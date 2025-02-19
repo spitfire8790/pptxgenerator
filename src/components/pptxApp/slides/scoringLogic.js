@@ -449,6 +449,7 @@ const scoringCriteria = {
         };
       } catch (error) {
         console.error('Error calculating geoscape score:', error);
+        console.error('Error stack:', error.stack);
         return { score: 0, coverage: 0, features: [] };
       }
     },
@@ -485,8 +486,7 @@ const scoringCriteria = {
 
       return description;
     },
-    getScoreColor: (scoreObj) => {
-      const score = typeof scoreObj === 'object' ? scoreObj.score : scoreObj;
+    getScoreColor: (score) => {
       return scoreColors[score] || scoreColors[0];
     }
   },
@@ -1431,7 +1431,7 @@ const scoringCriteria = {
 
       if (!developableArea?.[0]) {
         console.log('No developable area provided - returning score 0');
-        return { score: 0, minDistance: Infinity };
+        return { score: 0, minDistance: Infinity, features: [] };
       }
 
       try {
@@ -1597,6 +1597,9 @@ const scoringCriteria = {
       
       switch (score) {
         case 3:
+          if (minDistance === Infinity || features.length === 0) {
+            return "Developable area is not impacted by contamination and there is no known contamination in close proximity to the site.";
+          }
           return `Developable area is not impacted by contamination and is ${minDistance.toFixed(0)}m from the nearest contaminated site${siteName}.`;
         case 2:
           return `Developable area is not impacted by contamination but is ${minDistance.toFixed(0)}m from the nearest contaminated site${siteName}.`;
