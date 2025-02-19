@@ -12,12 +12,15 @@ import Climate from './Climate';
 import AreaOverview from './AreaOverview';
 import LayerDrawing from './LayerDrawing';
 import ReportGenerator from './ReportGenerator';
+import IssueModal from './IssueModal';
 import { setNewWidthInPixels } from '../../lib/sidebarWidth';
+import { AlertCircle } from 'react-feather';
 
 const MapScreenshotApp = () => {
   const [selectedFeature, setSelectedFeature] = React.useState(null);
   const [activeTab, setActiveTab] = React.useState('overview');
   const [sidebarWidth, setSidebarWidth] = React.useState(1000);  // Default width 1000px
+  const [isIssueModalOpen, setIsIssueModalOpen] = React.useState(false);
 
   React.useEffect(() => {
     setNewWidthInPixels(sidebarWidth);
@@ -92,6 +95,14 @@ const MapScreenshotApp = () => {
               {tab.label}
             </button>
           ))}
+          {/* Log Issue Button */}
+          <button
+            onClick={() => setIsIssueModalOpen(true)}
+            className="mt-4 mx-4 py-2 px-4 bg-red-50 text-red-600 hover:bg-red-100 rounded-md flex items-center justify-center text-sm font-medium"
+          >
+            <AlertCircle className="w-4 h-4 mr-2" />
+            Log Issue
+          </button>
         </nav>
         {/* Width Controls */}
         <div className="p-4 border-t border-gray-200">
@@ -261,6 +272,11 @@ const MapScreenshotApp = () => {
           </div>
         )}
       </div>
+      {/* Issue Modal */}
+      <IssueModal
+        isOpen={isIssueModalOpen}
+        onClose={() => setIsIssueModalOpen(false)}
+      />
     </div>
   );
 };
