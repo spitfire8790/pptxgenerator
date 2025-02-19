@@ -1,0 +1,743 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Copy/Paste Detector Report</title><link href="styles/tailwind.css" rel="stylesheet"><link href="styles/prism.css" rel="stylesheet"></head><body class="bg-gray-100"><header class="bg-white shadow py-4"><div class="container mx-auto px-4"><h1 class="text-3xl font-semibold text-gray-800">jscpd - copy/paste report</h1></div></header><main class="container mx-auto my-8 p-4 bg-white shadow rounded"><section class="mb-8" id="dashboard"><h2 class="text-2xl font-semibold text-gray-700 mb-4">Dashboard</h2><div class="grid grid-cols-4 gap-4"><div class="bg-blue-200 p-4 rounded text-center"><h3 class="text-lg font-semibold text-blue-800 mb-2">Total Files</h3><span class="text-4xl font-bold text-blue-800">62</span></div><div class="bg-green-200 p-4 rounded text-center"><h3 class="text-lg font-semibold text-green-800 mb-2">Total Lines of Code</h3><span class="text-4xl font-bold text-green-800">6652</span></div><div class="bg-yellow-200 p-4 rounded text-center"><h3 class="text-lg font-semibold text-yellow-800 mb-2">Number of Clones</h3><span class="text-4xl font-bold text-yellow-800">32</span></div><div class="bg-red-200 p-4 rounded text-center"><h3 class="text-lg font-semibold text-red-800 mb-2">Duplicated Lines</h3><span class="text-4xl font-bold text-red-800">734 (11.03%)</span></div></div></section><section class="mb-8" id="formats"><h2 class="text-2xl font-semibold text-gray-700 mb-4">Formats with Duplications</h2><table class="w-full table-auto"><thead><tr class="bg-gray-200 text-gray-600 uppercase text-sm leading-normal"><th class="py-3 px-6 text-left">Format</th><th class="py-3 px-6 text-left">Files</th><th class="py-3 px-6 text-left">Lines</th><th class="py-3 px-6 text-left">Clones</th><th class="py-3 px-6 text-left">Duplicated Lines</th><th class="py-3 px-6 text-left">Duplicated Tokens</th></tr></thead><tbody><tr class="bg-white border-b border-gray-200 text-gray-800 text-sm"><td class="py-3 px-6"><a class="text-blue-600 hover:underline" href="#javascript-clones">javascript</a></td><td class="py-3 px-6">43</td><td class="py-3 px-6">5006</td><td class="py-3 px-6">32</td><td class="py-3 px-6">734</td><td class="py-3 px-6">6546</td></tr><tr class="bg-white border-b border-gray-200 text-gray-800 text-sm"><td class="py-3 px-6"><a class="text-blue-600 hover:underline" href="#jsx-clones">jsx</a></td><td class="py-3 px-6">17</td><td class="py-3 px-6">1613</td><td class="py-3 px-6">0</td><td class="py-3 px-6">0</td><td class="py-3 px-6">0</td></tr><tr class="bg-white border-b border-gray-200 text-gray-800 text-sm"><td class="py-3 px-6"><a class="text-blue-600 hover:underline" href="#typescript-clones">typescript</a></td><td class="py-3 px-6">2</td><td class="py-3 px-6">33</td><td class="py-3 px-6">0</td><td class="py-3 px-6">0</td><td class="py-3 px-6">0</td></tr></tbody></table></section><section class="mb-8" id="txt-clones"><a name="javascript-clones"></a><h2 class="text-2xl font-semibold text-gray-700 mb-4">javascript</h2><div class="divide-y divide-gray-200 border-b-2"><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js (Line 288:7 - Line 295:7), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js (Line 40:7 - Line 47:3)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn0" onclick="toggleCodeBlock('cloneGroup0', 'expandBtn0', 'collapseBtn0')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn0" onclick="toggleCodeBlock('cloneGroup0', 'expandBtn0', 'collapseBtn0')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup0"><code class="language-javascript text-sm text-gray-800">drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.size || config.width, {
+        strokeStyle: '#02d1b8',
+        lineWidth: 12,
+        dashArray: [20, 10]
+      });
+    }
+
+    return</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js (Line 376:5 - Line 381:2), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js (Line 285:5 - Line 290:3)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn1" onclick="toggleCodeBlock('cloneGroup1', 'expandBtn1', 'collapseBtn1')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn1" onclick="toggleCodeBlock('cloneGroup1', 'expandBtn1', 'collapseBtn1')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup1"><code class="language-javascript text-sm text-gray-800">});
+
+    if (developableArea?.features?.[0]) {
+      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.size || config.width, {
+        strokeStyle: '#02d1b8',
+        lineWidth: 3</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js (Line 411:7 - Line 440:26), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js (Line 317:7 - Line 346:4)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn2" onclick="toggleCodeBlock('cloneGroup2', 'expandBtn2', 'collapseBtn2')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn2" onclick="toggleCodeBlock('cloneGroup2', 'expandBtn2', 'collapseBtn2')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup2"><code class="language-javascript text-sm text-gray-800">console.log('Loading aerial layer...');
+      const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];
+      const { bbox } = calculateMercatorParams(centerX, centerY, size);
+      
+      const params = new URLSearchParams({
+        SERVICE: 'WMS',
+        VERSION: '1.3.0',
+        REQUEST: 'GetMap',
+        BBOX: bbox,
+        CRS: 'EPSG:3857',
+        WIDTH: aerialConfig.width || aerialConfig.size,
+        HEIGHT: aerialConfig.height || aerialConfig.size,
+        LAYERS: aerialConfig.layers,
+        STYLES: '',
+        FORMAT: 'image/png',
+        DPI: 300,
+        MAP_RESOLUTION: 300,
+        FORMAT_OPTIONS: 'dpi:300'
+      });
+
+      const url = `${aerialConfig.url}?${params.toString()}`;
+      console.log('Aerial request URL:', url);
+      const baseMap = await loadImage(url);
+      console.log('Aerial layer loaded');
+      drawImage(ctx, baseMap, canvas.width, canvas.height, 0.7);
+    } catch (error) {
+      console.warn('Failed to load aerial layer:', error);
+    }
+
+    // Draw property boundary</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js (Line 462:19 - Line 479:28), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js (Line 393:21 - Line 410:72)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn3" onclick="toggleCodeBlock('cloneGroup3', 'expandBtn3', 'collapseBtn3')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn3" onclick="toggleCodeBlock('cloneGroup3', 'expandBtn3', 'collapseBtn3')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup3"><code class="language-javascript text-sm text-gray-800">(feature, developableArea = null) {
+  if (!feature) return null;
+  
+  try {
+    const config = {
+      width: 2048,
+      height: 2048,
+      padding: 0.1
+    };
+    
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    
+    // Create base canvas
+    const canvas = createCanvas(config.width, config.height);
+    const ctx = canvas.getContext('2d', { alpha: true });
+
+    try {
+      // 1. Aerial imagery (base)</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js (Line 480:7 - Line 500:6), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js (Line 318:7 - Line 338:8)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn4" onclick="toggleCodeBlock('cloneGroup4', 'expandBtn4', 'collapseBtn4')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn4" onclick="toggleCodeBlock('cloneGroup4', 'expandBtn4', 'collapseBtn4')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup4"><code class="language-javascript text-sm text-gray-800">const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];
+      const { bbox } = calculateMercatorParams(centerX, centerY, size);
+      
+      const params = new URLSearchParams({
+        SERVICE: 'WMS',
+        VERSION: '1.3.0',
+        REQUEST: 'GetMap',
+        BBOX: bbox,
+        CRS: 'EPSG:3857',
+        WIDTH: aerialConfig.width || aerialConfig.size,
+        HEIGHT: aerialConfig.height || aerialConfig.size,
+        LAYERS: aerialConfig.layers,
+        STYLES: '',
+        FORMAT: 'image/png',
+        DPI: 300,
+        MAP_RESOLUTION: 300,
+        FORMAT_OPTIONS: 'dpi:300'
+      });
+
+      const url = `${aerialConfig.url}?${params.toString()}`;
+      const</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js (Line 534:2 - Line 540:6), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js (Line 282:2 - Line 288:5)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn5" onclick="toggleCodeBlock('cloneGroup5', 'expandBtn5', 'collapseBtn5')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn5" onclick="toggleCodeBlock('cloneGroup5', 'expandBtn5', 'collapseBtn5')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup5"><code class="language-javascript text-sm text-gray-800">config.width, {
+      strokeStyle: '#FF0000',
+      lineWidth: 6
+    });
+
+    if (developableArea?.features?.[0]) {
+      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js (Line 539:5 - Line 549:34), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js (Line 447:5 - Line 457:36)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn6" onclick="toggleCodeBlock('cloneGroup6', 'expandBtn6', 'collapseBtn6')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn6" onclick="toggleCodeBlock('cloneGroup6', 'expandBtn6', 'collapseBtn6')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup6"><code class="language-javascript text-sm text-gray-800">if (developableArea?.features?.[0]) {
+      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
+        strokeStyle: '#02d1b8',
+        lineWidth: 12,
+        dashArray: [20, 10]
+      });
+    }
+
+    return canvas.toDataURL('image/png', 1.0);
+  } catch (error) {
+    console.error('Failed to capture heritage map:'</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js (Line 554:22 - Line 599:31), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js (Line 393:21 - Line 507:21)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn7" onclick="toggleCodeBlock('cloneGroup7', 'expandBtn7', 'collapseBtn7')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn7" onclick="toggleCodeBlock('cloneGroup7', 'expandBtn7', 'collapseBtn7')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup7"><code class="language-javascript text-sm text-gray-800">(feature, developableArea = null) {
+  if (!feature) return null;
+  
+  try {
+    const config = {
+      width: 2048,
+      height: 2048,
+      padding: 0.1
+    };
+    
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    
+    // Create base canvas
+    const canvas = createCanvas(config.width, config.height);
+    const ctx = canvas.getContext('2d', { alpha: true });
+
+    try {
+      // 1. Aerial imagery (base)
+      const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];
+      const { bbox } = calculateMercatorParams(centerX, centerY, size);
+      
+      const params = new URLSearchParams({
+        SERVICE: 'WMS',
+        VERSION: '1.3.0',
+        REQUEST: 'GetMap',
+        BBOX: bbox,
+        CRS: 'EPSG:3857',
+        WIDTH: aerialConfig.width || aerialConfig.size,
+        HEIGHT: aerialConfig.height || aerialConfig.size,
+        LAYERS: aerialConfig.layers,
+        STYLES: '',
+        FORMAT: 'image/png',
+        DPI: 300,
+        MAP_RESOLUTION: 300,
+        FORMAT_OPTIONS: 'dpi:300'
+      });
+
+      const url = `${aerialConfig.url}?${params.toString()}`;
+      const baseMap = await loadImage(url);
+      drawImage(ctx, baseMap, canvas.width, canvas.height, 0.7);
+    } catch (error) {
+      console.warn('Failed to load aerial layer:', error);
+    }
+
+    try {
+      // 2. Acid Sulfate Soils layer</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js (Line 622:43 - Line 641:44), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js (Line 530:33 - Line 457:36)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn8" onclick="toggleCodeBlock('cloneGroup8', 'expandBtn8', 'collapseBtn8')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn8" onclick="toggleCodeBlock('cloneGroup8', 'expandBtn8', 'collapseBtn8')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup8"><code class="language-javascript text-sm text-gray-800">, error);
+    }
+
+    // Draw boundaries
+    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+      strokeStyle: '#FF0000',
+      lineWidth: 6
+    });
+
+    if (developableArea?.features?.[0]) {
+      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
+        strokeStyle: '#02d1b8',
+        lineWidth: 12,
+        dashArray: [20, 10]
+      });
+    }
+
+    return canvas.toDataURL('image/png', 1.0);
+  } catch (error) {
+    console.error('Failed to capture acid sulfate soils map:'</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/propertySnapshotSlide.js (Line 1:17 - Line 46:6), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js (Line 35:2 - Line 79:13)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn9" onclick="toggleCodeBlock('cloneGroup9', 'expandBtn9', 'collapseBtn9')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn9" onclick="toggleCodeBlock('cloneGroup9', 'expandBtn9', 'collapseBtn9')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup9"><code class="language-javascript text-sm text-gray-800">;
+
+
+const styles = {
+  title: {
+    x: '4%',
+    y: '7%',
+    w: '80%',
+    h: '8%',
+    fontSize: 26,
+    fontFace: 'Public Sans Light',
+    autoFit: true,
+    breakLine: false,
+    color: '002664',
+    lineSpacing: 26
+  },
+  subtitle: {
+    color: '363636',
+  },
+  titleLine: {
+    x: '5%',
+    y: '17%',
+    w: '90%',
+    h: 0.01,
+    line: { color: '002664', width: 0.7 },
+    fill: { color: '002664' }
+  },
+  sensitiveText: {
+    x: '72%',
+    y: '2%',
+    w: '25%',
+    h: '3%',
+    fontSize: 9,
+    color: 'FF3B3B',
+    bold: true,
+    align: 'right',
+    fontFace: 'Public Sans'
+  },
+  nswLogo: {
+    x: '90%',
+    y: '5%',
+    w: '8%',
+    h: '8%',
+    sizing: { type: 'contain' }
+  },
+  table</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/propertySnapshotSlide.js (Line 61:3 - Line 90:14), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js (Line 121:3 - Line 150:10)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn10" onclick="toggleCodeBlock('cloneGroup10', 'expandBtn10', 'collapseBtn10')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn10" onclick="toggleCodeBlock('cloneGroup10', 'expandBtn10', 'collapseBtn10')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup10"><code class="language-javascript text-sm text-gray-800">},
+  footerLine: {
+    x: '5%',
+    y: '93%',
+    w: '90%',
+    h: 0.01,
+    line: { color: '002664', width: 0.7 },
+    fill: { color: '002664' }
+  },
+  footer: {
+    x: '4%',
+    y: '94%',
+    w: '90%',
+    h: '4%',
+    fontSize: 10,
+    color: '002664',
+    fontFace: 'Public Sans',
+    align: 'left'
+  },
+  pageNumber: {
+    x: '94%',
+    y: '94%',
+    w: '4%',
+    h: '4%',
+    fontSize: 8,
+    color: '002664',
+    fontFace: 'Public Sans',
+    align: 'left'
+  },
+  categoryIcons</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/propertySnapshotSlide.js (Line 138:20 - Line 156:6), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js (Line 171:23 - Line 189:23)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn11" onclick="toggleCodeBlock('cloneGroup11', 'expandBtn11', 'collapseBtn11')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn11" onclick="toggleCodeBlock('cloneGroup11', 'expandBtn11', 'collapseBtn11')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup11"><code class="language-javascript text-sm text-gray-800">, options: { color: styles.subtitle.color } }
+  ], convertCmValues({
+    ...styles.title,
+    color: undefined
+  }));
+  
+  // Add horizontal line under title
+  slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.titleLine));
+  
+  // Add sensitive text
+  slide.addText(&quot;SENSITIVE: NSW GOVERNMENT&quot;, convertCmValues(styles.sensitiveText));
+  
+  // Add NSW Logo
+  slide.addImage({
+    path: &quot;/images/NSW-Government-official-logo.jpg&quot;,
+    ...convertCmValues(styles.nswLogo)
+  });
+
+  const</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/primarySiteAttributesSlide.js (Line 3:13 - Line 47:19), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js (Line 35:2 - Line 79:13)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn12" onclick="toggleCodeBlock('cloneGroup12', 'expandBtn12', 'collapseBtn12')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn12" onclick="toggleCodeBlock('cloneGroup12', 'expandBtn12', 'collapseBtn12')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup12"><code class="language-javascript text-sm text-gray-800">;
+
+const styles = {
+  title: {
+    x: '4%',
+    y: '7%',
+    w: '80%',
+    h: '8%',
+    fontSize: 26,
+    fontFace: 'Public Sans Light',
+    autoFit: true,
+    breakLine: false,
+    color: '002664',
+    lineSpacing: 26
+  },
+  subtitle: {
+    color: '363636',
+  },
+  titleLine: {
+    x: '5%',
+    y: '17%',
+    w: '90%',
+    h: 0.01,
+    line: { color: '002664', width: 0.7 },
+    fill: { color: '002664' }
+  },
+  sensitiveText: {
+    x: '72%',
+    y: '2%',
+    w: '25%',
+    h: '3%',
+    fontSize: 9,
+    color: 'FF3B3B',
+    bold: true,
+    align: 'right',
+    fontFace: 'Public Sans'
+  },
+  nswLogo: {
+    x: '90%',
+    y: '5%',
+    w: '8%',
+    h: '8%',
+    sizing: { type: 'contain' }
+  },
+  developableAreaBox</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/primarySiteAttributesSlide.js (Line 113:3 - Line 142:10), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js (Line 121:3 - Line 150:10)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn13" onclick="toggleCodeBlock('cloneGroup13', 'expandBtn13', 'collapseBtn13')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn13" onclick="toggleCodeBlock('cloneGroup13', 'expandBtn13', 'collapseBtn13')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup13"><code class="language-javascript text-sm text-gray-800">},
+  footerLine: {
+    x: '5%',
+    y: '93%',
+    w: '90%',
+    h: 0.01,
+    line: { color: '002664', width: 0.7 },
+    fill: { color: '002664' }
+  },
+  footer: {
+    x: '4%',
+    y: '94%',
+    w: '90%',
+    h: '4%',
+    fontSize: 10,
+    color: '002664',
+    fontFace: 'Public Sans',
+    align: 'left'
+  },
+  pageNumber: {
+    x: '94%',
+    y: '94%',
+    w: '4%',
+    h: '4%',
+    fontSize: 8,
+    color: '002664',
+    fontFace: 'Public Sans',
+    align: 'left'
+  },
+  mapLegend</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/primarySiteAttributesSlide.js (Line 270:30 - Line 277:26), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/propertySnapshotSlide.js (Line 131:25 - Line 138:20)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn14" onclick="toggleCodeBlock('cloneGroup14', 'expandBtn14', 'collapseBtn14')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn14" onclick="toggleCodeBlock('cloneGroup14', 'expandBtn14', 'collapseBtn14')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup14"><code class="language-javascript text-sm text-gray-800">(pptx, properties) {
+  const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
+
+  // Add title with line break
+  slide.addText([
+    { text: properties.site__address, options: { color: styles.title.color } },
+    { text: ' ', options: { breakLine: true } },
+    { text: 'Primary Site Attributes'</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js (Line 6:5 - Line 13:2), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js (Line 16:3 - Line 23:3)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn15" onclick="toggleCodeBlock('cloneGroup15', 'expandBtn15', 'collapseBtn15')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn15" onclick="toggleCodeBlock('cloneGroup15', 'expandBtn15', 'collapseBtn15')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup15"><code class="language-javascript text-sm text-gray-800">try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() =&gt; controller.abort(), 10000);
+
+        const response = await proxyRequest(`${url}?${params}`);
+        clearTimeout(timeoutId);
+
+        if (response.features?</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js (Line 44:12 - Line 55:7), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js (Line 12:12 - Line 24:6)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn16" onclick="toggleCodeBlock('cloneGroup16', 'expandBtn16', 'collapseBtn16')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn16" onclick="toggleCodeBlock('cloneGroup16', 'expandBtn16', 'collapseBtn16')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup16"><code class="language-javascript text-sm text-gray-800">,
+        returnGeometry: false
+    });
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() =&gt; controller.abort(), 10000);  
+        const response = await proxyRequest(`${url}?${params}`);
+        clearTimeout(timeoutId);    
+
+        if (response.features &amp;&amp; response.features.length &gt; 0) {
+            return</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js (Line 59:42 - Line 136:2), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js (Line 32:33 - Line 111:2)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn17" onclick="toggleCodeBlock('cloneGroup17', 'expandBtn17', 'collapseBtn17')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn17" onclick="toggleCodeBlock('cloneGroup17', 'expandBtn17', 'collapseBtn17')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup17"><code class="language-javascript text-sm text-gray-800">, error);
+        return null;
+    }
+};
+    
+
+const styles = {
+    title: {
+        x: '4%',
+        y: '7%',
+        w: '80%',
+        h: '8%',
+        fontSize: 26,
+        fontFace: 'Public Sans Light',
+        autoFit: true,
+        breakLine: false,
+        color: '002664',
+        lineSpacing: 26
+    },
+    subtitle: {
+        color: '363636',
+    },
+    titleLine: {
+        x: '5%',
+        y: '17%',
+        w: '90%',
+        h: 0.01,
+        line: { color: '002664', width: 0.7 },
+        fill: { color: '002664' }
+    },
+    sensitiveText: {
+        x: '72%',
+        y: '2%',
+        w: '25%',
+        h: '3%',
+        fontSize: 9,
+        color: 'FF3B3B',
+        bold: true,
+        align: 'right',
+        fontFace: 'Public Sans'
+    },
+    nswLogo: {
+        x: '90%',
+        y: '5%',
+        w: '8%',
+        h: '8%',
+        sizing: { type: 'contain' }
+    },
+    mapContainer: {
+        x: (index) =&gt; `${15 + (index * 35)}%`,
+        y: '18%',
+        w: '50%',
+        h: '50%'
+    },
+    mapTitle: {
+        h: '6%',
+        fill: '002664',
+        color: 'FFFFFF',
+        fontSize: 14,
+        fontFace: 'Public Sans',
+        align: 'center',
+        valign: 'middle'
+    },
+    mapImage: {
+        y: '6%',
+        w: '100%',
+        h: '50%',
+        sizing: { type: 'contain', align: 'center', valign: 'middle' }
+    },
+    descriptionText: {
+        fontSize: 9,
+        color: '363636',
+        fontFace: 'Public Sans',
+        align: 'left',
+        valign: 'top',
+        wrap: true,
+        h: '12%'
+    }</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js (Line 145:5 - Line 187:18), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js (Line 121:3 - Line 163:28)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn18" onclick="toggleCodeBlock('cloneGroup18', 'expandBtn18', 'collapseBtn18')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn18" onclick="toggleCodeBlock('cloneGroup18', 'expandBtn18', 'collapseBtn18')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup18"><code class="language-javascript text-sm text-gray-800">},
+    footerLine: {
+        x: '5%',
+        y: '93%',
+        w: '90%',
+        h: 0.01,
+        line: { color: '002664', width: 0.7 },
+        fill: { color: '002664' }
+    },
+    footer: {
+        x: '4%',
+        y: '94%',
+        w: '90%',
+        h: '4%',
+        fontSize: 10,
+        color: '002664',
+        fontFace: 'Public Sans',
+        align: 'left'
+    },
+    pageNumber: {
+        x: '94%',
+        y: '94%',
+        w: '4%',
+        h: '4%',
+        fontSize: 8,
+        color: '002664',
+        fontFace: 'Public Sans',
+        align: 'left'
+    },
+    scoreText: {
+        x: '5%',
+        y: '85%',
+        w: '90%',
+        h: '6%',
+        fontSize: 8,
+        color: '363636',
+        fontFace: 'Public Sans',
+        align: 'left',
+        valign: 'middle'
+    }
+};
+
+export async function addPlanningSlide2</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js (Line 187:18 - Line 195:32), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js (Line 163:28 - Line 171:23)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn19" onclick="toggleCodeBlock('cloneGroup19', 'expandBtn19', 'collapseBtn19')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn19" onclick="toggleCodeBlock('cloneGroup19', 'expandBtn19', 'collapseBtn19')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup19"><code class="language-javascript text-sm text-gray-800">(pptx, properties) {
+  const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
+
+  try {
+    // Add title
+    slide.addText([
+    { text: properties.site__address, options: { color: styles.title.color } },
+    { text: ' ', options: { breakLine: true } },
+    { text: 'Heritage &amp; Acid Sulfate Soils'</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js (Line 195:32 - Line 216:4), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js (Line 171:23 - Line 192:4)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn20" onclick="toggleCodeBlock('cloneGroup20', 'expandBtn20', 'collapseBtn20')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn20" onclick="toggleCodeBlock('cloneGroup20', 'expandBtn20', 'collapseBtn20')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup20"><code class="language-javascript text-sm text-gray-800">, options: { color: styles.subtitle.color } }
+   ], convertCmValues({
+    ...styles.title,
+    color: undefined
+   }));
+    
+    // Add horizontal line under title
+    slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.titleLine));
+    
+    // Add sensitive text
+    slide.addText(&quot;SENSITIVE: NSW GOVERNMENT&quot;, convertCmValues(styles.sensitiveText));
+    
+    // Add NSW Logo
+    slide.addImage({
+      path: &quot;/images/NSW-Government-official-logo.jpg&quot;,
+      ...convertCmValues(styles.nswLogo)
+   });
+    
+   // Add footer elements
+   slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.footerLine));
+   slide.addText('Property and Development NSW', convertCmValues(styles.footer));
+   slide.addText('6'</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js (Line 238:11 - Line 251:23), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js (Line 214:15 - Line 227:16)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn21" onclick="toggleCodeBlock('cloneGroup21', 'expandBtn21', 'collapseBtn21')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn21" onclick="toggleCodeBlock('cloneGroup21', 'expandBtn21', 'collapseBtn21')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup21"><code class="language-javascript text-sm text-gray-800">, convertCmValues({
+     x: '-22.5%',    // Negative x to account for rotation
+     y: '45%',     // Centered vertically
+     w: '61%',     // Original height becomes width when rotated
+     h: '6%',      // Original width becomes height when rotated
+     color: 'FFFFFF',
+     fontSize: 14,
+     fontFace: 'Public Sans',
+     align: 'center',
+     valign: 'middle',
+     rotate: 270    // Use rotate instead of transform
+   }));
+
+   // Add heritage legend</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js (Line 340:15 - Line 364:39), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js (Line 315:2 - Line 337:5)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn22" onclick="toggleCodeBlock('cloneGroup22', 'expandBtn22', 'collapseBtn22')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn22" onclick="toggleCodeBlock('cloneGroup22', 'expandBtn22', 'collapseBtn22')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup22"><code class="language-javascript text-sm text-gray-800">]
+        };
+        
+        try {
+          const heritageData = await getHeritageData(geometry);
+          heritageScore = scoringCriteria.heritage.calculateScore(heritageData);
+          heritageText = scoringCriteria.heritage.getScoreDescription(heritageScore);
+          
+          // Add additional heritage information if heritage is found (scores 1 or 2)
+          if (heritageData &amp;&amp; (heritageScore === 1 || heritageScore === 2)) {
+            if (heritageData.LAY_CLASS) {
+              heritageText += `\n\nClass: ${heritageData.LAY_CLASS}`;
+            }
+            if (heritageData.H_NAME) {
+              heritageText += `\nName: ${heritageData.H_NAME}`;
+            }
+          }
+        } catch (error) {
+          console.error('Error getting heritage data:', error);
+          heritageText = 'Error retrieving heritage data.';
+          heritageScore = 0;
+        }
+      }
+
+      // Update the box color based on score</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js (Line 444:21 - Line 457:19), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js (Line 385:18 - Line 398:17)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn23" onclick="toggleCodeBlock('cloneGroup23', 'expandBtn23', 'collapseBtn23')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn23" onclick="toggleCodeBlock('cloneGroup23', 'expandBtn23', 'collapseBtn23')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup23"><code class="language-javascript text-sm text-gray-800">, convertCmValues({
+        x: '22.5%',     // Adjusted x position for right side
+        y: '45%',     // Centered vertically
+        w: '61%',     // Original height becomes width when rotated
+        h: '6%',      // Original width becomes height when rotated
+        color: 'FFFFFF',
+        fontSize: 14,
+        fontFace: 'Public Sans',
+        align: 'center',
+        valign: 'middle',
+        rotate: 270    // Use rotate instead of transform
+      }));  
+
+      // Add right map  </code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js (Line 467:27 - Line 483:46), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js (Line 408:21 - Line 422:38)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn24" onclick="toggleCodeBlock('cloneGroup24', 'expandBtn24', 'collapseBtn24')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn24" onclick="toggleCodeBlock('cloneGroup24', 'expandBtn24', 'collapseBtn24')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup24"><code class="language-javascript text-sm text-gray-800">,
+            ...convertCmValues({
+                x: '56%',
+                y: '18%',
+                w: '34%',
+                h: '61%',
+                sizing: {
+                    type: 'contain',
+                    align: 'center',
+                    valign: 'middle'
+                }
+            }
+
+            )
+          });
+        } catch (error) {
+          console.error('Error adding acid sulfate soils screenshot:'</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js (Line 525:15 - Line 539:23), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js (Line 510:2 - Line 522:5)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn25" onclick="toggleCodeBlock('cloneGroup25', 'expandBtn25', 'collapseBtn25')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn25" onclick="toggleCodeBlock('cloneGroup25', 'expandBtn25', 'collapseBtn25')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup25"><code class="language-javascript text-sm text-gray-800">]
+        };
+        
+        try {
+          const soilsData = await getAcidSulfateSoilsData(geometry);
+          acidSulfateSoilsScore = scoringCriteria.acidSulfateSoils.calculateScore(soilsData);
+          acidSulfateSoilsText = scoringCriteria.acidSulfateSoils.getScoreDescription(acidSulfateSoilsScore, soilsData);
+        } catch (error) {
+          console.error('Error getting acid sulfate soils data:', error);
+          acidSulfateSoilsText = 'Error retrieving acid sulfate soils data.';
+          acidSulfateSoilsScore = 0;
+        }
+      }
+
+      // Add description box</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js (Line 565:6 - Line 578:6), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js (Line 390:5 - Line 403:5)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn26" onclick="toggleCodeBlock('cloneGroup26', 'expandBtn26', 'collapseBtn26')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn26" onclick="toggleCodeBlock('cloneGroup26', 'expandBtn26', 'collapseBtn26')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup26"><code class="language-javascript text-sm text-gray-800">,
+        y: '86%',
+        w: '40%',
+        h: '4%',
+        fontSize: 7,
+        color: '363636',
+        fontFace: 'Public Sans',
+        bold: true,
+        align: 'right'
+      }));
+
+      // Add line
+      slide.addShape(pptx.shapes.LINE, convertCmValues({
+        x: '51%'</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js (Line 567:9 - Line 580:2), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js (Line 501:7 - Line 513:32)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn27" onclick="toggleCodeBlock('cloneGroup27', 'expandBtn27', 'collapseBtn27')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn27" onclick="toggleCodeBlock('cloneGroup27', 'expandBtn27', 'collapseBtn27')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup27"><code class="language-javascript text-sm text-gray-800">w: '40%',
+        h: '4%',
+        fontSize: 7,
+        color: '363636',
+        fontFace: 'Public Sans',
+        bold: true,
+        align: 'right'
+      }));
+
+      // Add line
+      slide.addShape(pptx.shapes.LINE, convertCmValues({
+        x: '51%',
+        y: '88.5%',
+        w</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide.js (Line 143:10 - Line 158:8), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide.js (Line 111:6 - Line 126:4)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn28" onclick="toggleCodeBlock('cloneGroup28', 'expandBtn28', 'collapseBtn28')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn28" onclick="toggleCodeBlock('cloneGroup28', 'expandBtn28', 'collapseBtn28')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup28"><code class="language-javascript text-sm text-gray-800">,
+    returnGeometry: false
+  });
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() =&gt; controller.abort(), 10000);
+    
+    const response = await fetch(`${url}?${params}`, {
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    
+    const data = await response.json();
+    if (data.features &amp;&amp; data.features.length &gt; 0) {
+      return data.features[0].attributes.MAX_B_H</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide.js (Line 162:39 - Line 210:2), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js (Line 32:33 - Line 80:3)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn29" onclick="toggleCodeBlock('cloneGroup29', 'expandBtn29', 'collapseBtn29')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn29" onclick="toggleCodeBlock('cloneGroup29', 'expandBtn29', 'collapseBtn29')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup29"><code class="language-javascript text-sm text-gray-800">, error);
+    return null;
+  }
+};
+
+const styles = {
+  title: {
+    x: '4%',
+    y: '7%',
+    w: '80%',
+    h: '8%',
+    fontSize: 26,
+    fontFace: 'Public Sans Light',
+    autoFit: true,
+    breakLine: false,
+    color: '002664',
+    lineSpacing: 26
+  },
+  subtitle: {
+    color: '363636',
+  },
+  titleLine: {
+    x: '5%',
+    y: '17%',
+    w: '90%',
+    h: 0.01,
+    line: { color: '002664', width: 0.7 },
+    fill: { color: '002664' }
+  },
+  sensitiveText: {
+    x: '72%',
+    y: '2%',
+    w: '25%',
+    h: '3%',
+    fontSize: 9,
+    color: 'FF3B3B',
+    bold: true,
+    align: 'right',
+    fontFace: 'Public Sans'
+  },
+  nswLogo: {
+    x: '90%',
+    y: '5%',
+    w: '8%',
+    h: '8%',
+    sizing: { type: 'contain' }
+  },
+  mapContainer: {
+    x: (index) =&gt; `${5</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide.js (Line 212:6 - Line 242:5), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js (Line 82:6 - Line 111:6)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn30" onclick="toggleCodeBlock('cloneGroup30', 'expandBtn30', 'collapseBtn30')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn30" onclick="toggleCodeBlock('cloneGroup30', 'expandBtn30', 'collapseBtn30')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup30"><code class="language-javascript text-sm text-gray-800">,
+    h: '50%'
+  },
+  mapTitle: {
+    h: '6%',
+    fill: '002664',
+    color: 'FFFFFF',
+    fontSize: 14,
+    fontFace: 'Public Sans',
+    align: 'center',
+    valign: 'middle'
+  },
+  mapImage: {
+    y: '6%',
+    w: '100%',
+    h: '50%',
+    sizing: {
+      type: 'contain',
+      align: 'center',
+      valign: 'middle'
+    }
+  },
+
+  descriptionText: {
+    fontSize: 9,
+    color: '363636',
+    fontFace: 'Public Sans',
+    align: 'left',
+    valign: 'top',
+    wrap: true,
+    h: '5%'</code></pre></div><div class="py-4"><p class="text-gray-600">C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide.js (Line 242:5 - Line 281:15), C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js (Line 111:6 - Line 150:10)</p><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2" id="expandBtn31" onclick="toggleCodeBlock('cloneGroup31', 'expandBtn31', 'collapseBtn31')">Show code</button><button class="bg-gray-500 text-white px-1 py-0.5 text-xs rounded focus:outline-none ml-2 hidden" id="collapseBtn31" onclick="toggleCodeBlock('cloneGroup31', 'expandBtn31', 'collapseBtn31')">Hide code</button><pre class="bg-gray-100 border border-gray-200 p-4 rounded mt-2 hidden" id="cloneGroup31"><code class="language-javascript text-sm text-gray-800">,
+  },
+  sourceText: {
+    fontSize: 8,
+    color: '363636',
+    fontFace: 'Public Sans Light',
+    italic: true,
+    align: 'left',
+    wrap: true,
+    h: '3%',
+  },
+  footerLine: {
+    x: '5%',
+    y: '93%',
+    w: '90%',
+    h: 0.01,
+    line: { color: '002664', width: 0.7 },
+    fill: { color: '002664' }
+  },
+  footer: {
+    x: '4%',
+    y: '94%',
+    w: '90%',
+    h: '4%',
+    fontSize: 10,
+    color: '002664',
+    fontFace: 'Public Sans',
+    align: 'left'
+  },
+  pageNumber: {
+    x: '94%',
+    y: '94%',
+    w: '4%',
+    h: '4%',
+    fontSize: 8,
+    color: '002664',
+    fontFace: 'Public Sans',
+    align: 'left'
+  },
+  scoreContainer</code></pre></div><!-- Add more clone groups for .txt format as needed         // Add more clone groups for .txt format as needed--></div><a name="jsx-clones"></a><h2 class="text-2xl font-semibold text-gray-700 mb-4">jsx</h2><div class="divide-y divide-gray-200 border-b-2"><!-- Add more clone groups for .txt format as needed         // Add more clone groups for .txt format as needed--></div><a name="typescript-clones"></a><h2 class="text-2xl font-semibold text-gray-700 mb-4">typescript</h2><div class="divide-y divide-gray-200 border-b-2"><!-- Add more clone groups for .txt format as needed         // Add more clone groups for .txt format as needed--></div></section><!-- Add more sections for other formats and clone groups as needed--></main><footer class="bg-white shadow mt-8 py-4"><div class="container mx-auto px-4 text-center"><p class="text-sm text-gray-600">This report is generated by jscpd, an open-source copy/paste detector.</p><p class="text-sm text-gray-600">jscpd is licensed under the MIT License.</p><a class="text-blue-500 text-sm" href="https://github.com/kucherenko/jscpd" target="_blank" rel="noopener noreferrer">View jscpd on GitHub</a></div></footer><script src="js/prism.js"></script><script>function toggleCodeBlock(codeBlockId, expandBtnId, collapseBtnId) {
+  const codeBlock = document.getElementById(codeBlockId);
+  const expandBtn = document.getElementById(expandBtnId);
+  const collapseBtn = document.getElementById(collapseBtnId);
+
+  codeBlock.classList.toggle('hidden');
+  expandBtn.classList.toggle('hidden');
+  collapseBtn.classList.toggle('hidden');
+}</script></body></html>

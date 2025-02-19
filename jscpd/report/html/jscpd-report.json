@@ -1,0 +1,1966 @@
+{
+  "statistics": {
+    "detectionDate": "2025-01-05T20:42:21.832Z",
+    "formats": {
+      "javascript": {
+        "sources": {
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/utils/layerDetails.js": {
+            "lines": 18,
+            "tokens": 126,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/utils/image.js": {
+            "lines": 8,
+            "tokens": 104,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/utils/coordinates.js": {
+            "lines": 12,
+            "tokens": 241,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/utils/canvas.js": {
+            "lines": 79,
+            "tokens": 693,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/wmsService.js": {
+            "lines": 23,
+            "tokens": 246,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js": {
+            "lines": 643,
+            "tokens": 6763,
+            "sources": 1,
+            "clones": 18,
+            "duplicatedLines": 316,
+            "duplicatedTokens": 3458,
+            "percentage": 49.14,
+            "percentageTokens": 51.13,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/arcgisService.js": {
+            "lines": 19,
+            "tokens": 252,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/config/screenshotTypes.js": {
+            "lines": 12,
+            "tokens": 99,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/config/layerConfigs.js": {
+            "lines": 66,
+            "tokens": 523,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/services/proxyService.js": {
+            "lines": 34,
+            "tokens": 318,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/config/proxyConfig.js": {
+            "lines": 7,
+            "tokens": 55,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/units.js": {
+            "lines": 38,
+            "tokens": 336,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js": {
+            "lines": 547,
+            "tokens": 4846,
+            "sources": 1,
+            "clones": 18,
+            "duplicatedLines": 503,
+            "duplicatedTokens": 4099,
+            "percentage": 91.96,
+            "percentageTokens": 84.59,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/scoringLogic.js": {
+            "lines": 260,
+            "tokens": 2532,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/propertySnapshotSlide.js": {
+            "lines": 278,
+            "tokens": 2651,
+            "sources": 1,
+            "clones": 4,
+            "duplicatedLines": 99,
+            "duplicatedTokens": 836,
+            "percentage": 35.61,
+            "percentageTokens": 31.54,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/primarySiteAttributesSlide.js": {
+            "lines": 452,
+            "tokens": 4139,
+            "sources": 1,
+            "clones": 3,
+            "duplicatedLines": 80,
+            "duplicatedTokens": 689,
+            "percentage": 17.7,
+            "percentageTokens": 16.65,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js": {
+            "lines": 612,
+            "tokens": 5338,
+            "sources": 1,
+            "clones": 16,
+            "duplicatedLines": 323,
+            "duplicatedTokens": 2768,
+            "percentage": 52.78,
+            "percentageTokens": 51.85,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide.js": {
+            "lines": 702,
+            "tokens": 6111,
+            "sources": 1,
+            "clones": 5,
+            "duplicatedLines": 147,
+            "duplicatedTokens": 1242,
+            "percentage": 20.94,
+            "percentageTokens": 20.32,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/coverSlide.js": {
+            "lines": 119,
+            "tokens": 1001,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/fonts/registerFonts.js": {
+            "lines": 25,
+            "tokens": 165,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/ui/select.jsx": {
+            "lines": 74,
+            "tokens": 516,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/ui/popover.jsx": {
+            "lines": 18,
+            "tokens": 89,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/ui/input.jsx": {
+            "lines": 5,
+            "tokens": 21,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/ui/command.jsx": {
+            "lines": 72,
+            "tokens": 542,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/ui/combobox.jsx": {
+            "lines": 56,
+            "tokens": 423,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/ui/card.jsx": {
+            "lines": 48,
+            "tokens": 386,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/ui/button.jsx": {
+            "lines": 7,
+            "tokens": 34,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/ui/alert.jsx": {
+            "lines": 20,
+            "tokens": 173,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/zoneHierarchy.js": {
+            "lines": 13,
+            "tokens": 186,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/zoneColors.js": {
+            "lines": 87,
+            "tokens": 864,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/SlidePreview.jsx": {
+            "lines": 24,
+            "tokens": 178,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/ReportGenerator.jsx": {
+            "lines": 47,
+            "tokens": 334,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/MapView.jsx": {
+            "lines": 4,
+            "tokens": 54,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/index.jsx": {
+            "lines": 177,
+            "tokens": 1509,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/GenerationProgress.jsx": {
+            "lines": 9,
+            "tokens": 69,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/DevelopableAreaSelector.jsx": {
+            "lines": 7,
+            "tokens": 56,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/lib/utils.js": {
+            "lines": 10,
+            "tokens": 56,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/lib/powerpoint.js": {
+            "lines": 79,
+            "tokens": 840,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/App.jsx": {
+            "lines": 9,
+            "tokens": 30,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/proxy-server/server.js": {
+            "lines": 65,
+            "tokens": 629,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/vite.config.js": {
+            "lines": 114,
+            "tokens": 1079,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/tailwind.config.js": {
+            "lines": 102,
+            "tokens": 781,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/postcss.config.js": {
+            "lines": 5,
+            "tokens": 36,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          }
+        },
+        "total": {
+          "lines": 5006,
+          "tokens": 45424,
+          "sources": 43,
+          "clones": 32,
+          "duplicatedLines": 734,
+          "duplicatedTokens": 6546,
+          "percentage": 14.66,
+          "percentageTokens": 14.41,
+          "newDuplicatedLines": 0,
+          "newClones": 0
+        }
+      },
+      "jsx": {
+        "sources": {
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/ui/select.jsx": {
+            "lines": 102,
+            "tokens": 724,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/ui/popover.jsx": {
+            "lines": 54,
+            "tokens": 427,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/ui/input.jsx": {
+            "lines": 18,
+            "tokens": 128,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/ui/command.jsx": {
+            "lines": 93,
+            "tokens": 711,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/ui/combobox.jsx": {
+            "lines": 170,
+            "tokens": 1520,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/ui/card.jsx": {
+            "lines": 59,
+            "tokens": 495,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/ui/button.jsx": {
+            "lines": 55,
+            "tokens": 366,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/ui/alert.jsx": {
+            "lines": 48,
+            "tokens": 379,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/SlidePreview.jsx": {
+            "lines": 74,
+            "tokens": 597,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/ReportGenerator.jsx": {
+            "lines": 279,
+            "tokens": 2981,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/PlanningMapView.jsx": {
+            "lines": 38,
+            "tokens": 387,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/MapView.jsx": {
+            "lines": 104,
+            "tokens": 1019,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/index.jsx": {
+            "lines": 267,
+            "tokens": 2423,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/GenerationProgress.jsx": {
+            "lines": 58,
+            "tokens": 583,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/DevelopableAreaSelector.jsx": {
+            "lines": 130,
+            "tokens": 1159,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/main.jsx": {
+            "lines": 9,
+            "tokens": 70,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/App.jsx": {
+            "lines": 55,
+            "tokens": 289,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          }
+        },
+        "total": {
+          "lines": 1613,
+          "tokens": 14258,
+          "sources": 17,
+          "clones": 0,
+          "duplicatedLines": 0,
+          "duplicatedTokens": 0,
+          "percentage": 0,
+          "percentageTokens": 0,
+          "newDuplicatedLines": 0,
+          "newClones": 0
+        }
+      },
+      "typescript": {
+        "sources": {
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/lib/sidebarWidth.ts": {
+            "lines": 26,
+            "tokens": 226,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/constants/common.ts": {
+            "lines": 7,
+            "tokens": 81,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          }
+        },
+        "total": {
+          "lines": 33,
+          "tokens": 307,
+          "sources": 2,
+          "clones": 0,
+          "duplicatedLines": 0,
+          "duplicatedTokens": 0,
+          "percentage": 0,
+          "percentageTokens": 0,
+          "newDuplicatedLines": 0,
+          "newClones": 0
+        }
+      }
+    },
+    "total": {
+      "lines": 6652,
+      "tokens": 59989,
+      "sources": 62,
+      "clones": 32,
+      "duplicatedLines": 734,
+      "duplicatedTokens": 6546,
+      "percentage": 11.03,
+      "percentageTokens": 10.91,
+      "newDuplicatedLines": 0,
+      "newClones": 0
+    }
+  },
+  "duplicates": [
+    {
+      "format": "javascript",
+      "lines": 8,
+      "fragment": "drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.size || config.width, {\r\n        strokeStyle: '#02d1b8',\r\n        lineWidth: 12,\r\n        dashArray: [20, 10]\r\n      });\r\n    }\r\n\r\n    return",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js",
+        "start": 288,
+        "end": 295,
+        "startLoc": {
+          "line": 288,
+          "column": 7,
+          "position": 3094
+        },
+        "endLoc": {
+          "line": 295,
+          "column": 7,
+          "position": 3178
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js",
+        "start": 40,
+        "end": 47,
+        "startLoc": {
+          "line": 40,
+          "column": 7,
+          "position": 520
+        },
+        "endLoc": {
+          "line": 47,
+          "column": 3,
+          "position": 604
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 6,
+      "fragment": "});\r\n\r\n    if (developableArea?.features?.[0]) {\r\n      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.size || config.width, {\r\n        strokeStyle: '#02d1b8',\r\n        lineWidth: 3",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js",
+        "start": 376,
+        "end": 381,
+        "startLoc": {
+          "line": 376,
+          "column": 5,
+          "position": 4107
+        },
+        "endLoc": {
+          "line": 381,
+          "column": 2,
+          "position": 4188
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js",
+        "start": 285,
+        "end": 290,
+        "startLoc": {
+          "line": 285,
+          "column": 5,
+          "position": 3068
+        },
+        "endLoc": {
+          "line": 290,
+          "column": 3,
+          "position": 3149
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 30,
+      "fragment": "console.log('Loading aerial layer...');\r\n      const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];\r\n      const { bbox } = calculateMercatorParams(centerX, centerY, size);\r\n      \r\n      const params = new URLSearchParams({\r\n        SERVICE: 'WMS',\r\n        VERSION: '1.3.0',\r\n        REQUEST: 'GetMap',\r\n        BBOX: bbox,\r\n        CRS: 'EPSG:3857',\r\n        WIDTH: aerialConfig.width || aerialConfig.size,\r\n        HEIGHT: aerialConfig.height || aerialConfig.size,\r\n        LAYERS: aerialConfig.layers,\r\n        STYLES: '',\r\n        FORMAT: 'image/png',\r\n        DPI: 300,\r\n        MAP_RESOLUTION: 300,\r\n        FORMAT_OPTIONS: 'dpi:300'\r\n      });\r\n\r\n      const url = `${aerialConfig.url}?${params.toString()}`;\r\n      console.log('Aerial request URL:', url);\r\n      const baseMap = await loadImage(url);\r\n      console.log('Aerial layer loaded');\r\n      drawImage(ctx, baseMap, canvas.width, canvas.height, 0.7);\r\n    } catch (error) {\r\n      console.warn('Failed to load aerial layer:', error);\r\n    }\r\n\r\n    // Draw property boundary",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js",
+        "start": 411,
+        "end": 440,
+        "startLoc": {
+          "line": 411,
+          "column": 7,
+          "position": 4453
+        },
+        "endLoc": {
+          "line": 440,
+          "column": 26,
+          "position": 4767
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js",
+        "start": 317,
+        "end": 346,
+        "startLoc": {
+          "line": 317,
+          "column": 7,
+          "position": 3429
+        },
+        "endLoc": {
+          "line": 346,
+          "column": 4,
+          "position": 3743
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 18,
+      "fragment": "(feature, developableArea = null) {\r\n  if (!feature) return null;\r\n  \r\n  try {\r\n    const config = {\r\n      width: 2048,\r\n      height: 2048,\r\n      padding: 0.1\r\n    };\r\n    \r\n    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);\r\n    \r\n    // Create base canvas\r\n    const canvas = createCanvas(config.width, config.height);\r\n    const ctx = canvas.getContext('2d', { alpha: true });\r\n\r\n    try {\r\n      // 1. Aerial imagery (base)",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js",
+        "start": 462,
+        "end": 479,
+        "startLoc": {
+          "line": 462,
+          "column": 19,
+          "position": 4989
+        },
+        "endLoc": {
+          "line": 479,
+          "column": 28,
+          "position": 5159
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js",
+        "start": 393,
+        "end": 410,
+        "startLoc": {
+          "line": 393,
+          "column": 21,
+          "position": 4279
+        },
+        "endLoc": {
+          "line": 410,
+          "column": 72,
+          "position": 4449
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 21,
+      "fragment": "const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];\r\n      const { bbox } = calculateMercatorParams(centerX, centerY, size);\r\n      \r\n      const params = new URLSearchParams({\r\n        SERVICE: 'WMS',\r\n        VERSION: '1.3.0',\r\n        REQUEST: 'GetMap',\r\n        BBOX: bbox,\r\n        CRS: 'EPSG:3857',\r\n        WIDTH: aerialConfig.width || aerialConfig.size,\r\n        HEIGHT: aerialConfig.height || aerialConfig.size,\r\n        LAYERS: aerialConfig.layers,\r\n        STYLES: '',\r\n        FORMAT: 'image/png',\r\n        DPI: 300,\r\n        MAP_RESOLUTION: 300,\r\n        FORMAT_OPTIONS: 'dpi:300'\r\n      });\r\n\r\n      const url = `${aerialConfig.url}?${params.toString()}`;\r\n      const",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js",
+        "start": 480,
+        "end": 500,
+        "startLoc": {
+          "line": 480,
+          "column": 7,
+          "position": 5163
+        },
+        "endLoc": {
+          "line": 500,
+          "column": 6,
+          "position": 5373
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js",
+        "start": 318,
+        "end": 338,
+        "startLoc": {
+          "line": 318,
+          "column": 7,
+          "position": 3439
+        },
+        "endLoc": {
+          "line": 338,
+          "column": 8,
+          "position": 3649
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 7,
+      "fragment": "config.width, {\r\n      strokeStyle: '#FF0000',\r\n      lineWidth: 6\r\n    });\r\n\r\n    if (developableArea?.features?.[0]) {\r\n      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js",
+        "start": 534,
+        "end": 540,
+        "startLoc": {
+          "line": 534,
+          "column": 2,
+          "position": 5692
+        },
+        "endLoc": {
+          "line": 540,
+          "column": 6,
+          "position": 5773
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js",
+        "start": 282,
+        "end": 288,
+        "startLoc": {
+          "line": 282,
+          "column": 2,
+          "position": 3044
+        },
+        "endLoc": {
+          "line": 288,
+          "column": 5,
+          "position": 3125
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 11,
+      "fragment": "if (developableArea?.features?.[0]) {\r\n      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {\r\n        strokeStyle: '#02d1b8',\r\n        lineWidth: 12,\r\n        dashArray: [20, 10]\r\n      });\r\n    }\r\n\r\n    return canvas.toDataURL('image/png', 1.0);\r\n  } catch (error) {\r\n    console.error('Failed to capture heritage map:'",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js",
+        "start": 539,
+        "end": 549,
+        "startLoc": {
+          "line": 539,
+          "column": 5,
+          "position": 5724
+        },
+        "endLoc": {
+          "line": 549,
+          "column": 34,
+          "position": 5851
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js",
+        "start": 447,
+        "end": 457,
+        "startLoc": {
+          "line": 447,
+          "column": 5,
+          "position": 4831
+        },
+        "endLoc": {
+          "line": 457,
+          "column": 36,
+          "position": 4958
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 46,
+      "fragment": "(feature, developableArea = null) {\r\n  if (!feature) return null;\r\n  \r\n  try {\r\n    const config = {\r\n      width: 2048,\r\n      height: 2048,\r\n      padding: 0.1\r\n    };\r\n    \r\n    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);\r\n    \r\n    // Create base canvas\r\n    const canvas = createCanvas(config.width, config.height);\r\n    const ctx = canvas.getContext('2d', { alpha: true });\r\n\r\n    try {\r\n      // 1. Aerial imagery (base)\r\n      const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];\r\n      const { bbox } = calculateMercatorParams(centerX, centerY, size);\r\n      \r\n      const params = new URLSearchParams({\r\n        SERVICE: 'WMS',\r\n        VERSION: '1.3.0',\r\n        REQUEST: 'GetMap',\r\n        BBOX: bbox,\r\n        CRS: 'EPSG:3857',\r\n        WIDTH: aerialConfig.width || aerialConfig.size,\r\n        HEIGHT: aerialConfig.height || aerialConfig.size,\r\n        LAYERS: aerialConfig.layers,\r\n        STYLES: '',\r\n        FORMAT: 'image/png',\r\n        DPI: 300,\r\n        MAP_RESOLUTION: 300,\r\n        FORMAT_OPTIONS: 'dpi:300'\r\n      });\r\n\r\n      const url = `${aerialConfig.url}?${params.toString()}`;\r\n      const baseMap = await loadImage(url);\r\n      drawImage(ctx, baseMap, canvas.width, canvas.height, 0.7);\r\n    } catch (error) {\r\n      console.warn('Failed to load aerial layer:', error);\r\n    }\r\n\r\n    try {\r\n      // 2. Acid Sulfate Soils layer",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js",
+        "start": 554,
+        "end": 599,
+        "startLoc": {
+          "line": 554,
+          "column": 22,
+          "position": 5882
+        },
+        "endLoc": {
+          "line": 599,
+          "column": 31,
+          "position": 6343
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js",
+        "start": 393,
+        "end": 507,
+        "startLoc": {
+          "line": 393,
+          "column": 21,
+          "position": 4279
+        },
+        "endLoc": {
+          "line": 507,
+          "column": 21,
+          "position": 5450
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 20,
+      "fragment": ", error);\r\n    }\r\n\r\n    // Draw boundaries\r\n    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {\r\n      strokeStyle: '#FF0000',\r\n      lineWidth: 6\r\n    });\r\n\r\n    if (developableArea?.features?.[0]) {\r\n      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {\r\n        strokeStyle: '#02d1b8',\r\n        lineWidth: 12,\r\n        dashArray: [20, 10]\r\n      });\r\n    }\r\n\r\n    return canvas.toDataURL('image/png', 1.0);\r\n  } catch (error) {\r\n    console.error('Failed to capture acid sulfate soils map:'",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js",
+        "start": 622,
+        "end": 641,
+        "startLoc": {
+          "line": 622,
+          "column": 43,
+          "position": 6543
+        },
+        "endLoc": {
+          "line": 641,
+          "column": 44,
+          "position": 6744
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/utils/map/services/screenshot.js",
+        "start": 530,
+        "end": 457,
+        "startLoc": {
+          "line": 530,
+          "column": 33,
+          "position": 5650
+        },
+        "endLoc": {
+          "line": 457,
+          "column": 36,
+          "position": 4958
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 46,
+      "fragment": ";\r\n\r\n\r\nconst styles = {\r\n  title: {\r\n    x: '4%',\r\n    y: '7%',\r\n    w: '80%',\r\n    h: '8%',\r\n    fontSize: 26,\r\n    fontFace: 'Public Sans Light',\r\n    autoFit: true,\r\n    breakLine: false,\r\n    color: '002664',\r\n    lineSpacing: 26\r\n  },\r\n  subtitle: {\r\n    color: '363636',\r\n  },\r\n  titleLine: {\r\n    x: '5%',\r\n    y: '17%',\r\n    w: '90%',\r\n    h: 0.01,\r\n    line: { color: '002664', width: 0.7 },\r\n    fill: { color: '002664' }\r\n  },\r\n  sensitiveText: {\r\n    x: '72%',\r\n    y: '2%',\r\n    w: '25%',\r\n    h: '3%',\r\n    fontSize: 9,\r\n    color: 'FF3B3B',\r\n    bold: true,\r\n    align: 'right',\r\n    fontFace: 'Public Sans'\r\n  },\r\n  nswLogo: {\r\n    x: '90%',\r\n    y: '5%',\r\n    w: '8%',\r\n    h: '8%',\r\n    sizing: { type: 'contain' }\r\n  },\r\n  table",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/propertySnapshotSlide.js",
+        "start": 1,
+        "end": 46,
+        "startLoc": {
+          "line": 1,
+          "column": 17,
+          "position": 11
+        },
+        "endLoc": {
+          "line": 46,
+          "column": 6,
+          "position": 359
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js",
+        "start": 35,
+        "end": 79,
+        "startLoc": {
+          "line": 35,
+          "column": 2,
+          "position": 361
+        },
+        "endLoc": {
+          "line": 79,
+          "column": 13,
+          "position": 707
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 30,
+      "fragment": "},\r\n  footerLine: {\r\n    x: '5%',\r\n    y: '93%',\r\n    w: '90%',\r\n    h: 0.01,\r\n    line: { color: '002664', width: 0.7 },\r\n    fill: { color: '002664' }\r\n  },\r\n  footer: {\r\n    x: '4%',\r\n    y: '94%',\r\n    w: '90%',\r\n    h: '4%',\r\n    fontSize: 10,\r\n    color: '002664',\r\n    fontFace: 'Public Sans',\r\n    align: 'left'\r\n  },\r\n  pageNumber: {\r\n    x: '94%',\r\n    y: '94%',\r\n    w: '4%',\r\n    h: '4%',\r\n    fontSize: 8,\r\n    color: '002664',\r\n    fontFace: 'Public Sans',\r\n    align: 'left'\r\n  },\r\n  categoryIcons",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/propertySnapshotSlide.js",
+        "start": 61,
+        "end": 90,
+        "startLoc": {
+          "line": 61,
+          "column": 3,
+          "position": 548
+        },
+        "endLoc": {
+          "line": 90,
+          "column": 14,
+          "position": 782
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js",
+        "start": 121,
+        "end": 150,
+        "startLoc": {
+          "line": 121,
+          "column": 3,
+          "position": 1037
+        },
+        "endLoc": {
+          "line": 150,
+          "column": 10,
+          "position": 1271
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 19,
+      "fragment": ", options: { color: styles.subtitle.color } }\r\n  ], convertCmValues({\r\n    ...styles.title,\r\n    color: undefined\r\n  }));\r\n  \r\n  // Add horizontal line under title\r\n  slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.titleLine));\r\n  \r\n  // Add sensitive text\r\n  slide.addText(\"SENSITIVE: NSW GOVERNMENT\", convertCmValues(styles.sensitiveText));\r\n  \r\n  // Add NSW Logo\r\n  slide.addImage({\r\n    path: \"/images/NSW-Government-official-logo.jpg\",\r\n    ...convertCmValues(styles.nswLogo)\r\n  });\r\n\r\n  const",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/propertySnapshotSlide.js",
+        "start": 138,
+        "end": 156,
+        "startLoc": {
+          "line": 138,
+          "column": 20,
+          "position": 1231
+        },
+        "endLoc": {
+          "line": 156,
+          "column": 6,
+          "position": 1376
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js",
+        "start": 171,
+        "end": 189,
+        "startLoc": {
+          "line": 171,
+          "column": 23,
+          "position": 1481
+        },
+        "endLoc": {
+          "line": 189,
+          "column": 23,
+          "position": 1626
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 45,
+      "fragment": ";\r\n\r\nconst styles = {\r\n  title: {\r\n    x: '4%',\r\n    y: '7%',\r\n    w: '80%',\r\n    h: '8%',\r\n    fontSize: 26,\r\n    fontFace: 'Public Sans Light',\r\n    autoFit: true,\r\n    breakLine: false,\r\n    color: '002664',\r\n    lineSpacing: 26\r\n  },\r\n  subtitle: {\r\n    color: '363636',\r\n  },\r\n  titleLine: {\r\n    x: '5%',\r\n    y: '17%',\r\n    w: '90%',\r\n    h: 0.01,\r\n    line: { color: '002664', width: 0.7 },\r\n    fill: { color: '002664' }\r\n  },\r\n  sensitiveText: {\r\n    x: '72%',\r\n    y: '2%',\r\n    w: '25%',\r\n    h: '3%',\r\n    fontSize: 9,\r\n    color: 'FF3B3B',\r\n    bold: true,\r\n    align: 'right',\r\n    fontFace: 'Public Sans'\r\n  },\r\n  nswLogo: {\r\n    x: '90%',\r\n    y: '5%',\r\n    w: '8%',\r\n    h: '8%',\r\n    sizing: { type: 'contain' }\r\n  },\r\n  developableAreaBox",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/primarySiteAttributesSlide.js",
+        "start": 3,
+        "end": 47,
+        "startLoc": {
+          "line": 3,
+          "column": 13,
+          "position": 35
+        },
+        "endLoc": {
+          "line": 47,
+          "column": 19,
+          "position": 381
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js",
+        "start": 35,
+        "end": 79,
+        "startLoc": {
+          "line": 35,
+          "column": 2,
+          "position": 361
+        },
+        "endLoc": {
+          "line": 79,
+          "column": 13,
+          "position": 707
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 30,
+      "fragment": "},\r\n  footerLine: {\r\n    x: '5%',\r\n    y: '93%',\r\n    w: '90%',\r\n    h: 0.01,\r\n    line: { color: '002664', width: 0.7 },\r\n    fill: { color: '002664' }\r\n  },\r\n  footer: {\r\n    x: '4%',\r\n    y: '94%',\r\n    w: '90%',\r\n    h: '4%',\r\n    fontSize: 10,\r\n    color: '002664',\r\n    fontFace: 'Public Sans',\r\n    align: 'left'\r\n  },\r\n  pageNumber: {\r\n    x: '94%',\r\n    y: '94%',\r\n    w: '4%',\r\n    h: '4%',\r\n    fontSize: 8,\r\n    color: '002664',\r\n    fontFace: 'Public Sans',\r\n    align: 'left'\r\n  },\r\n  mapLegend",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/primarySiteAttributesSlide.js",
+        "start": 113,
+        "end": 142,
+        "startLoc": {
+          "line": 113,
+          "column": 3,
+          "position": 952
+        },
+        "endLoc": {
+          "line": 142,
+          "column": 10,
+          "position": 1186
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js",
+        "start": 121,
+        "end": 150,
+        "startLoc": {
+          "line": 121,
+          "column": 3,
+          "position": 1037
+        },
+        "endLoc": {
+          "line": 150,
+          "column": 10,
+          "position": 1271
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 8,
+      "fragment": "(pptx, properties) {\r\n  const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });\r\n\r\n  // Add title with line break\r\n  slide.addText([\r\n    { text: properties.site__address, options: { color: styles.title.color } },\r\n    { text: ' ', options: { breakLine: true } },\r\n    { text: 'Primary Site Attributes'",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/primarySiteAttributesSlide.js",
+        "start": 270,
+        "end": 277,
+        "startLoc": {
+          "line": 270,
+          "column": 30,
+          "position": 2469
+        },
+        "endLoc": {
+          "line": 277,
+          "column": 26,
+          "position": 2578
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/propertySnapshotSlide.js",
+        "start": 131,
+        "end": 138,
+        "startLoc": {
+          "line": 131,
+          "column": 25,
+          "position": 1121
+        },
+        "endLoc": {
+          "line": 138,
+          "column": 20,
+          "position": 1230
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 8,
+      "fragment": "try {\r\n        const controller = new AbortController();\r\n        const timeoutId = setTimeout(() => controller.abort(), 10000);\r\n\r\n        const response = await proxyRequest(`${url}?${params}`);\r\n        clearTimeout(timeoutId);\r\n\r\n        if (response.features?",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js",
+        "start": 6,
+        "end": 13,
+        "startLoc": {
+          "line": 6,
+          "column": 5,
+          "position": 61
+        },
+        "endLoc": {
+          "line": 13,
+          "column": 2,
+          "position": 150
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js",
+        "start": 16,
+        "end": 23,
+        "startLoc": {
+          "line": 16,
+          "column": 3,
+          "position": 143
+        },
+        "endLoc": {
+          "line": 23,
+          "column": 3,
+          "position": 233
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 12,
+      "fragment": ",\r\n        returnGeometry: false\r\n    });\r\n\r\n    try {\r\n        const controller = new AbortController();\r\n        const timeoutId = setTimeout(() => controller.abort(), 10000);  \r\n        const response = await proxyRequest(`${url}?${params}`);\r\n        clearTimeout(timeoutId);    \r\n\r\n        if (response.features && response.features.length > 0) {\r\n            return",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js",
+        "start": 44,
+        "end": 55,
+        "startLoc": {
+          "line": 44,
+          "column": 12,
+          "position": 432
+        },
+        "endLoc": {
+          "line": 55,
+          "column": 7,
+          "position": 556
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js",
+        "start": 12,
+        "end": 24,
+        "startLoc": {
+          "line": 12,
+          "column": 12,
+          "position": 124
+        },
+        "endLoc": {
+          "line": 24,
+          "column": 6,
+          "position": 250
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 78,
+      "fragment": ", error);\r\n        return null;\r\n    }\r\n};\r\n    \r\n\r\nconst styles = {\r\n    title: {\r\n        x: '4%',\r\n        y: '7%',\r\n        w: '80%',\r\n        h: '8%',\r\n        fontSize: 26,\r\n        fontFace: 'Public Sans Light',\r\n        autoFit: true,\r\n        breakLine: false,\r\n        color: '002664',\r\n        lineSpacing: 26\r\n    },\r\n    subtitle: {\r\n        color: '363636',\r\n    },\r\n    titleLine: {\r\n        x: '5%',\r\n        y: '17%',\r\n        w: '90%',\r\n        h: 0.01,\r\n        line: { color: '002664', width: 0.7 },\r\n        fill: { color: '002664' }\r\n    },\r\n    sensitiveText: {\r\n        x: '72%',\r\n        y: '2%',\r\n        w: '25%',\r\n        h: '3%',\r\n        fontSize: 9,\r\n        color: 'FF3B3B',\r\n        bold: true,\r\n        align: 'right',\r\n        fontFace: 'Public Sans'\r\n    },\r\n    nswLogo: {\r\n        x: '90%',\r\n        y: '5%',\r\n        w: '8%',\r\n        h: '8%',\r\n        sizing: { type: 'contain' }\r\n    },\r\n    mapContainer: {\r\n        x: (index) => `${15 + (index * 35)}%`,\r\n        y: '18%',\r\n        w: '50%',\r\n        h: '50%'\r\n    },\r\n    mapTitle: {\r\n        h: '6%',\r\n        fill: '002664',\r\n        color: 'FFFFFF',\r\n        fontSize: 14,\r\n        fontFace: 'Public Sans',\r\n        align: 'center',\r\n        valign: 'middle'\r\n    },\r\n    mapImage: {\r\n        y: '6%',\r\n        w: '100%',\r\n        h: '50%',\r\n        sizing: { type: 'contain', align: 'center', valign: 'middle' }\r\n    },\r\n    descriptionText: {\r\n        fontSize: 9,\r\n        color: '363636',\r\n        fontFace: 'Public Sans',\r\n        align: 'left',\r\n        valign: 'top',\r\n        wrap: true,\r\n        h: '12%'\r\n    }",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js",
+        "start": 59,
+        "end": 136,
+        "startLoc": {
+          "line": 59,
+          "column": 42,
+          "position": 598
+        },
+        "endLoc": {
+          "line": 136,
+          "column": 2,
+          "position": 1218
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js",
+        "start": 32,
+        "end": 111,
+        "startLoc": {
+          "line": 32,
+          "column": 33,
+          "position": 342
+        },
+        "endLoc": {
+          "line": 111,
+          "column": 2,
+          "position": 965
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 43,
+      "fragment": "},\r\n    footerLine: {\r\n        x: '5%',\r\n        y: '93%',\r\n        w: '90%',\r\n        h: 0.01,\r\n        line: { color: '002664', width: 0.7 },\r\n        fill: { color: '002664' }\r\n    },\r\n    footer: {\r\n        x: '4%',\r\n        y: '94%',\r\n        w: '90%',\r\n        h: '4%',\r\n        fontSize: 10,\r\n        color: '002664',\r\n        fontFace: 'Public Sans',\r\n        align: 'left'\r\n    },\r\n    pageNumber: {\r\n        x: '94%',\r\n        y: '94%',\r\n        w: '4%',\r\n        h: '4%',\r\n        fontSize: 8,\r\n        color: '002664',\r\n        fontFace: 'Public Sans',\r\n        align: 'left'\r\n    },\r\n    scoreText: {\r\n        x: '5%',\r\n        y: '85%',\r\n        w: '90%',\r\n        h: '6%',\r\n        fontSize: 8,\r\n        color: '363636',\r\n        fontFace: 'Public Sans',\r\n        align: 'left',\r\n        valign: 'middle'\r\n    }\r\n};\r\n\r\nexport async function addPlanningSlide2",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js",
+        "start": 145,
+        "end": 187,
+        "startLoc": {
+          "line": 145,
+          "column": 5,
+          "position": 1285
+        },
+        "endLoc": {
+          "line": 187,
+          "column": 18,
+          "position": 1612
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js",
+        "start": 121,
+        "end": 163,
+        "startLoc": {
+          "line": 121,
+          "column": 3,
+          "position": 1037
+        },
+        "endLoc": {
+          "line": 163,
+          "column": 28,
+          "position": 1364
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 9,
+      "fragment": "(pptx, properties) {\r\n  const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });\r\n\r\n  try {\r\n    // Add title\r\n    slide.addText([\r\n    { text: properties.site__address, options: { color: styles.title.color } },\r\n    { text: ' ', options: { breakLine: true } },\r\n    { text: 'Heritage & Acid Sulfate Soils'",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js",
+        "start": 187,
+        "end": 195,
+        "startLoc": {
+          "line": 187,
+          "column": 18,
+          "position": 1613
+        },
+        "endLoc": {
+          "line": 195,
+          "column": 32,
+          "position": 1728
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js",
+        "start": 163,
+        "end": 171,
+        "startLoc": {
+          "line": 163,
+          "column": 28,
+          "position": 1365
+        },
+        "endLoc": {
+          "line": 171,
+          "column": 23,
+          "position": 1480
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 22,
+      "fragment": ", options: { color: styles.subtitle.color } }\r\n   ], convertCmValues({\r\n    ...styles.title,\r\n    color: undefined\r\n   }));\r\n    \r\n    // Add horizontal line under title\r\n    slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.titleLine));\r\n    \r\n    // Add sensitive text\r\n    slide.addText(\"SENSITIVE: NSW GOVERNMENT\", convertCmValues(styles.sensitiveText));\r\n    \r\n    // Add NSW Logo\r\n    slide.addImage({\r\n      path: \"/images/NSW-Government-official-logo.jpg\",\r\n      ...convertCmValues(styles.nswLogo)\r\n   });\r\n    \r\n   // Add footer elements\r\n   slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.footerLine));\r\n   slide.addText('Property and Development NSW', convertCmValues(styles.footer));\r\n   slide.addText('6'",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js",
+        "start": 195,
+        "end": 216,
+        "startLoc": {
+          "line": 195,
+          "column": 32,
+          "position": 1729
+        },
+        "endLoc": {
+          "line": 216,
+          "column": 4,
+          "position": 1922
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js",
+        "start": 171,
+        "end": 192,
+        "startLoc": {
+          "line": 171,
+          "column": 23,
+          "position": 1481
+        },
+        "endLoc": {
+          "line": 192,
+          "column": 4,
+          "position": 1674
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 14,
+      "fragment": ", convertCmValues({\r\n     x: '-22.5%',    // Negative x to account for rotation\r\n     y: '45%',     // Centered vertically\r\n     w: '61%',     // Original height becomes width when rotated\r\n     h: '6%',      // Original width becomes height when rotated\r\n     color: 'FFFFFF',\r\n     fontSize: 14,\r\n     fontFace: 'Public Sans',\r\n     align: 'center',\r\n     valign: 'middle',\r\n     rotate: 270    // Use rotate instead of transform\r\n   }));\r\n\r\n   // Add heritage legend",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js",
+        "start": 238,
+        "end": 251,
+        "startLoc": {
+          "line": 238,
+          "column": 11,
+          "position": 2106
+        },
+        "endLoc": {
+          "line": 251,
+          "column": 23,
+          "position": 2212
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js",
+        "start": 214,
+        "end": 227,
+        "startLoc": {
+          "line": 214,
+          "column": 15,
+          "position": 1858
+        },
+        "endLoc": {
+          "line": 227,
+          "column": 16,
+          "position": 1964
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 25,
+      "fragment": "]\r\n        };\r\n        \r\n        try {\r\n          const heritageData = await getHeritageData(geometry);\r\n          heritageScore = scoringCriteria.heritage.calculateScore(heritageData);\r\n          heritageText = scoringCriteria.heritage.getScoreDescription(heritageScore);\r\n          \r\n          // Add additional heritage information if heritage is found (scores 1 or 2)\r\n          if (heritageData && (heritageScore === 1 || heritageScore === 2)) {\r\n            if (heritageData.LAY_CLASS) {\r\n              heritageText += `\\n\\nClass: ${heritageData.LAY_CLASS}`;\r\n            }\r\n            if (heritageData.H_NAME) {\r\n              heritageText += `\\nName: ${heritageData.H_NAME}`;\r\n            }\r\n          }\r\n        } catch (error) {\r\n          console.error('Error getting heritage data:', error);\r\n          heritageText = 'Error retrieving heritage data.';\r\n          heritageScore = 0;\r\n        }\r\n      }\r\n\r\n      // Update the box color based on score",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js",
+        "start": 340,
+        "end": 364,
+        "startLoc": {
+          "line": 340,
+          "column": 15,
+          "position": 2999
+        },
+        "endLoc": {
+          "line": 364,
+          "column": 39,
+          "position": 3217
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js",
+        "start": 315,
+        "end": 337,
+        "startLoc": {
+          "line": 315,
+          "column": 2,
+          "position": 2750
+        },
+        "endLoc": {
+          "line": 337,
+          "column": 5,
+          "position": 2964
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 14,
+      "fragment": ", convertCmValues({\r\n        x: '22.5%',     // Adjusted x position for right side\r\n        y: '45%',     // Centered vertically\r\n        w: '61%',     // Original height becomes width when rotated\r\n        h: '6%',      // Original width becomes height when rotated\r\n        color: 'FFFFFF',\r\n        fontSize: 14,\r\n        fontFace: 'Public Sans',\r\n        align: 'center',\r\n        valign: 'middle',\r\n        rotate: 270    // Use rotate instead of transform\r\n      }));  \r\n\r\n      // Add right map  ",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js",
+        "start": 444,
+        "end": 457,
+        "startLoc": {
+          "line": 444,
+          "column": 21,
+          "position": 3889
+        },
+        "endLoc": {
+          "line": 457,
+          "column": 19,
+          "position": 3995
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js",
+        "start": 385,
+        "end": 398,
+        "startLoc": {
+          "line": 385,
+          "column": 18,
+          "position": 3380
+        },
+        "endLoc": {
+          "line": 398,
+          "column": 17,
+          "position": 3486
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 17,
+      "fragment": ",\r\n            ...convertCmValues({\r\n                x: '56%',\r\n                y: '18%',\r\n                w: '34%',\r\n                h: '61%',\r\n                sizing: {\r\n                    type: 'contain',\r\n                    align: 'center',\r\n                    valign: 'middle'\r\n                }\r\n            }\r\n\r\n            )\r\n          });\r\n        } catch (error) {\r\n          console.error('Error adding acid sulfate soils screenshot:'",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js",
+        "start": 467,
+        "end": 483,
+        "startLoc": {
+          "line": 467,
+          "column": 27,
+          "position": 4105
+        },
+        "endLoc": {
+          "line": 483,
+          "column": 46,
+          "position": 4214
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js",
+        "start": 408,
+        "end": 422,
+        "startLoc": {
+          "line": 408,
+          "column": 21,
+          "position": 3596
+        },
+        "endLoc": {
+          "line": 422,
+          "column": 38,
+          "position": 3700
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 15,
+      "fragment": "]\r\n        };\r\n        \r\n        try {\r\n          const soilsData = await getAcidSulfateSoilsData(geometry);\r\n          acidSulfateSoilsScore = scoringCriteria.acidSulfateSoils.calculateScore(soilsData);\r\n          acidSulfateSoilsText = scoringCriteria.acidSulfateSoils.getScoreDescription(acidSulfateSoilsScore, soilsData);\r\n        } catch (error) {\r\n          console.error('Error getting acid sulfate soils data:', error);\r\n          acidSulfateSoilsText = 'Error retrieving acid sulfate soils data.';\r\n          acidSulfateSoilsScore = 0;\r\n        }\r\n      }\r\n\r\n      // Add description box",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js",
+        "start": 525,
+        "end": 539,
+        "startLoc": {
+          "line": 525,
+          "column": 15,
+          "position": 4592
+        },
+        "endLoc": {
+          "line": 539,
+          "column": 23,
+          "position": 4713
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js",
+        "start": 510,
+        "end": 522,
+        "startLoc": {
+          "line": 510,
+          "column": 2,
+          "position": 4440
+        },
+        "endLoc": {
+          "line": 522,
+          "column": 5,
+          "position": 4557
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 14,
+      "fragment": ",\r\n        y: '86%',\r\n        w: '40%',\r\n        h: '4%',\r\n        fontSize: 7,\r\n        color: '363636',\r\n        fontFace: 'Public Sans',\r\n        bold: true,\r\n        align: 'right'\r\n      }));\r\n\r\n      // Add line\r\n      slide.addShape(pptx.shapes.LINE, convertCmValues({\r\n        x: '51%'",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js",
+        "start": 565,
+        "end": 578,
+        "startLoc": {
+          "line": 565,
+          "column": 6,
+          "position": 4954
+        },
+        "endLoc": {
+          "line": 578,
+          "column": 6,
+          "position": 5054
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js",
+        "start": 390,
+        "end": 403,
+        "startLoc": {
+          "line": 390,
+          "column": 5,
+          "position": 3458
+        },
+        "endLoc": {
+          "line": 403,
+          "column": 5,
+          "position": 3558
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 14,
+      "fragment": "w: '40%',\r\n        h: '4%',\r\n        fontSize: 7,\r\n        color: '363636',\r\n        fontFace: 'Public Sans',\r\n        bold: true,\r\n        align: 'right'\r\n      }));\r\n\r\n      // Add line\r\n      slide.addShape(pptx.shapes.LINE, convertCmValues({\r\n        x: '51%',\r\n        y: '88.5%',\r\n        w",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide2.js",
+        "start": 567,
+        "end": 580,
+        "startLoc": {
+          "line": 567,
+          "column": 9,
+          "position": 4966
+        },
+        "endLoc": {
+          "line": 580,
+          "column": 2,
+          "position": 5067
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js",
+        "start": 501,
+        "end": 513,
+        "startLoc": {
+          "line": 501,
+          "column": 7,
+          "position": 4469
+        },
+        "endLoc": {
+          "line": 513,
+          "column": 32,
+          "position": 4568
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 16,
+      "fragment": ",\r\n    returnGeometry: false\r\n  });\r\n\r\n  try {\r\n    const controller = new AbortController();\r\n    const timeoutId = setTimeout(() => controller.abort(), 10000);\r\n    \r\n    const response = await fetch(`${url}?${params}`, {\r\n      signal: controller.signal\r\n    });\r\n    clearTimeout(timeoutId);\r\n    \r\n    const data = await response.json();\r\n    if (data.features && data.features.length > 0) {\r\n      return data.features[0].attributes.MAX_B_H",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide.js",
+        "start": 143,
+        "end": 158,
+        "startLoc": {
+          "line": 143,
+          "column": 10,
+          "position": 1468
+        },
+        "endLoc": {
+          "line": 158,
+          "column": 8,
+          "position": 1638
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide.js",
+        "start": 111,
+        "end": 126,
+        "startLoc": {
+          "line": 111,
+          "column": 6,
+          "position": 1154
+        },
+        "endLoc": {
+          "line": 126,
+          "column": 4,
+          "position": 1324
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 49,
+      "fragment": ", error);\r\n    return null;\r\n  }\r\n};\r\n\r\nconst styles = {\r\n  title: {\r\n    x: '4%',\r\n    y: '7%',\r\n    w: '80%',\r\n    h: '8%',\r\n    fontSize: 26,\r\n    fontFace: 'Public Sans Light',\r\n    autoFit: true,\r\n    breakLine: false,\r\n    color: '002664',\r\n    lineSpacing: 26\r\n  },\r\n  subtitle: {\r\n    color: '363636',\r\n  },\r\n  titleLine: {\r\n    x: '5%',\r\n    y: '17%',\r\n    w: '90%',\r\n    h: 0.01,\r\n    line: { color: '002664', width: 0.7 },\r\n    fill: { color: '002664' }\r\n  },\r\n  sensitiveText: {\r\n    x: '72%',\r\n    y: '2%',\r\n    w: '25%',\r\n    h: '3%',\r\n    fontSize: 9,\r\n    color: 'FF3B3B',\r\n    bold: true,\r\n    align: 'right',\r\n    fontFace: 'Public Sans'\r\n  },\r\n  nswLogo: {\r\n    x: '90%',\r\n    y: '5%',\r\n    w: '8%',\r\n    h: '8%',\r\n    sizing: { type: 'contain' }\r\n  },\r\n  mapContainer: {\r\n    x: (index) => `${5",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide.js",
+        "start": 162,
+        "end": 210,
+        "startLoc": {
+          "line": 162,
+          "column": 39,
+          "position": 1671
+        },
+        "endLoc": {
+          "line": 210,
+          "column": 2,
+          "position": 2054
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js",
+        "start": 32,
+        "end": 80,
+        "startLoc": {
+          "line": 32,
+          "column": 33,
+          "position": 342
+        },
+        "endLoc": {
+          "line": 80,
+          "column": 3,
+          "position": 725
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 31,
+      "fragment": ",\r\n    h: '50%'\r\n  },\r\n  mapTitle: {\r\n    h: '6%',\r\n    fill: '002664',\r\n    color: 'FFFFFF',\r\n    fontSize: 14,\r\n    fontFace: 'Public Sans',\r\n    align: 'center',\r\n    valign: 'middle'\r\n  },\r\n  mapImage: {\r\n    y: '6%',\r\n    w: '100%',\r\n    h: '50%',\r\n    sizing: {\r\n      type: 'contain',\r\n      align: 'center',\r\n      valign: 'middle'\r\n    }\r\n  },\r\n\r\n  descriptionText: {\r\n    fontSize: 9,\r\n    color: '363636',\r\n    fontFace: 'Public Sans',\r\n    align: 'left',\r\n    valign: 'top',\r\n    wrap: true,\r\n    h: '5%'",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide.js",
+        "start": 212,
+        "end": 242,
+        "startLoc": {
+          "line": 212,
+          "column": 6,
+          "position": 2082
+        },
+        "endLoc": {
+          "line": 242,
+          "column": 5,
+          "position": 2295
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js",
+        "start": 82,
+        "end": 111,
+        "startLoc": {
+          "line": 82,
+          "column": 6,
+          "position": 753
+        },
+        "endLoc": {
+          "line": 111,
+          "column": 6,
+          "position": 964
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 40,
+      "fragment": ",\r\n  },\r\n  sourceText: {\r\n    fontSize: 8,\r\n    color: '363636',\r\n    fontFace: 'Public Sans Light',\r\n    italic: true,\r\n    align: 'left',\r\n    wrap: true,\r\n    h: '3%',\r\n  },\r\n  footerLine: {\r\n    x: '5%',\r\n    y: '93%',\r\n    w: '90%',\r\n    h: 0.01,\r\n    line: { color: '002664', width: 0.7 },\r\n    fill: { color: '002664' }\r\n  },\r\n  footer: {\r\n    x: '4%',\r\n    y: '94%',\r\n    w: '90%',\r\n    h: '4%',\r\n    fontSize: 10,\r\n    color: '002664',\r\n    fontFace: 'Public Sans',\r\n    align: 'left'\r\n  },\r\n  pageNumber: {\r\n    x: '94%',\r\n    y: '94%',\r\n    w: '4%',\r\n    h: '4%',\r\n    fontSize: 8,\r\n    color: '002664',\r\n    fontFace: 'Public Sans',\r\n    align: 'left'\r\n  },\r\n  scoreContainer",
+      "tokens": 0,
+      "firstFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/planningSlide.js",
+        "start": 242,
+        "end": 281,
+        "startLoc": {
+          "line": 242,
+          "column": 5,
+          "position": 2296
+        },
+        "endLoc": {
+          "line": 281,
+          "column": 15,
+          "position": 2602
+        }
+      },
+      "secondFile": {
+        "name": "C:/Users/strutj01/CascadeProjects/pptxgenerator/src/components/pptxApp/slides/secondaryAttributesSlide.js",
+        "start": 111,
+        "end": 150,
+        "startLoc": {
+          "line": 111,
+          "column": 6,
+          "position": 965
+        },
+        "endLoc": {
+          "line": 150,
+          "column": 10,
+          "position": 1271
+        }
+      }
+    }
+  ],
+  "filename": "C:\\Users\\strutj01\\nodejs\\node-v20.18.0-win-x64\\node-v20.18.0-win-x64\\node_modules\\jscpd\\node_modules\\@jscpd\\html-reporter\\dist\\templates\\main.pug"
+}

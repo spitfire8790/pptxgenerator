@@ -1597,6 +1597,9 @@ const scoringCriteria = {
       
       switch (score) {
         case 3:
+          if (minDistance === Infinity || features.length === 0) {
+            return "Developable area is not impacted by contamination and there is no known contamination in close proximity to the site.";
+          }
           return `Developable area is not impacted by contamination and is ${minDistance.toFixed(0)}m from the nearest contaminated site${siteName}.`;
         case 2:
           return `Developable area is not impacted by contamination but is ${minDistance.toFixed(0)}m from the nearest contaminated site${siteName}.`;
