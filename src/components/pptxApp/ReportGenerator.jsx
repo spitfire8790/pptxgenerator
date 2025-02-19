@@ -230,6 +230,7 @@ const ReportGenerator = ({ selectedFeature }) => {
     context: true
   });
   const [developableArea, setDevelopableArea] = useState(null);
+  const [showDevelopableArea, setShowDevelopableArea] = useState(true);
   const planningMapRef = useRef();
   const [currentStep, setCurrentStep] = useState(null);
   const [completedSteps, setCompletedSteps] = useState([]);
@@ -283,9 +284,8 @@ const ReportGenerator = ({ selectedFeature }) => {
     setFailedScreenshots([]);
     setGenerationStartTime(Date.now());
     setGenerationLogs([]);
-    logCounterRef.current = 0; // Reset counter when starting new generation
+    logCounterRef.current = 0;
     
-    // Clear the service cache at the start of report generation
     clearServiceCache();
     
     try {
@@ -294,7 +294,6 @@ const ReportGenerator = ({ selectedFeature }) => {
       
       addLog('Starting report generation...', 'default');
       
-      // Only capture screenshots for selected slides
       if (selectedSlides.cover) {
         addLog('Capturing cover screenshot...', 'image');
         try {
@@ -322,70 +321,69 @@ const ReportGenerator = ({ selectedFeature }) => {
       
       if (selectedSlides.planning) {
         await planningMapRef.current?.captureScreenshots();
-        screenshots.zoningScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.ZONING, true, developableArea);
-        screenshots.fsrScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.FSR, true, developableArea);
-        screenshots.hobScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.HOB, true, developableArea);
+        screenshots.zoningScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.ZONING, true, developableArea, showDevelopableArea);
+        screenshots.fsrScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.FSR, true, developableArea, showDevelopableArea);
+        screenshots.hobScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.HOB, true, developableArea, showDevelopableArea);
       }
       
       if (selectedSlides.primaryAttributes) {
-        screenshots.compositeMapScreenshot = await capturePrimarySiteAttributesMap(selectedFeature, developableArea);
+        screenshots.compositeMapScreenshot = await capturePrimarySiteAttributesMap(selectedFeature, developableArea, showDevelopableArea);
       }
       
       if (selectedSlides.secondaryAttributes) {
-        screenshots.contourScreenshot = await captureContourMap(selectedFeature, developableArea);
-        screenshots.regularityScreenshot = await captureRegularityMap(selectedFeature, developableArea);
+        screenshots.contourScreenshot = await captureContourMap(selectedFeature, developableArea, showDevelopableArea);
+        screenshots.regularityScreenshot = await captureRegularityMap(selectedFeature, developableArea, showDevelopableArea);
       }
       
       if (selectedSlides.planningTwo) {
-        screenshots.heritageScreenshot = await captureHeritageMap(selectedFeature, developableArea);
-        screenshots.acidSulfateSoilsScreenshot = await captureAcidSulfateMap(selectedFeature, developableArea);
+        screenshots.heritageScreenshot = await captureHeritageMap(selectedFeature, developableArea, showDevelopableArea);
+        screenshots.acidSulfateSoilsScreenshot = await captureAcidSulfateMap(selectedFeature, developableArea, showDevelopableArea);
       }
       
       if (selectedSlides.servicing) {
-        const waterMains = await captureWaterMainsMap(selectedFeature, developableArea);
+        const waterMains = await captureWaterMainsMap(selectedFeature, developableArea, showDevelopableArea);
         screenshots.waterMainsScreenshot = waterMains?.image;
         screenshots.waterFeatures = waterMains?.features;
         
-        const sewer = await captureSewerMap(selectedFeature, developableArea);
+        const sewer = await captureSewerMap(selectedFeature, developableArea, showDevelopableArea);
         screenshots.sewerScreenshot = sewer?.image;
         screenshots.sewerFeatures = sewer?.features;
         
-        const power = await capturePowerMap(selectedFeature, developableArea);
+        const power = await capturePowerMap(selectedFeature, developableArea, showDevelopableArea);
         screenshots.powerScreenshot = power?.image;
         screenshots.powerFeatures = power?.features;
       }
       
       if (selectedSlides.utilisation) {
-        const geoscape = await captureGeoscapeMap(selectedFeature, developableArea);
+        const geoscape = await captureGeoscapeMap(selectedFeature, developableArea, showDevelopableArea);
         screenshots.geoscapeScreenshot = geoscape?.image;
         screenshots.geoscapeFeatures = geoscape?.features;
       }
       
       if (selectedSlides.access) {
-        screenshots.roadsScreenshot = await captureRoadsMap(selectedFeature, developableArea);
-        screenshots.udpPrecinctsScreenshot = await captureUDPPrecinctMap(selectedFeature, developableArea);
-        screenshots.ptalScreenshot = await capturePTALMap(selectedFeature, developableArea);
+        screenshots.roadsScreenshot = await captureRoadsMap(selectedFeature, developableArea, showDevelopableArea);
+        screenshots.udpPrecinctsScreenshot = await captureUDPPrecinctMap(selectedFeature, developableArea, showDevelopableArea);
+        screenshots.ptalScreenshot = await capturePTALMap(selectedFeature, developableArea, showDevelopableArea);
       }
       
       if (selectedSlides.hazards) {
-        screenshots.floodMapScreenshot = await captureFloodMap(selectedFeature, developableArea);
-        screenshots.bushfireMapScreenshot = await captureBushfireMap(selectedFeature, developableArea);
+        screenshots.floodMapScreenshot = await captureFloodMap(selectedFeature, developableArea, showDevelopableArea);
+        screenshots.bushfireMapScreenshot = await captureBushfireMap(selectedFeature, developableArea, showDevelopableArea);
       }
       
       if (selectedSlides.environmental) {
-        screenshots.tecMapScreenshot = await captureTECMap(selectedFeature, developableArea);
+        screenshots.tecMapScreenshot = await captureTECMap(selectedFeature, developableArea, showDevelopableArea);
         screenshots.tecFeatures = screenshots.tecMapScreenshot?.features;
-        screenshots.biodiversityMapScreenshot = await captureBiodiversityMap(selectedFeature, developableArea);
+        screenshots.biodiversityMapScreenshot = await captureBiodiversityMap(selectedFeature, developableArea, showDevelopableArea);
         screenshots.biodiversityFeatures = screenshots.biodiversityMapScreenshot?.features;
       }
       
       if (selectedSlides.contamination) {
-        const contaminationResult = await captureContaminationMap(selectedFeature, developableArea);
+        const contaminationResult = await captureContaminationMap(selectedFeature, developableArea, showDevelopableArea);
         screenshots.contaminationMapScreenshot = contaminationResult?.image;
         screenshots.contaminationFeatures = contaminationResult?.features;
         
-        // Add historical imagery
-        screenshots.historicalImagery = await captureHistoricalImagery(selectedFeature);
+        screenshots.historicalImagery = await captureHistoricalImagery(selectedFeature, developableArea, showDevelopableArea);
       }
 
       setFailedScreenshots(failed);
@@ -408,6 +406,7 @@ const ReportGenerator = ({ selectedFeature }) => {
         selectedSlides,
         site__geometry: selectedFeature.geometry.coordinates[0],
         developableArea: developableArea?.features || null,
+        showDevelopableArea,
         scores: {}, // Initialize empty scores object that will be populated by each slide
         screenshot: screenshots.coverScreenshot,
         ...screenshots,
@@ -621,9 +620,27 @@ const ReportGenerator = ({ selectedFeature }) => {
           feature={selectedFeature} 
           onScreenshotCapture={handlePlanningScreenshotsCapture}
           developableArea={developableArea}
+          showDevelopableArea={showDevelopableArea}
         />
 
         <DevelopableAreaSelector onLayerSelect={handleDevelopableAreaSelect} selectedFeature={selectedFeature} />
+        
+        {developableArea && (
+          <div className="p-4 bg-white rounded-lg shadow mb-4">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center space-x-3">
+                <input
+                  type="checkbox"
+                  checked={showDevelopableArea}
+                  onChange={(e) => setShowDevelopableArea(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 rounded"
+                  disabled={isGenerating}
+                />
+                <span className="text-0.5g font-small">Show Blue Dash Developable Area Boundary in Screenshots?</span>
+              </label>
+            </div>
+          </div>
+        )}
 
         <div className="bg-white p-6 rounded-lg shadow mb-4">
           <SlidePreview 
@@ -632,24 +649,26 @@ const ReportGenerator = ({ selectedFeature }) => {
           />
 
           <div className="flex items-center justify-between mt-4 mb-2 pb-2 border-b border-gray-200">
-            <label className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                checked={Object.values(selectedSlides).every(Boolean)}
-                onChange={(e) => {
-                  const value = e.target.checked;
-                  setSelectedSlides(
-                    Object.keys(selectedSlides).reduce((acc, key) => ({
-                      ...acc,
-                      [key]: value
-                    }), {})
-                  );
-                }}
-                className="w-4 h-4 text-blue-600 rounded"
-                disabled={isGenerating}
-              />
-              <span className="font-medium">{Object.values(selectedSlides).every(Boolean) ? 'Deselect All' : 'Select All'}</span>
-            </label>
+            <div className="flex items-center gap-4">
+              <label className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={Object.values(selectedSlides).every(Boolean)}
+                  onChange={(e) => {
+                    const value = e.target.checked;
+                    setSelectedSlides(
+                      Object.keys(selectedSlides).reduce((acc, key) => ({
+                        ...acc,
+                        [key]: value
+                      }), {})
+                    );
+                  }}
+                  className="w-4 h-4 text-blue-600 rounded"
+                  disabled={isGenerating}
+                />
+                <span className="font-medium">{Object.values(selectedSlides).every(Boolean) ? 'Deselect All' : 'Select All'}</span>
+              </label>
+            </div>
 
             {isGenerating && (
               <Timer 
@@ -806,41 +825,112 @@ const ReportGenerator = ({ selectedFeature }) => {
       </div>
 
       {showHowTo && (
-        <div className="fixed inset-0 bg-black/20 z-50 flex items-start justify-end p-4">
-          <div className="w-[500px] rounded-xl border-2 border-blue-600 bg-white p-6 shadow-xl mt-12 mr-4">
-            <div className="flex justify-between items-start mb-4">
-              <h3 className="text-xl font-semibold text-gray-900">How to use</h3>
-              <button 
-                onClick={() => setShowHowTo(false)}
-                className="rounded-full p-1 hover:bg-gray-100 transition-colors"
-              >
-                <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12.8536 2.85355C13.0488 2.65829 13.0488 2.34171 12.8536 2.14645C12.6583 1.95118 12.3417 1.95118 12.1464 2.14645L7.5 6.79289L2.85355 2.14645C2.65829 1.95118 2.34171 1.95118 2.14645 2.14645C1.95118 2.34171 1.95118 2.65829 2.14645 2.85355L6.79289 7.5L2.14645 12.1464C1.95118 12.3417 1.95118 12.6583 2.14645 12.8536C2.34171 13.0488 2.65829 13.0488 2.85355 12.8536L7.5 8.20711L12.1464 12.8536C12.3417 13.0488 12.6583 13.0488 12.8536 12.8536C13.0488 12.6583 13.0488 12.3417 12.8536 12.1464L8.20711 7.5L12.8536 2.85355Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd" />
-                </svg>
-              </button>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className="w-[80%] max-h-[90vh] rounded-xl border-2 border-blue-600 bg-white shadow-xl relative flex flex-col"
+          >
+            <div className="sticky top-0 z-10 bg-white p-6 border-b border-gray-200">
+              <div className="flex justify-between items-center">
+                <motion.h3 
+                  initial={{ x: -20, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  className="text-2xl font-semibold text-gray-900"
+                >
+                  How to Generate a Report
+                </motion.h3>
+                <button 
+                  onClick={() => setShowHowTo(false)}
+                  className="rounded-full p-2 hover:bg-gray-100 transition-colors"
+                >
+                  <svg width="20" height="20" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12.8536 2.85355C13.0488 2.65829 13.0488 2.34171 12.8536 2.14645C12.6583 1.95118 12.3417 1.95118 12.1464 2.14645L7.5 6.79289L2.85355 2.14645C2.65829 1.95118 2.34171 1.95118 2.14645 2.14645C1.95118 2.34171 1.95118 2.65829 2.14645 2.85355L6.79289 7.5L2.14645 12.1464C1.95118 12.3417 1.95118 12.6583 2.14645 12.8536C2.34171 13.0488 2.65829 13.0488 2.85355 12.8536L7.5 8.20711L12.1464 12.8536C12.3417 13.0488 12.6583 13.0488 12.8536 12.8536C13.0488 12.6583 13.0488 12.3417 12.8536 12.1464L8.20711 7.5L12.8536 2.85355Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
             </div>
             
-            <ol className="space-y-4 text-sm list-decimal pl-5">
-              <li className="pl-2 leading-relaxed">
-                Turn off Harmony / VPN and then using Land iQ Site Search, identify a property of interest and create a feature on the 'Site Boundary' drawing layer. Ensure you are creating a feature using the Land iQ search results so the data is attached to the feature.
-              </li>
-              <li className="pl-2 leading-relaxed">
-                Draw the developable area boundary as a new feature on the 'Developable Area Boundary' drawing layer.
-              </li>
-              <li className="pl-2 leading-relaxed">
-                Click on the Site Boundary and then select the Developable Area Boundary under 'Select Developable Area Layer' up the top.
-              </li>
-              <li className="pl-2 leading-relaxed">
-                A preview will load of the cover slide and if everything looks good to go, select the slides you want and click on the blue 'Generate Report' button.
-              </li>
-              <li className="pl-2 leading-relaxed">
-                ???
-              </li>
-              <li className="pl-2 leading-relaxed">
-                Profit
-              </li>
-            </ol>
-          </div>
+            <div className="flex-1 overflow-y-auto p-8">
+              <div className="space-y-6">
+                {[
+                  {
+                    step: 1,
+                    title: "Disable VPN",
+                    content: "Temporarily turn off Harmony / VPN."
+                  },
+                  {
+                    step: 2,
+                    title: "Search Property",
+                    content: "Use Land iQ Site Search to identify the property of interest."
+                  },
+                  {
+                    step: 3,
+                    title: "Generate Shortlist",
+                    content: "In Site Search, select the property and generate a shortlist using that selection."
+                  },
+                  {
+                    step: 4,
+                    title: "Activate Drawing Layer",
+                    content: "Left-click on the 'Site Boundary' drawing layer to activate it."
+                  },
+                  {
+                    step: 5,
+                    title: "Create Property Boundary",
+                    content: "Right click on the property on the map and wait until you see the shortlist appear and your property highlighted - then hover over the little arrow and click 'Create'."
+                  },
+                  {
+                    step: 6,
+                    title: "Complete Property Coverage",
+                    content: "If it didn't create a polygon that covers the whole property, click on the part that was added first and then right click along the boundary of any missing parts of the property and select 'Merge'. Do this until the complete property is covered. Once complete, on the left panel change the usage to be 'Site Boundary'."
+                  },
+                  {
+                    step: 7,
+                    title: "Add Developable Area (Optional)",
+                    content: "If you want to include a developable area, left-click on the 'Developable Area' drawing layer on the left panel and use Giraffe's drawing tools to draw the boundary. Once complete, on the left panel change the usage to be 'Developable Area'."
+                  },
+                  {
+                    step: 8,
+                    title: "Select Area Type",
+                    content: "On the right panel, select the developable area to use (just the Site Boundary or the Developable Area you've just drawn)."
+                  },
+                  {
+                    step: 9,
+                    title: "Configure Visibility",
+                    content: "Confirm in the check-box if you want to show the developable area as a blue-dash line or not in the report (uncheck this if you have selected to just use the Site Boundary and not a separate Developable Area)."
+                  },
+                  {
+                    step: 10,
+                    title: "Review and Generate",
+                    content: "A preview will load of the cover slide and if everything looks good to go, select the slides you want (default is all slides) and click on the blue 'Generate Report' button."
+                  },
+                  {
+                    step: 11,
+                    title: "Wait for Generation",
+                    content: "Report will generate and for a full report should take approximately 4 minutes to produce. If any of the slides fail or you would like to produce a sub-set of the full report you can check the appropriate slides and select Generate Report again as needed."
+                  }
+                ].map((item, index) => (
+                  <motion.div
+                    key={item.step}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                    className="relative pl-12 pr-4"
+                  >
+                    <div className="absolute left-0 top-0 flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 font-semibold">
+                      {item.step}
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-medium text-gray-900 mb-2">{item.title}</h4>
+                      <p className="text-gray-600 leading-relaxed">{item.content}</p>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
         </div>
       )}
 

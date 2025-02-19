@@ -57,7 +57,7 @@ function App() {
       */}
       <MapView onFeatureSelect={handleFeatureSelect} />
       <Analytics 
-        debug={process.env.NODE_ENV === 'development'}
+        debug={import.meta.env.MODE === 'development'}
         beforeSend={(event) => {
           // You can modify or filter events before they're sent
           if (event.type === 'pageview') {
@@ -66,7 +66,7 @@ function App() {
               ...event,
               properties: {
                 ...event.properties,
-                appVersion: process.env.REACT_APP_VERSION,
+                appVersion: import.meta.env.VITE_APP_VERSION,
               },
             };
           }

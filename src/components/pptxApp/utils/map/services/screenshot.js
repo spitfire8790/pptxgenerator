@@ -15,7 +15,7 @@ import { HISTORICAL_LAYERS, METROMAP_CONFIG } from '../config/historicalLayers';
 
 console.log('Aerial config:', LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL]);
 
-export async function captureMapScreenshot(feature, type = SCREENSHOT_TYPES.SNAPSHOT, drawBoundaryLine = true, developableArea = null) {
+export async function captureMapScreenshot(feature, type = SCREENSHOT_TYPES.SNAPSHOT, drawBoundaryLine = true, developableArea = null, showDevelopableArea = true) {
   if (!feature || !LAYER_CONFIGS[type]) return null;
   
   try {
@@ -77,7 +77,7 @@ export async function captureMapScreenshot(feature, type = SCREENSHOT_TYPES.SNAP
       }
     }
 
-    if (developableArea?.features?.[0]) {
+    if (developableArea?.features?.[0] && showDevelopableArea) {
       drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width || config.size, {
         strokeStyle: '#02d1b8',
         lineWidth: 12,
@@ -132,7 +132,7 @@ export function calculateBounds(feature, padding, developableArea = null) {
   return { centerX, centerY, size };
 }
 
-export async function capturePrimarySiteAttributesMap(feature, developableArea = null) {
+export async function capturePrimarySiteAttributesMap(feature, developableArea = null, showDevelopableArea = true) {
   if (!feature) return null;
   
   try {
@@ -341,8 +341,8 @@ export async function capturePrimarySiteAttributesMap(feature, developableArea =
       lineWidth: 6
     });
 
-    if (developableArea?.features?.[0]) {
-      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.size || config.width, {
+    if (developableArea?.features?.[0] && showDevelopableArea) {
+      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
         strokeStyle: '#02d1b8',
         lineWidth: 12,
         dashArray: [20, 10]
@@ -356,7 +356,7 @@ export async function capturePrimarySiteAttributesMap(feature, developableArea =
   }
 }
 
-export async function captureContourMap(feature, developableArea = null) {
+export async function captureContourMap(feature, developableArea = null, showDevelopableArea = true) {
   if (!feature) return null;
   
   try {
@@ -432,7 +432,7 @@ export async function captureContourMap(feature, developableArea = null) {
       lineWidth: 6
     });
 
-    if (developableArea?.features?.[0]) {
+    if (developableArea?.features?.[0] && showDevelopableArea) {
       drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.size || config.width, {
         strokeStyle: '#02d1b8',
         lineWidth: 6,
@@ -447,7 +447,7 @@ export async function captureContourMap(feature, developableArea = null) {
   }
 }
 
-export async function captureRegularityMap(feature, developableArea = null) {
+export async function captureRegularityMap(feature, developableArea = null, showDevelopableArea = true) {
   if (!feature) return null;
   
   try {
@@ -501,7 +501,7 @@ export async function captureRegularityMap(feature, developableArea = null) {
     });
 
     // Draw developable area if it exists
-    if (developableArea?.features?.[0]) {
+    if (developableArea?.features?.[0] && showDevelopableArea) {
       drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
         strokeStyle: '#02d1b8',
         lineWidth: 12,
@@ -516,7 +516,7 @@ export async function captureRegularityMap(feature, developableArea = null) {
   }
 }
 
-export async function captureHeritageMap(feature, developableArea = null) {
+export async function captureHeritageMap(feature, developableArea = null, showDevelopableArea = true) {
   if (!feature) return null;
   
   try {
@@ -593,7 +593,7 @@ export async function captureHeritageMap(feature, developableArea = null) {
       lineWidth: 6
     });
 
-    if (developableArea?.features?.[0]) {
+    if (developableArea?.features?.[0] && showDevelopableArea) {
       drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
         strokeStyle: '#02d1b8',
         lineWidth: 12,
@@ -632,7 +632,7 @@ export async function captureHeritageMap(feature, developableArea = null) {
   }
 }
 
-export async function captureAcidSulfateMap(feature, developableArea = null) {
+export async function captureAcidSulfateMap(feature, developableArea = null, showDevelopableArea = true) {
   if (!feature) return null;
   
   try {
@@ -709,7 +709,7 @@ export async function captureAcidSulfateMap(feature, developableArea = null) {
       lineWidth: 6
     });
 
-    if (developableArea?.features?.[0]) {
+    if (developableArea?.features?.[0] && showDevelopableArea) {
       drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
         strokeStyle: '#02d1b8',
         lineWidth: 12,
@@ -803,7 +803,7 @@ export async function captureAcidSulfateMap(feature, developableArea = null) {
   }
 }
 
-export async function captureWaterMainsMap(feature, developableArea = null) {
+export async function captureWaterMainsMap(feature, developableArea = null, showDevelopableArea = true) {
   if (!feature) return null;
   console.log('Starting water mains capture...');
 
@@ -927,7 +927,7 @@ export async function captureWaterMainsMap(feature, developableArea = null) {
       lineWidth: 10
     });
 
-    if (developableArea?.features?.[0]) {
+    if (developableArea?.features?.[0] && showDevelopableArea) {
       drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
         strokeStyle: '#02d1b8',
         lineWidth: 12,
@@ -946,7 +946,7 @@ export async function captureWaterMainsMap(feature, developableArea = null) {
   }
 }
 
-export async function capturePowerMap(feature, developableArea = null) {
+export async function capturePowerMap(feature, developableArea = null, showDevelopableArea = true) {
   if (!feature) return null;
   console.log('Starting power infrastructure capture...');
 
@@ -1172,7 +1172,7 @@ export async function capturePowerMap(feature, developableArea = null) {
       lineWidth: 10
     });
 
-    if (developableArea?.features?.[0]) {
+    if (developableArea?.features?.[0] && showDevelopableArea) {
       drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
         strokeStyle: '#02d1b8',
         lineWidth: 12,
@@ -1194,7 +1194,7 @@ export async function capturePowerMap(feature, developableArea = null) {
   }
 }
 
-export async function captureSewerMap(feature, developableArea = null) {
+export async function captureSewerMap(feature, developableArea = null, showDevelopableArea = true) {
   if (!feature) return null;
   console.log('Starting sewer infrastructure capture...');
 
@@ -1318,7 +1318,7 @@ export async function captureSewerMap(feature, developableArea = null) {
       lineWidth: 10
     });
 
-    if (developableArea?.features?.[0]) {
+    if (developableArea?.features?.[0] && showDevelopableArea) {
       drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
         strokeStyle: '#02d1b8',
         lineWidth: 12,
@@ -1337,7 +1337,7 @@ export async function captureSewerMap(feature, developableArea = null) {
   }
 }
 
-export async function captureGeoscapeMap(feature, developableArea = null) {
+export async function captureGeoscapeMap(feature, developableArea = null, showDevelopableArea = true) {
   if (!feature) return null;
   console.log('Starting geoscape capture...');
 
@@ -1447,7 +1447,7 @@ export async function captureGeoscapeMap(feature, developableArea = null) {
       lineWidth: 6
     });
 
-    if (developableArea?.features?.[0]) {
+    if (developableArea?.features?.[0] && showDevelopableArea) {
       drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
         strokeStyle: '#02d1b8',
         lineWidth: 12,
@@ -1699,7 +1699,7 @@ async function getRoadFeatures(centerX, centerY, size) {
   }
 }
 
-export async function captureRoadsMap(feature, developableArea = null) {
+export async function captureRoadsMap(feature, developableArea = null, showDevelopableArea = true) {
   if (!feature) return null;
   console.log('Starting roads capture...');
 
@@ -1846,7 +1846,7 @@ export async function captureRoadsMap(feature, developableArea = null) {
     }
 
     // Draw boundaries AFTER all layers
-    if (developableArea?.features?.[0]) {
+    if (developableArea?.features?.[0] && showDevelopableArea) {
       console.log('Drawing developable area boundary...');
       drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
         strokeStyle: '#02d1b8',
@@ -1935,7 +1935,7 @@ export async function captureRoadsMap(feature, developableArea = null) {
   }
 }
 
-export async function captureFloodMap(feature, developableArea = null) {
+export async function captureFloodMap(feature, developableArea = null, showDevelopableArea = true) {
   if (!feature) return null;
   
   try {
@@ -2080,7 +2080,7 @@ export async function captureFloodMap(feature, developableArea = null) {
       lineWidth: 6
     });
 
-    if (developableArea?.features?.[0]) {
+    if (developableArea?.features?.[0] && showDevelopableArea) {
       drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
         strokeStyle: '#02d1b8',
         lineWidth: 12,
@@ -2099,7 +2099,7 @@ export async function captureFloodMap(feature, developableArea = null) {
   }
 }
 
-export async function captureBushfireMap(feature, developableArea = null) {
+export async function captureBushfireMap(feature, developableArea = null, showDevelopableArea = true) {
   if (!feature) return null;
   console.log('Starting bushfire map capture...');
 
@@ -2212,7 +2212,7 @@ export async function captureBushfireMap(feature, developableArea = null) {
       lineWidth: 6
     });
 
-    if (developableArea?.features?.[0]) {
+    if (developableArea?.features?.[0] && showDevelopableArea) {
       drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
         strokeStyle: '#02d1b8',
         lineWidth: 12,
@@ -2315,7 +2315,7 @@ function drawRoundedTextBox(ctx, text, x, y, padding = 10, cornerRadius = 5) {
   ctx.fillText(text, x + padding, y + (boxHeight / 2));
 }
 
-export async function captureUDPPrecinctMap(feature, developableArea) {
+export async function captureUDPPrecinctMap(feature, developableArea = null, showDevelopableArea = true) {
   if (!feature) return null;
   console.log('Starting UDP precinct map capture...');
 
@@ -2462,7 +2462,7 @@ export async function captureUDPPrecinctMap(feature, developableArea) {
       lineWidth: 6
     });
 
-    if (developableArea?.features?.[0]) {
+    if (developableArea?.features?.[0] && showDevelopableArea) {
       drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
         strokeStyle: '#02d1b8',
         lineWidth: 12,
@@ -2520,7 +2520,7 @@ export async function captureUDPPrecinctMap(feature, developableArea) {
   }
 }
 
-export async function capturePTALMap(feature, developableArea = null) {
+export async function capturePTALMap(feature, developableArea = null, showDevelopableArea = true) {
   if (!feature) {
     console.log('No feature provided, returning null');
     return null;
@@ -2743,7 +2743,7 @@ export async function capturePTALMap(feature, developableArea = null) {
       lineWidth: 6
     });
 
-    if (developableArea?.features?.[0]) {
+    if (developableArea?.features?.[0] && showDevelopableArea) {
       console.log('Drawing developable area boundary...');
       drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
         strokeStyle: '#02d1b8',
@@ -2761,7 +2761,7 @@ export async function capturePTALMap(feature, developableArea = null) {
   }
 }
 
-export async function captureContaminationMap(feature, developableArea = null) {
+export async function captureContaminationMap(feature, developableArea = null, showDevelopableArea = true) {
   if (!feature) return null;
   console.log('Starting contamination map capture...');
 
@@ -3102,7 +3102,7 @@ export async function captureContaminationMap(feature, developableArea = null) {
       lineWidth: 6
     });
 
-    if (developableArea?.features?.[0]) {
+    if (developableArea?.features?.[0] && showDevelopableArea) {
       drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
         strokeStyle: '#02d1b8',
         lineWidth: 12,
@@ -3274,7 +3274,7 @@ export async function captureOpenStreetMap(feature, developableArea = null) {
   }
 }
 
-export async function captureTECMap(feature, developableArea = null) {
+export async function captureTECMap(feature, developableArea = null, showDevelopableArea = true) {
   if (!feature) {
     console.log('No feature provided for TEC map capture');
     return null;
@@ -3414,7 +3414,7 @@ export async function captureTECMap(feature, developableArea = null) {
     }
 
     // Draw developable area if provided
-    if (developableArea?.features?.[0]?.geometry?.coordinates?.[0]) {
+    if (developableArea?.features?.[0]?.geometry?.coordinates?.[0] && showDevelopableArea) {
       console.log('Drawing developable area boundary');
       drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width || config.size, {
         strokeStyle: '#02d1b8',
@@ -3430,7 +3430,7 @@ export async function captureTECMap(feature, developableArea = null) {
   }
 }
 
-export async function captureBiodiversityMap(feature, developableArea = null) {
+export async function captureBiodiversityMap(feature, developableArea = null, showDevelopableArea = true) {
   if (!feature) return null;
   console.log('Starting biodiversity map capture...', { feature, developableArea });
 
@@ -3554,7 +3554,7 @@ export async function captureBiodiversityMap(feature, developableArea = null) {
     }
 
     // Draw developable area with more prominent styling
-    if (developableArea?.features?.[0]) {
+    if (developableArea?.features?.[0] && showDevelopableArea) {
       drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
         strokeStyle: '#02d1b8',
         lineWidth: 12,
@@ -3591,7 +3591,7 @@ function mercatorToWGS84(x, y) {
 
 
 
-export async function captureHistoricalImagery(feature, developableArea = null) {
+export async function captureHistoricalImagery(feature, developableArea = null, showDevelopableArea = true) {
   if (!feature) return null;
   console.log('Starting historical imagery capture...');
 
@@ -3664,7 +3664,7 @@ export async function captureHistoricalImagery(feature, developableArea = null) 
           lineWidth: 6
         });
 
-        if (developableArea?.features?.[0]) {
+        if (developableArea?.features?.[0] && showDevelopableArea) {
           drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
             strokeStyle: '#02d1b8',
             lineWidth: 12,

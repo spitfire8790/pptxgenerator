@@ -102,7 +102,7 @@ export async function addAccessSlide(pptx, propertyData) {
       },
       properties: propertyData
     };
-    const ptalScreenshot = await capturePTALMap(ptalMapFeature, formattedDevelopableArea);
+    const ptalScreenshot = await capturePTALMap(ptalMapFeature, formattedDevelopableArea, propertyData.showDevelopableArea);
     
     // Get PTAL values from the updated feature after map capture
     const ptalValues = ptalMapFeature.properties?.ptalValues || [];
@@ -172,7 +172,7 @@ export async function addAccessSlide(pptx, propertyData) {
         coordinates: [propertyData.site__geometry]
       },
       properties: propertyData
-    }, formattedDevelopableArea);
+    }, formattedDevelopableArea, propertyData.showDevelopableArea);
     if (roadsScreenshot) {
       slide.addImage({
         data: roadsScreenshot,
@@ -285,7 +285,7 @@ export async function addAccessSlide(pptx, propertyData) {
         coordinates: [propertyData.site__geometry]
       },
       properties: propertyData
-    }, formattedDevelopableArea);
+    }, formattedDevelopableArea, propertyData.showDevelopableArea);
     if (udpScreenshot) {
       slide.addImage({
         data: udpScreenshot,

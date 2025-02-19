@@ -278,7 +278,7 @@ const scoringCriteria = {
   },
   ptal: {
     calculateScore: (ptalValues) => {
-      if (!ptalValues || ptalValues.length === 0) return 0;
+      if (!ptalValues || ptalValues.length === 0) return 1;
       
       // Get the highest PTAL value from the intersecting values
       const valuesToScore = Array.isArray(ptalValues) ? ptalValues : [];
@@ -309,7 +309,7 @@ const scoringCriteria = {
         return 1;
       }
       
-      return 0;
+      return 1;
     },
     getScoreDescription: (score, ptalValues) => {
       if (!ptalValues || ptalValues.length === 0) {
