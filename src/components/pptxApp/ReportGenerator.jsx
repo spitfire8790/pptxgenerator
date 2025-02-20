@@ -266,22 +266,68 @@ const ReportGenerator = ({ selectedFeature }) => {
     // Test JWT claims when component mounts
     const fetchClaims = async () => {
       try {
+        // Try to get user info from session first
+        const session = window?.giraffeSdk?.session;
+        if (session?.user) {
+          const user = {
+            email: session.user.email,
+            name: session.user.name || session.user.email,
+            status: 'online'
+          };
+          console.log('Got user from session:', user);
+          setCurrentUser(user);
+          setActiveUsers(prev => {
+            const existingUsers = prev.filter(u => u.email !== user.email);
+            return [...existingUsers, user];
+          });
+          return;
+        }
+
+        // Fallback to checking claims
         const claims = await checkUserClaims();
-        console.log('Successfully retrieved user claims:', claims);
+        console.log('Raw claims data:', claims);
+        
+        if (!claims || (!claims.email && !claims.preferred_username)) {
+          console.warn('No user information found in claims or session');
+          // Create anonymous user with timestamp
+          const anonymousUser = {
+            email: `user_${Date.now()}`,
+            name: 'Anonymous User',
+            status: 'online'
+          };
+          setCurrentUser(anonymousUser);
+          setActiveUsers(prev => {
+            const existingUsers = prev.filter(u => u.email !== anonymousUser.email);
+            return [...existingUsers, anonymousUser];
+          });
+          return;
+        }
+
         const user = {
-          email: claims.email,
-          name: claims.name || claims.email,
+          email: claims.email || claims.preferred_username,
+          name: claims.name || claims.given_name || claims.email || claims.preferred_username,
           status: 'online'
         };
-        setCurrentUser(user);
         
-        // Initialize user in active users list
+        console.log('Processed user data:', user);
+        setCurrentUser(user);
         setActiveUsers(prev => {
-          const existingUsers = prev.filter(u => u.email !== claims.email);
+          const existingUsers = prev.filter(u => u.email !== user.email);
           return [...existingUsers, user];
         });
       } catch (error) {
-        console.error('Failed to get user claims:', error);
+        console.error('Failed to get user info:', error);
+        // Create anonymous user with timestamp as fallback
+        const anonymousUser = {
+          email: `user_${Date.now()}`,
+          name: 'Anonymous User',
+          status: 'online'
+        };
+        setCurrentUser(anonymousUser);
+        setActiveUsers(prev => {
+          const existingUsers = prev.filter(u => u.email !== anonymousUser.email);
+          return [...existingUsers, anonymousUser];
+        });
       }
     };
     fetchClaims();
