@@ -265,16 +265,215 @@ export async function addPermissibilitySlide(pptx, properties) {
         prohibited: [...prohibitedSet].sort((a, b) => a.localeCompare(b))
       };
 
-      // Format the permitted uses with bullets
-      const formatWithTicks = (items) => {
-        if (!items || items.length === 0) return 'None specified';
-        return items.map(item => `✓ ${item}`).join('\n');
+      // Helper function to format items with commas and proper styling
+      const formatItemsAsText = (items) => {
+        if (!items || items.length === 0) return [{ text: 'None specified', options: { color: '363636' } }];
+        
+        return items.map((item, index) => {
+          const isHousingRelated = housingRelatedUses.has(item);
+          const formattedItem = {
+            text: item + (isHousingRelated ? ' 🏠' : '') + (index < items.length - 1 ? ', ' : ''),
+            options: {
+              color: isHousingRelated ? '0066CC' : undefined,
+              bold: isHousingRelated,
+              highlight: isHousingRelated ? 'CCFFCC' : undefined
+            }
+          };
+          return formattedItem;
+        });
       };
 
-      const formatWithCrosses = (items) => {
-        if (!items || items.length === 0) return 'None specified';
-        return items.map(item => `✗ ${item}`).join('\n');
-      };
+      // Create combined table rows with all information
+      const combinedTableRows = [
+        [
+          { 
+            text: 'Environmental Planning Instrument:', 
+            options: { 
+              bold: true,
+              color: '363636',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left'
+            }
+          },
+          {
+            text: jsonData[0].EPIName,
+            options: {
+              color: '363636',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left',
+              wrap: true
+            }
+          }
+        ],
+        [
+          { 
+            text: 'Zone:', 
+            options: { 
+              bold: true,
+              color: '363636',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left'
+            }
+          },
+          {
+            text: [
+              {
+                text: properties.site_suitability__principal_zone_identifier || 'Not available',
+                options: {
+                  fontSize: 8,
+                  color: '363636'
+                }
+              },
+              {
+                text: ' ■',
+                options: {
+                  fontSize: 10,
+                  color: zoneCode ? landZoningColors[zoneCode] || '363636' : '363636'
+                }
+              }
+            ],
+            options: {
+              valign: 'middle',
+              align: 'left'
+            }
+          }
+        ],
+        [
+          { 
+            text: 'LGA:', 
+            options: { 
+              bold: true,
+              color: '363636',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left'
+            }
+          },
+          {
+            text: properties.site_suitability__LGA || 'Not available',
+            options: {
+              color: '363636',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left'
+            }
+          }
+        ],
+        [
+          { 
+            text: 'Zone Objective:', 
+            options: { 
+              bold: true,
+              color: '363636',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left'
+            }
+          },
+          {
+            text: zone.ZoneObjective?.trim() || 'No zone objective available',
+            options: {
+              color: '363636',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left',
+              wrap: true
+            }
+          }
+        ],
+        [
+          { 
+            text: 'Permitted without consent',
+            options: { 
+              bold: true,
+              color: '4CAF50',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left'
+            }
+          },
+          {
+            text: formatItemsAsText(permittedUses.withoutConsent),
+            options: {
+              color: '4CAF50',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left',
+              wrap: true
+            }
+          }
+        ],
+        [
+          { 
+            text: 'Permitted with consent',
+            options: { 
+              bold: true,
+              color: '4CAF50',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left'
+            }
+          },
+          {
+            text: formatItemsAsText(permittedUses.withConsent),
+            options: {
+              color: '4CAF50',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left',
+              wrap: true
+            }
+          }
+        ],
+        [
+          { 
+            text: 'Prohibited Uses',
+            options: { 
+              bold: true,
+              color: 'FF3B3B',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left'
+            }
+          },
+          {
+            text: formatItemsAsText(permittedUses.prohibited),
+            options: {
+              color: 'FF3B3B',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left',
+              wrap: true
+            }
+          }
+        ]
+      ];
+
+      // Add the combined table
+      slide.addTable(combinedTableRows, {
+        ...convertCmValues({
+          x: '5%',
+          y: '18%',
+          w: '90%',
+          h: '70%'
+        }),
+        colW: [2.2, 9.8],
+        rowH: 0.4,
+        fontSize: 8,
+        fontFace: 'Public Sans',
+        border: { 
+          type: 'solid',
+          pt: 1,
+          color: '002664'
+        },
+        align: 'left',
+        valign: 'middle',
+        margin: 3,
+        autoPage: false
+      });
 
       // Add title
       slide.addText([
@@ -296,337 +495,6 @@ export async function addPermissibilitySlide(pptx, properties) {
       slide.addImage({
         path: "/images/NSW-Government-official-logo.jpg",
         ...convertCmValues(styles.nswLogo)
-      });
-
-      // Add LEP Information Card with rounded corners
-      slide.addShape(pptx.shapes.ROUNDED_RECTANGLE, convertCmValues({
-        x: '5%',
-        y: '18%',
-        w: '90%',
-        h: '22%',
-        fill: 'FFFFFF',
-        line: { color: '002664', width: 2 },
-        rectRadius: 0.1
-      }));
-
-      // Add LEP content as a table with proper PptxGenJS table formatting
-      const rows = [
-        [
-          { 
-            text: 'Environmental Planning Instrument:', 
-            options: { 
-              bold: true, 
-              fontSize: 8,
-              color: '363636',
-              align: 'left',
-              valign: 'middle'
-            }
-          },
-          { 
-            text: jsonData[0].EPIName, 
-            options: { 
-              fontSize: 8,
-              color: '363636',
-              align: 'left',
-              valign: 'middle'
-            }
-          }
-        ],
-        [
-          { 
-            text: 'Zone:', 
-            options: { 
-              bold: true, 
-              fontSize: 8,
-              color: '363636',
-              align: 'left',
-              valign: 'middle'
-            }
-          },
-          { 
-            text: [
-              {
-                text: properties.site_suitability__principal_zone_identifier || 'Not available',
-                options: {
-                  fontSize: 8,
-                  color: '363636',
-                  align: 'left',
-                  valign: 'middle'
-                }
-              },
-              {
-                text: ' ■',  // Changed to filled square character
-                options: {
-                  fontSize: 10,
-                  color: zoneCode ? landZoningColors[zoneCode] || '363636' : '363636',
-                  align: 'left',
-                  valign: 'middle'
-                }
-              }
-            ],
-            options: {
-              align: 'left',
-              valign: 'middle'
-            }
-          }
-        ],
-        [
-          { 
-            text: 'LGA:', 
-            options: { 
-              bold: true, 
-              fontSize: 8,
-              color: '363636',
-              align: 'left',
-              valign: 'middle'
-            }
-          },
-          { 
-            text: properties.site_suitability__LGA || 'Not available', 
-            options: { 
-              fontSize: 8,
-              color: '363636',
-              align: 'left',
-              valign: 'middle'
-            }
-          }
-        ],
-        [
-          { 
-            text: 'Zone Objective:', 
-            options: { 
-              bold: true, 
-              fontSize: 8,
-              color: '363636',
-              align: 'left',
-              valign: 'top'
-            }
-          },
-          { 
-            text: zone.ZoneObjective || 'No zone objective available', 
-            options: { 
-              fontSize: 8,
-              color: '363636',
-              align: 'left',
-              valign: 'top',
-              wrap: true
-            }
-          }
-        ]
-      ];
-
-      slide.addTable(rows, {
-        ...convertCmValues({
-          x: '6%',
-          y: '19%',
-          w: '90%',
-          h: '18%'  // Increased height for EPI box
-        }),
-        colW: [2, 9],
-        rowH: 0.15, // Slightly increased row height
-        fontFace: 'Public Sans',
-        border: { type: 'none' },
-        align: 'left',
-        valign: 'middle',
-        margin: 3,
-        autoPage: false
-      });
-
-      // Add Permitted Uses Section with three columns - adjusted widths
-      const withoutConsentWidth = '18%';  // Reduced width for smaller section
-      const withConsentWidth = '33%';     // Increased width for larger sections
-      const prohibitedWidth = '33%';      // Increased width for larger sections
-      const columnSpacing = '3%';
-      const startY = '42%';               // Moved down further to accommodate EPI box
-      const columnHeight = '50%';         // Slightly reduced height to fit
-
-      // Helper function to create table rows from items - only use second column when needed
-      const createTwoColumnTableRows = (items, symbol) => {
-        if (!items || items.length === 0) return [[{ 
-          text: 'None specified', 
-          options: { 
-            align: 'left', 
-            valign: 'top',
-            colspan: 2 
-          } 
-        }]];
-
-        // Format a single item with housing-related highlighting if applicable
-        const formatItem = (item) => {
-          const isHousingRelated = housingRelatedUses.has(item);
-          return {
-            text: `${symbol} ${item}`,
-            options: {
-              align: 'left',
-              valign: 'top',
-              wrap: true,
-              bold: isHousingRelated,
-              color: isHousingRelated ? '0066CC' : undefined, // Use blue for housing-related items
-              highlight: isHousingRelated ? 'CCFFCC' : undefined // Light green highlight for housing-related items
-            }
-          };
-        };
-
-        // If all items fit in one column, use single column
-        if (items.length <= 12) {
-          return items.map(item => [{
-            ...formatItem(item),
-            options: {
-              ...formatItem(item).options,
-              colspan: 2
-            }
-          }]);
-        }
-        
-        // Calculate maximum items per column based on available height
-        const maxItemsPerColumn = 20; // Adjust this number based on slide height and font size
-        
-        // Split items between columns, filling first column completely
-        const col1 = items.slice(0, maxItemsPerColumn);
-        const col2 = items.slice(maxItemsPerColumn);
-        
-        // Create rows with proper cell formatting
-        const rows = [];
-        const maxRows = Math.max(col1.length, col2.length);
-        
-        for (let i = 0; i < maxRows; i++) {
-          const row = [
-            col1[i] ? formatItem(col1[i]) : { text: '', options: { align: 'left', valign: 'top' } },
-            col2[i] ? formatItem(col2[i]) : { text: '', options: { align: 'left', valign: 'top' } }
-          ];
-          rows.push(row);
-        }
-        
-        return rows;
-      };
-
-      // First Column - Without Consent (Left) - Smaller width
-      slide.addShape(pptx.shapes.ROUNDED_RECTANGLE, convertCmValues({
-        x: '5%',
-        y: startY,
-        w: withoutConsentWidth,
-        h: columnHeight,
-        fill: 'FFFFFF',
-        line: { color: '4CAF50', width: 2 },
-        rectRadius: 0.1
-      }));
-
-      // Add Without Consent Title
-      slide.addText('Permitted without consent', convertCmValues({
-        x: '6%',
-        y: `${parseFloat(startY) + 1}%`,
-        w: '18%',
-        h: '4%',
-        color: '4CAF50',
-        fontSize: 10,
-        bold: true,
-        fontFace: 'Public Sans'
-      }));
-
-      // Add Without Consent Content as Table
-      const withoutConsentRows = createTwoColumnTableRows(permittedUses.withoutConsent, '✓');
-      slide.addTable(withoutConsentRows, {
-        ...convertCmValues({
-          x: '6%',
-          y: `${parseFloat(startY) + 6}%`,
-          w: '16%'
-        }),
-        colW: [1.2, 1.2],
-        rowH: 0.2, // Fixed row height
-        fontSize: 6,
-        color: '4CAF50',
-        fontFace: 'Public Sans',
-        border: { type: 'none' },
-        align: 'left',
-        valign: 'top',
-        margin: 1,
-        autoPage: false
-      });
-
-      // Second Column - With Consent (Middle) - Larger width
-      slide.addShape(pptx.shapes.ROUNDED_RECTANGLE, convertCmValues({
-        x: `${5 + parseInt(withoutConsentWidth) + parseInt(columnSpacing)}%`,
-        y: startY,
-        w: withConsentWidth,
-        h: columnHeight,
-        fill: 'FFFFFF',
-        line: { color: '4CAF50', width: 2 },
-        rectRadius: 0.1
-      }));
-
-      // Add With Consent Title
-      slide.addText('Permitted with consent', convertCmValues({
-        x: `${6 + parseInt(withoutConsentWidth) + parseInt(columnSpacing)}%`,
-        y: `${parseFloat(startY) + 1}%`,
-        w: '30%',
-        h: '4%',
-        color: '4CAF50',
-        fontSize: 10,
-        bold: true,
-        fontFace: 'Public Sans'
-      }));
-
-      // Add With Consent Content as Table
-      const withConsentRows = createTwoColumnTableRows(permittedUses.withConsent, '✓');
-      slide.addTable(withConsentRows, {
-        ...convertCmValues({
-          x: `${6 + parseInt(withoutConsentWidth) + parseInt(columnSpacing)}%`,
-          y: `${parseFloat(startY) + 6}%`,
-          w: '31%'
-        }),
-        colW: [2.2, 2.2],
-        rowH: 0.2, // Fixed row height
-        fontSize: 6,
-        color: '4CAF50',
-        fontFace: 'Public Sans',
-        border: { type: 'none' },
-        align: 'left',
-        valign: 'top',
-        margin: 1,
-        autoPage: false
-      });
-
-      // Third Column - Prohibited (Right) - Larger width
-      slide.addShape(pptx.shapes.ROUNDED_RECTANGLE, convertCmValues({
-        x: `${5 + parseInt(withoutConsentWidth) + parseInt(withConsentWidth) + 2 * parseInt(columnSpacing)}%`,
-        y: startY,
-        w: prohibitedWidth,
-        h: columnHeight,
-        fill: 'FFFFFF',
-        line: { color: 'FF3B3B', width: 2 },
-        rectRadius: 0.1
-      }));
-
-      // Add Prohibited Title
-      slide.addText('Prohibited Uses', convertCmValues({
-        x: `${6 + parseInt(withoutConsentWidth) + parseInt(withConsentWidth) + 2 * parseInt(columnSpacing)}%`,
-        y: `${parseFloat(startY) + 1}%`,
-        w: '30%',
-        h: '4%',
-        color: 'FF3B3B',
-        fontSize: 10,
-        bold: true,
-        fontFace: 'Public Sans'
-      }));
-
-      // Add Prohibited Content as Table
-      const prohibitedRows = createTwoColumnTableRows(permittedUses.prohibited, '✗');
-      slide.addTable(prohibitedRows, {
-        ...convertCmValues({
-          x: `${6 + parseInt(withoutConsentWidth) + parseInt(withConsentWidth) + 2 * parseInt(columnSpacing)}%`,
-          y: `${parseFloat(startY) + 6}%`,
-          w: '31%'
-        }),
-        colW: [2.2, 2.2],
-        rowH: 0.2, // Fixed row height
-        fontSize: 6,
-        color: 'FF3B3B',
-        fontFace: 'Public Sans',
-        border: { type: 'none' },
-        align: 'left',
-        valign: 'top',
-        margin: 1,
-        autoPage: false
       });
 
       // Add footer line
