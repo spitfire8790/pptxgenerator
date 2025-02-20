@@ -263,61 +263,56 @@ const ReportGenerator = ({ selectedFeature }) => {
   }, [selectedFeature]);
 
   useEffect(() => {
-    // Test JWT claims when component mounts
-    const fetchClaims = async () => {
+    // Get user info from Giraffe
+    const fetchUser = async () => {
       try {
-        // Try to get user info from session first
-        const session = window?.giraffeSdk?.session;
-        if (session?.user) {
-          const user = {
-            email: session.user.email,
-            name: session.user.name || session.user.email,
-            status: 'online'
-          };
-          console.log('Got user from session:', user);
-          setCurrentUser(user);
-          setActiveUsers(prev => {
-            const existingUsers = prev.filter(u => u.email !== user.email);
-            return [...existingUsers, user];
-          });
-          return;
-        }
-
-        // Fallback to checking claims
-        const claims = await checkUserClaims();
-        console.log('Raw claims data:', claims);
-        
-        if (!claims || (!claims.email && !claims.preferred_username)) {
-          console.warn('No user information found in claims or session');
-          // Create anonymous user with timestamp
-          const anonymousUser = {
-            email: `user_${Date.now()}`,
-            name: 'Anonymous User',
-            status: 'online'
-          };
-          setCurrentUser(anonymousUser);
-          setActiveUsers(prev => {
-            const existingUsers = prev.filter(u => u.email !== anonymousUser.email);
-            return [...existingUsers, anonymousUser];
-          });
-          return;
-        }
-
-        const user = {
-          email: claims.email || claims.preferred_username,
-          name: claims.name || claims.given_name || claims.email || claims.preferred_username,
-          status: 'online'
+        // Wait for Giraffe SDK to be initialized
+        let attempts = 0;
+        const maxAttempts = 10;
+        const checkGiraffeSdk = async () => {
+          if (window.giraffeSdk?.isInitialized) {
+            // SDK is ready, get user info
+            const claims = await checkUserClaims();
+            console.log('Claims after SDK init:', claims);
+            
+            if (claims) {
+              const user = {
+                email: claims.email,
+                name: claims.name || claims.email,
+                status: 'online'
+              };
+              console.log('Got user after SDK init:', user);
+              setCurrentUser(user);
+              setActiveUsers(prev => {
+                const existingUsers = prev.filter(u => u.email !== user.email);
+                return [...existingUsers, user];
+              });
+              return;
+            }
+          } else if (attempts < maxAttempts) {
+            attempts++;
+            console.log('Waiting for Giraffe SDK, attempt:', attempts);
+            // Wait 1 second before trying again
+            setTimeout(checkGiraffeSdk, 1000);
+          } else {
+            console.warn('Giraffe SDK not initialized after max attempts');
+            // Fall back to anonymous user
+            const anonymousUser = {
+              email: `user_${Date.now()}`,
+              name: 'Anonymous User',
+              status: 'online'
+            };
+            setCurrentUser(anonymousUser);
+            setActiveUsers(prev => {
+              const existingUsers = prev.filter(u => u.email !== anonymousUser.email);
+              return [...existingUsers, anonymousUser];
+            });
+          }
         };
-        
-        console.log('Processed user data:', user);
-        setCurrentUser(user);
-        setActiveUsers(prev => {
-          const existingUsers = prev.filter(u => u.email !== user.email);
-          return [...existingUsers, user];
-        });
+
+        await checkGiraffeSdk();
       } catch (error) {
         console.error('Failed to get user info:', error);
-        // Create anonymous user with timestamp as fallback
         const anonymousUser = {
           email: `user_${Date.now()}`,
           name: 'Anonymous User',
@@ -330,7 +325,7 @@ const ReportGenerator = ({ selectedFeature }) => {
         });
       }
     };
-    fetchClaims();
+    fetchUser();
   }, []);
 
   // Update user status when generating report
