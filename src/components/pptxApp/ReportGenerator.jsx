@@ -75,6 +75,7 @@ import { recordReportGeneration } from './utils/stats/reportStats';
 import './GenerationLog.css';
 import { motion, AnimatePresence } from 'framer-motion';
 import IssuesList from './IssuesList';
+import UserStatusList from './UserStatusList';
 
 const slideOptions = [
   { id: 'cover', label: 'Cover Page', addSlide: addCoverSlide, icon: Home },
@@ -252,6 +253,8 @@ const ReportGenerator = ({ selectedFeature }) => {
   const [generationStartTime, setGenerationStartTime] = useState(null);
   const [generationLogs, setGenerationLogs] = useState([]);
   const logCounterRef = useRef(0);
+  const [activeUsers, setActiveUsers] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
     if (selectedFeature) {
@@ -265,12 +268,37 @@ const ReportGenerator = ({ selectedFeature }) => {
       try {
         const claims = await checkUserClaims();
         console.log('Successfully retrieved user claims:', claims);
+        const user = {
+          email: claims.email,
+          name: claims.name || claims.email,
+          status: 'online'
+        };
+        setCurrentUser(user);
+        
+        // Initialize user in active users list
+        setActiveUsers(prev => {
+          const existingUsers = prev.filter(u => u.email !== claims.email);
+          return [...existingUsers, user];
+        });
       } catch (error) {
         console.error('Failed to get user claims:', error);
       }
     };
     fetchClaims();
   }, []);
+
+  // Update user status when generating report
+  useEffect(() => {
+    if (!currentUser) return;
+
+    setActiveUsers(prev => {
+      const existingUsers = prev.filter(u => u.email !== currentUser.email);
+      return [...existingUsers, {
+        ...currentUser,
+        status: isGenerating ? 'generating' : 'online'
+      }];
+    });
+  }, [isGenerating, currentUser]);
 
   const addLog = (message, type = 'default') => {
     const timestamp = new Date().toLocaleTimeString();
@@ -639,7 +667,10 @@ const ReportGenerator = ({ selectedFeature }) => {
         </div>
 
         <div className="mb-4">
-          <h2 className="text-xl font-semibold">Desktop Due Diligence PowerPoint Report Generator (WIP)</h2>
+          <div className="flex justify-between items-center">
+            <h2 className="text-xl font-semibold">Desktop Due Diligence PowerPoint Report Generator (WIP)</h2>
+            <UserStatusList users={activeUsers} />
+          </div>
         </div>
         
         <PlanningMapView 
