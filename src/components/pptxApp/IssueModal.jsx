@@ -13,13 +13,13 @@ const IssueModal = ({ isOpen, onClose }) => {
     const handleImageUpload = (e) => {
         const files = Array.from(e.target.files);
         const validFiles = files.filter(file => {
-            const isValidSize = file.size <= 1024 * 1024; // 1MB
+            const isValidSize = file.size <= 10 * 1024 * 1024; // 10MB
             const isValidType = ['image/jpeg', 'image/png', 'image/gif'].includes(file.type);
             return isValidSize && isValidType;
         });
 
         if (validFiles.length !== files.length) {
-            setError('Some files were skipped. Images must be under 1MB and in JPG, PNG, or GIF format.');
+            setError('Some files were skipped. Images must be under 10MB and in JPG, PNG, or GIF format.');
         }
 
         setImages(prevImages => [...prevImages, ...validFiles]);
@@ -151,7 +151,7 @@ const IssueModal = ({ isOpen, onClose }) => {
                                 </span>
                             </div>
                             <p className="text-xs text-gray-500 mt-1">
-                                Max 1MB per image. JPG, PNG, or GIF only.
+                                Max 10MB per image. JPG, PNG, or GIF only.
                             </p>
                         </div>
 

@@ -63,14 +63,18 @@ import {
   LineChart,
   Trophy,
   Loader2,
-  Globe2
+  Globe2,
+  AlertCircle,
+  HelpCircle
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import './Timer.css';
 import Leaderboard from './Leaderboard';
+import IssueModal from './IssueModal';
 import { recordReportGeneration } from './utils/stats/reportStats';
 import './GenerationLog.css';
 import { motion, AnimatePresence } from 'framer-motion';
+import IssuesList from './IssuesList';
 
 const slideOptions = [
   { id: 'cover', label: 'Cover Page', addSlide: addCoverSlide, icon: Home },
@@ -243,6 +247,8 @@ const ReportGenerator = ({ selectedFeature }) => {
   const [failedScreenshots, setFailedScreenshots] = useState([]);
   const [showConfetti, setShowConfetti] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
+  const [showIssuesList, setShowIssuesList] = useState(false);
   const [generationStartTime, setGenerationStartTime] = useState(null);
   const [generationLogs, setGenerationLogs] = useState([]);
   const logCounterRef = useRef(0);
@@ -598,25 +604,42 @@ const ReportGenerator = ({ selectedFeature }) => {
   return (
     <div className="h-full overflow-auto">
       <div className="p-4">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold">Desktop Due Diligence PowerPoint Report Generator (WIP)</h2>
+        <div className="grid grid-cols-4 gap-4 mb-6">
+          <button
+            className="px-4 py-2.5 rounded-xl text-gray-900 font-medium bg-white border-2 border-blue-600 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
+            onClick={() => setShowHowTo(true)}
+          >
+            <HelpCircle className="w-5 h-5 text-blue-600" />
+            How to use
+          </button>
           
-          <div className="flex gap-2">
-            <button
-              className="px-4 py-2 rounded text-white font-medium bg-blue-600 hover:bg-blue-700 transition-colors"
-              onClick={() => setShowHowTo(true)}
-            >
-              How to use
-            </button>
-            
-            <button
-              className="px-4 py-2 rounded text-white font-medium bg-yellow-600 hover:bg-yellow-700 transition-colors flex items-center gap-2"
-              onClick={() => setShowLeaderboard(true)}
-            >
-              <Trophy className="w-4 h-4" />
-              Leaderboard
-            </button>
-          </div>
+          <button
+            className="px-4 py-2.5 rounded-xl text-gray-900 font-medium bg-white border-2 border-blue-600 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
+            onClick={() => setShowLeaderboard(true)}
+          >
+            <Trophy className="w-5 h-5 text-yellow-500" />
+            Leaderboard
+          </button>
+
+          <button
+            onClick={() => setShowIssuesList(true)}
+            className="px-4 py-2.5 rounded-xl text-gray-900 font-medium bg-white border-2 border-blue-600 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
+          >
+            <AlertCircle className="w-5 h-5 text-blue-600" />
+            View Issues
+          </button>
+
+          <button
+            onClick={() => setIsIssueModalOpen(true)}
+            className="px-4 py-2.5 rounded-xl text-gray-900 font-medium bg-white border-2 border-blue-600 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
+          >
+            <AlertCircle className="w-5 h-5 text-red-600" />
+            Log Issue
+          </button>
+        </div>
+
+        <div className="mb-4">
+          <h2 className="text-xl font-semibold">Desktop Due Diligence PowerPoint Report Generator (WIP)</h2>
         </div>
         
         <PlanningMapView 
@@ -944,6 +967,16 @@ const ReportGenerator = ({ selectedFeature }) => {
           onClose={() => setShowLeaderboard(false)} 
         />
       )}
+
+      <IssueModal
+        isOpen={isIssueModalOpen}
+        onClose={() => setIsIssueModalOpen(false)}
+      />
+
+      <IssuesList
+        isOpen={showIssuesList}
+        onClose={() => setShowIssuesList(false)}
+      />
     </div>
   );
 };

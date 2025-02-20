@@ -4,13 +4,13 @@ export async function checkUserClaims() {
     try {
         const state = GiraffeSdk.giraffeState;
         
-        if (state?.attr?.giraffe_user?.name) {
-            return state.attr.giraffe_user.name;
+        if (state?.attr?.giraffe_user) {
+            return state.attr.giraffe_user;
         }
         
-        throw new Error('Could not find user name in Giraffe SDK');
+        throw new Error('Could not find user in Giraffe SDK');
     } catch (error) {
-        console.error('Error getting user name:', error);
+        console.error('Error getting user:', error);
         throw error;
     }
 }
