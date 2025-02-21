@@ -17,6 +17,7 @@ import { addEnviroSlide } from '../components/pptxApp/slides/enviroSlide';
 import { createScoringSlide } from '../components/pptxApp/slides/scoringSlide';
 import { addContextSlide } from '../components/pptxApp/slides/contextSlide';
 import { addPermissibilitySlide } from '../components/pptxApp/slides/permissibilitySlide';
+import { addDevelopmentSlide } from '../components/pptxApp/slides/developmentSlide';
 
 export async function generateReport(properties, onProgress) {
   try {
@@ -130,6 +131,12 @@ export async function generateReport(properties, onProgress) {
 
     if (properties.selectedSlides.permissibility !== false) {
       await addPermissibilitySlide(pptx, properties);
+      updateProgress();
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    if (properties.selectedSlides.development !== false) {
+      await addDevelopmentSlide(pptx, properties);
       updateProgress();
       await new Promise(resolve => setTimeout(resolve, 300));
     }

@@ -11,6 +11,7 @@ import scoringCriteria from './slides/scoringLogic';
 import { area } from '@turf/area';
 import { addContextSlide } from './slides/contextSlide';
 import { addPermissibilitySlide } from './slides/permissibilitySlide';
+import { addDevelopmentSlide } from './slides/developmentSlide';
 import { 
   captureMapScreenshot, 
   capturePrimarySiteAttributesMap, 
@@ -91,7 +92,8 @@ const slideOptions = [
   { id: 'contamination', label: 'Site Contamination', addSlide: addContaminationSlide, icon: Skull },
   { id: 'scoring', label: 'Scoring', addSlide: createScoringSlide, icon: LineChart },
   { id: 'context', label: 'Site Context', addSlide: addContextSlide, icon: Globe2 },
-  { id: 'permissibility', label: 'Permissible Uses', addSlide: addPermissibilitySlide, icon: ListTodo }
+  { id: 'permissibility', label: 'Permissible Uses', addSlide: addPermissibilitySlide, icon: ListTodo },
+  { id: 'development', label: 'Development', addSlide: addDevelopmentSlide, icon: Building2 }
 ];
 
 const getStepDescription = (stepId) => {
@@ -234,7 +236,8 @@ const ReportGenerator = ({ selectedFeature }) => {
     contamination: true,
     permissibility: true,
     scoring: true,
-    context: true
+    context: true,
+    development: true
   });
   const [developableArea, setDevelopableArea] = useState(null);
   const [showDevelopableArea, setShowDevelopableArea] = useState(true);
@@ -437,7 +440,8 @@ const ReportGenerator = ({ selectedFeature }) => {
           ...(selectedSlides.contamination ? ['contamination'] : []),
           ...(selectedSlides.scoring ? ['scoring'] : []),
           ...(selectedSlides.context ? ['context'] : []),
-          ...(selectedSlides.permissibility ? ['permissibility'] : [])
+          ...(selectedSlides.permissibility ? ['permissibility'] : []),
+          ...(selectedSlides.development ? ['development'] : [])
         ];
 
         if (selectedSteps.length === 0) return;
