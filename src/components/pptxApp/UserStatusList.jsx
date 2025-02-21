@@ -3,15 +3,29 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Users } from 'lucide-react';
 
 const UserStatusList = ({ users }) => {
+  // Filter out duplicate users and sort by status
+  const uniqueUsers = users.reduce((acc, current) => {
+    const x = acc.find(item => item.email === current.email);
+    if (!x) {
+      return acc.concat([current]);
+    } else {
+      // Update existing user's status if needed
+      if (x.status !== current.status) {
+        x.status = current.status;
+      }
+      return acc;
+    }
+  }, []);
+
   return (
     <div className="flex items-center gap-4">
       <div className="flex items-center gap-1 text-gray-500">
         <Users size={16} />
-        <span className="text-sm">{users.length} active</span>
+        <span className="text-sm">{uniqueUsers.length} active</span>
       </div>
       <div className="flex gap-2">
         <AnimatePresence>
-          {users.map((user) => (
+          {uniqueUsers.map((user) => (
             <motion.div
               key={user.email}
               initial={{ opacity: 0, x: 20 }}

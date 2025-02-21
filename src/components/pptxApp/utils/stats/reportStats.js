@@ -7,7 +7,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function recordReportGeneration(generationTime, selectedSlides, properties) {
     try {
-        const userName = getCurrentUserName();
+        const userName = await getCurrentUserName();
         const allSlides = Object.values(selectedSlides).every(Boolean);
         const suburb = properties?.site_suitability__LGA || 'Unknown LGA';
 
