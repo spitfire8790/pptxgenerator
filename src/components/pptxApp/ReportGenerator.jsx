@@ -75,12 +75,6 @@ import { recordReportGeneration } from './utils/stats/reportStats';
 import './GenerationLog.css';
 import { motion, AnimatePresence } from 'framer-motion';
 import IssuesList from './IssuesList';
-import UserStatusList from './UserStatusList';
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 const slideOptions = [
   { id: 'cover', label: 'Cover Page', addSlide: addCoverSlide, icon: Home },
@@ -258,163 +252,12 @@ const ReportGenerator = ({ selectedFeature }) => {
   const [generationStartTime, setGenerationStartTime] = useState(null);
   const [generationLogs, setGenerationLogs] = useState([]);
   const logCounterRef = useRef(0);
-  const [activeUsers, setActiveUsers] = useState([]);
-  const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
     if (selectedFeature) {
       handleScreenshotCapture();
     }
   }, [selectedFeature]);
-
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const user = await checkUserClaims();
-        console.log('User claims:', user);
-        
-        if (user) {
-          const userInfo = {
-            email: user.email,
-            name: user.name,
-            status: 'online',
-            id: user.id
-          };
-          console.log('Setting user info:', userInfo);
-          setCurrentUser(userInfo);
-          
-          setActiveUsers(prev => {
-            const existingUsers = prev.filter(u => u.email !== userInfo.email);
-            const newUsers = [...existingUsers, userInfo];
-            console.log('Updated active users:', newUsers);
-            return newUsers;
-          });
-        } else {
-          console.warn('No user found in claims');
-          handleAnonymousUser();
-        }
-      } catch (error) {
-        console.error('Error in fetchUser:', error);
-        handleAnonymousUser();
-      }
-    };
-
-    const handleAnonymousUser = () => {
-      console.warn('Falling back to anonymous user');
-      const anonymousUser = {
-        email: `anonymous_${Date.now()}`,
-        name: 'Anonymous User',
-        status: 'online'
-      };
-      console.log('Created anonymous user:', anonymousUser);
-      setCurrentUser(anonymousUser);
-      setActiveUsers(prev => {
-        const existingUsers = prev.filter(u => u.email !== anonymousUser.email);
-        const newUsers = [...existingUsers, anonymousUser];
-        console.log('Updated active users with anonymous:', newUsers);
-        return newUsers;
-      });
-    };
-
-    fetchUser();
-  }, []);
-
-  // Update Supabase with user status
-  const updateUserStatus = async (status) => {
-    if (!currentUser) return;
-    
-    try {
-      const { error } = await supabase
-        .from('user_status')
-        .upsert({
-          user_id: currentUser.id,
-          email: currentUser.email,
-          name: currentUser.name,
-          status: status,
-          last_seen: new Date().toISOString()
-        }, {
-          onConflict: 'user_id'
-        });
-
-      if (error) throw error;
-    } catch (err) {
-      console.error('Error updating user status:', err);
-    }
-  };
-
-  // Subscribe to user status changes
-  useEffect(() => {
-    if (!currentUser) return;
-
-    // Initial status update
-    updateUserStatus('online');
-
-    // Subscribe to changes
-    const statusSubscription = supabase
-      .channel('user_status_changes')
-      .on('postgres_changes', 
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'user_status' 
-        }, 
-        (payload) => {
-          setActiveUsers(current => {
-            // Filter out users who haven't been seen in the last 5 minutes
-            const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-            const activeUsersList = payload.new.last_seen > fiveMinutesAgo ? 
-              [...current.filter(u => u.email !== payload.new.email), payload.new] :
-              current.filter(u => u.email !== payload.new.email);
-              
-            return activeUsersList;
-          });
-        })
-      .subscribe();
-
-    // Cleanup function
-    return () => {
-      updateUserStatus('offline');
-      statusSubscription.unsubscribe();
-    };
-  }, [currentUser]);
-
-  // Update status when generating report
-  useEffect(() => {
-    if (!currentUser) return;
-    updateUserStatus(isGenerating ? 'generating' : 'online');
-  }, [isGenerating, currentUser]);
-
-  // Periodic status update to keep session alive
-  useEffect(() => {
-    if (!currentUser) return;
-
-    const interval = setInterval(() => {
-      updateUserStatus('online');
-    }, 30000); // Update every 30 seconds
-
-    return () => clearInterval(interval);
-  }, [currentUser]);
-
-  // Initial fetch of active users
-  useEffect(() => {
-    const fetchActiveUsers = async () => {
-      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-      
-      const { data, error } = await supabase
-        .from('user_status')
-        .select('*')
-        .gt('last_seen', fiveMinutesAgo);
-
-      if (error) {
-        console.error('Error fetching active users:', error);
-        return;
-      }
-
-      setActiveUsers(data || []);
-    };
-
-    fetchActiveUsers();
-  }, []);
 
   const addLog = (message, type = 'default') => {
     const timestamp = new Date().toLocaleTimeString();
@@ -785,7 +628,6 @@ const ReportGenerator = ({ selectedFeature }) => {
         <div className="mb-4">
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-semibold">Desktop Due Diligence PowerPoint Report Generator (WIP)</h2>
-            <UserStatusList users={activeUsers} />
           </div>
         </div>
         
