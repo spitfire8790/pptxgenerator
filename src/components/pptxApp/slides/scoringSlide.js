@@ -165,25 +165,34 @@ export async function createScoringSlide(pres, propertyData) {
       };
     };
 
+    // Initialize scores object if it doesn't exist
+    if (!propertyData?.scores) {
+      console.warn('propertyData.scores is undefined, initializing empty object');
+      propertyData.scores = {};
+    }
+
     // Calculate scores with default values if data is missing
     const scores = {
-      developableArea: getScoreValue(propertyData.scores.developableArea),
-      contours: getScoreValue(propertyData.scores.contours),
-      siteRegularity: getScoreValue(propertyData.scores.siteRegularity),
-      zoning: getScoreValue(propertyData.scores.zoning),
-      heritage: getScoreValue(propertyData.scores.heritage),
-      acidSulfateSoils: getScoreValue(propertyData.scores.acidSulfateSoils),
-      servicing: getScoreValue(propertyData.scores.servicing),
-      roads: getScoreValue(propertyData.scores.roads),
-      udpPrecincts: getScoreValue(propertyData.scores.udpPrecincts),
-      ptal: getScoreValue(propertyData.scores.ptal),
-      geoscape: getScoreValue(propertyData.scores.geoscape),
-      flood: getScoreValue(propertyData.scores.flood),
-      bushfire: getScoreValue(propertyData.scores.bushfire),
-      contamination: getScoreValue(propertyData.scores.contamination),
+      developableArea: getScoreValue(propertyData.scores?.developableArea),
+      contours: getScoreValue(propertyData.scores?.contours),
+      siteRegularity: getScoreValue(propertyData.scores?.siteRegularity),
+      zoning: getScoreValue(propertyData.scores?.zoning),
+      heritage: getScoreValue(propertyData.scores?.heritage),
+      acidSulfateSoils: getScoreValue(propertyData.scores?.acidSulfateSoils),
+      servicing: getScoreValue(propertyData.scores?.servicing),
+      roads: getScoreValue(propertyData.scores?.roads),
+      udpPrecincts: getScoreValue(propertyData.scores?.udpPrecincts),
+      ptal: getScoreValue(propertyData.scores?.ptal),
+      geoscape: getScoreValue(propertyData.scores?.geoscape),
+      flood: getScoreValue(propertyData.scores?.flood),
+      bushfire: getScoreValue(propertyData.scores?.bushfire),
+      contamination: getScoreValue(propertyData.scores?.contamination),
       tec: getScoreValue(propertyData.site_suitability__scores?.tec),
       historicalImagery: getScoreValue(propertyData.site_suitability__scores?.historicalImagery)
     };
+
+    // Log all scores for debugging
+    console.log('All scores after initialization:', JSON.stringify(scores, null, 2));
 
     // Calculate total score
     const totalScore = Object.values(scores).reduce((sum, score) => sum + (parseInt(score) || 0), 0);
@@ -199,46 +208,52 @@ export async function createScoringSlide(pres, propertyData) {
        { text: 'Criteria', options: { fill: '002664', color: 'FFFFFF' } }, 
        { text: 'Scoring', options: { fill: '002664', color: 'FFFFFF' } }],
       // Primary Site Attributes
-      [{ text: 'Primary Site Attributes\n\n', options: { rowspan: 1, valign: 'middle' }}, 
-       'Developable Area', formatScoreWithColor(scores.developableArea)],
+      [formatGroupCell('Primary Site Attributes\n\n', 1), 
+       formatCriteriaCell('Developable Area'), formatScoreWithColor(scores.developableArea)],
       // Secondary Site Attributes
-      [{ text: 'Secondary Site Attributes\n\n', options: { rowspan: 2, valign: 'middle' }}, 
-       'Site Contour', formatScoreWithColor(scores.contours)],
-      ['Site Regularity', formatScoreWithColor(scores.siteRegularity)],
+      [formatGroupCell('Secondary Site Attributes\n\n', 2), 
+       formatCriteriaCell('Site Contour'), formatScoreWithColor(scores.contours)],
+      [null, formatCriteriaCell('Site Regularity'), formatScoreWithColor(scores.siteRegularity)],
       // Planning
-      [{ text: 'Planning\n\n', options: { rowspan: 3, valign: 'middle' }}, 
-       'Zoning', formatScoreWithColor(scores.zoning)],
-      ['Heritage', formatScoreWithColor(scores.heritage)],
-      ['Acid Sulfate Soils', formatScoreWithColor(scores.acidSulfateSoils)],
+      [formatGroupCell('Planning\n\n', 3), 
+       formatCriteriaCell('Zoning'), formatScoreWithColor(scores.zoning)],
+      [null, formatCriteriaCell('Heritage'), formatScoreWithColor(scores.heritage)],
+      [null, formatCriteriaCell('Acid Sulfate Soils'), formatScoreWithColor(scores.acidSulfateSoils)],
       // Access & Services
-      [{ text: 'Access & Services\n\n', options: { rowspan: 4, valign: 'middle' }}, 
-       'Servicing', formatScoreWithColor(scores.servicing)],
-      ['Access', formatScoreWithColor(scores.roads)],
-      ['Proximity to Strategic Centre', formatScoreWithColor(scores.udpPrecincts)],
-      ['Public Transport Access Level (PTAL)', formatScoreWithColor(scores.ptal)],
+      [formatGroupCell('Access & Services\n\n', 4), 
+       formatCriteriaCell('Servicing'), formatScoreWithColor(scores.servicing)],
+      [null, formatCriteriaCell('Access'), formatScoreWithColor(scores.roads)],
+      [null, formatCriteriaCell('Proximity to Strategic Centre'), formatScoreWithColor(scores.udpPrecincts)],
+      [null, formatCriteriaCell('Public Transport Access Level (PTAL)'), formatScoreWithColor(scores.ptal)],
       // Utilisation & Improvements
-      [{ text: 'Utilisation & Improvements\n\n', options: { rowspan: 1, valign: 'middle' }}, 
-       'Built Form', formatScoreWithColor(scores.geoscape)],
+      [formatGroupCell('Utilisation & Improvements\n\n', 1), 
+       formatCriteriaCell('Built Form'), formatScoreWithColor(scores.geoscape)],
       // Hazards
-      [{ text: 'Hazards\n\n', options: { rowspan: 2, valign: 'middle' }}, 
-       'Flood risk (1% AEP)', formatScoreWithColor(scores.flood)],
-      ['Bushfire Risk', formatScoreWithColor(scores.bushfire)],
+      [formatGroupCell('Hazards\n\n', 2), 
+       formatCriteriaCell('Flood risk (1% AEP)'), formatScoreWithColor(scores.flood)],
+      [null, formatCriteriaCell('Bushfire Risk'), formatScoreWithColor(scores.bushfire)],
       // Site Contamination
-      [{ text: 'Site Contamination\n\n', options: { rowspan: 2, valign: 'middle' }}, 
-       'Contaminated sites Register', formatScoreWithColor(scores.contamination)],
-      ['Usage & potential site remediation', formatScoreWithColor(scores.historicalImagery)],
+      [formatGroupCell('Site Contamination\n\n', 2), 
+       formatCriteriaCell('Contaminated sites Register'), formatScoreWithColor(scores.contamination)],
+      [null, formatCriteriaCell('Usage & potential site remediation'), formatScoreWithColor(scores.historicalImagery)],
       // Environmental
-      [{ text: 'Environmental\n\n', options: { rowspan: 1, valign: 'middle' }}, 
-       'Threatened Ecological Communities', formatScoreWithColor(scores.tec)],
+      [formatGroupCell('Environmental\n\n', 1), 
+       formatCriteriaCell('Threatened Ecological Communities'), formatScoreWithColor(scores.tec)],
       // Total Score
       [{ text: 'Total Score\n\n', options: { rowspan: 1, valign: 'middle', bold: true }}, 
-       '', { text: `${totalScore}/${maxScore} (${percentage}%)`, options: { bold: true, align: 'center' }}]
+       { text: '', options: {} }, 
+       { text: `${totalScore}/${maxScore} (${percentage}%)`, options: { bold: true, align: 'center' }}]
     ];
 
-    console.log('Table data structure:', JSON.stringify(tableData, null, 2));
+    // Filter out any undefined or null values from the table data
+    const cleanTableData = tableData.map(row => 
+      row.map(cell => cell === null ? { text: '', options: {} } : cell)
+    );
+
+    console.log('Table data structure:', JSON.stringify(cleanTableData, null, 2));
 
     // Add table with styling
-    slide.addTable(tableData, {
+    slide.addTable(cleanTableData, {
       x: '5%',
       y: '18%',
       w: '62%',
