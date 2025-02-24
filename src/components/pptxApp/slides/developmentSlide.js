@@ -93,6 +93,14 @@ export async function addDevelopmentSlide(pptx, properties) {
       properties: properties
     }, properties.developableArea);
 
+    // Store construction certificates data in properties for use in feasibility slide
+    if (ccMapResult) {
+      properties.constructionCertificates = ccMapResult.typeStats.map(stat => ({
+        Cost: stat.medianCostPerDwelling * stat.count, // Total cost
+        GFA: stat.medianGFAPerDwelling * stat.count // Total GFA
+      }));
+    }
+
     // Add title
     slide.addText([
       { text: properties.site__address, options: { color: styles.title.color } },
