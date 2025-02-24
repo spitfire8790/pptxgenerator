@@ -70,7 +70,8 @@ import {
   HelpCircle,
   Calculator,
   Settings2,
-  Banknote
+  Banknote,
+  X
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import './Timer.css';
@@ -264,19 +265,36 @@ const ReportGenerator = ({ selectedFeature }) => {
   const [generationLogs, setGenerationLogs] = useState([]);
   const logCounterRef = useRef(0);
   const [feasibilitySettings, setFeasibilitySettings] = useState({
-    siteEfficiencyRatio: 0.80,
-    floorToFloorHeight: 3.5,
-    gbaToGfaRatio: 0.75,
-    gfaToNsaRatio: 0.85,
-    unitSize: 75,
-    agentsSalesCommission: 0.02,
-    legalFeesOnSales: 0.005,
-    marketingCosts: 0.0075,
-    profitAndRisk: 0.20,
-    daApplicationFees: 200000,
-    professionalFees: 0.05,
-    interestRate: 0.075,
-    projectPeriod: 48
+    lowMidDensity: {
+      siteEfficiencyRatio: 0.80,
+      floorToFloorHeight: 3.5,
+      gbaToGfaRatio: 0.75,
+      gfaToNsaRatio: 0.85,
+      unitSize: 75,
+      agentsSalesCommission: 0.02,
+      legalFeesOnSales: 0.005,
+      marketingCosts: 0.0075,
+      profitAndRisk: 0.20,
+      daApplicationFees: 200000,
+      professionalFees: 0.05,
+      interestRate: 0.075,
+      projectPeriod: 48
+    },
+    highDensity: {
+      siteEfficiencyRatio: 0.80,
+      floorToFloorHeight: 3.5,
+      gbaToGfaRatio: 0.75,
+      gfaToNsaRatio: 0.85,
+      unitSize: 75,
+      agentsSalesCommission: 0.02,
+      legalFeesOnSales: 0.005,
+      marketingCosts: 0.0075,
+      profitAndRisk: 0.20,
+      daApplicationFees: 200000,
+      professionalFees: 0.05,
+      interestRate: 0.075,
+      projectPeriod: 48
+    }
   });
   const [salesData, setSalesData] = useState([]);
   const [showFeasibilitySettings, setShowFeasibilitySettings] = useState(false);
@@ -311,13 +329,32 @@ const ReportGenerator = ({ selectedFeature }) => {
                 headers: results.meta.fields
               });
 
-              // Filter for matching suburb and property_type
-              const filteredData = results.data
+              // First try exact suburb match
+              let filteredData = results.data
                 .filter(row => 
                   row.suburb?.toUpperCase() === suburb && 
-                  row.property_type?.toLowerCase() === 'apartment' &&
                   row.price && row.bedrooms
-                )
+                );
+
+              // If no results, try searching for suburbs containing the original suburb name
+              if (filteredData.length === 0) {
+                console.log('No exact suburb matches found, searching for related suburbs containing:', suburb);
+                const baseSuburb = suburb.split(' ').pop(); // Get the base suburb name (e.g., 'KILLARA' from 'EAST KILLARA')
+                filteredData = results.data
+                  .filter(row => 
+                    row.suburb?.toUpperCase().includes(baseSuburb) && 
+                    row.price && row.bedrooms
+                  );
+                
+                console.log('Found related suburbs:', {
+                  baseSuburb,
+                  matchedSuburbs: [...new Set(filteredData.map(row => row.suburb))],
+                  matchCount: filteredData.length
+                });
+              }
+
+              // Process the filtered data
+              const processedData = filteredData
                 .map(row => ({
                   price: parseFloat(row.price),
                   bedrooms: parseInt(row.bedrooms),
@@ -325,7 +362,8 @@ const ReportGenerator = ({ selectedFeature }) => {
                   parking: parseInt(row.parking) || 0,
                   address: row.address || 'Address not provided',
                   property_type: row.property_type || 'Apartment',
-                  sold_date: row.sold_date || 'Date not provided'
+                  sold_date: row.sold_date || 'Date not provided',
+                  suburb: row.suburb // Include suburb in the processed data
                 }))
                 .filter(item => 
                   !isNaN(item.price) && 
@@ -336,12 +374,13 @@ const ReportGenerator = ({ selectedFeature }) => {
 
               console.log('Processed sales data:', {
                 originalLength: results.data.length,
-                filteredLength: filteredData.length,
-                sample: filteredData.slice(0, 3),
-                suburb
+                filteredLength: processedData.length,
+                sample: processedData.slice(0, 3),
+                suburb,
+                uniqueSuburbs: [...new Set(processedData.map(item => item.suburb))]
               });
 
-              setSalesData(filteredData);
+              setSalesData(processedData);
             },
             error: (error) => {
               console.error('CSV parsing error:', error);
@@ -417,7 +456,6 @@ const ReportGenerator = ({ selectedFeature }) => {
                 currentSalesData = results.data
                   .filter(row => 
                     row.suburb?.toUpperCase() === suburb && 
-                    row.property_type?.toLowerCase() === 'apartment' &&
                     row.price && row.bedrooms
                   )
                   .map(row => ({
@@ -794,20 +832,31 @@ const ReportGenerator = ({ selectedFeature }) => {
     return logs[logs.length - 1] || null;
   };
 
-  const handleFeasibilitySettingChange = (setting, value) => {
+  const handleFeasibilitySettingChange = (setting, value, density) => {
     setFeasibilitySettings(prev => ({
       ...prev,
-      [setting]: value
+      [density]: {
+        ...prev[density],
+        [setting]: value
+      }
     }));
   };
 
   return (
     <div className="h-full overflow-auto">
-      <div className="p-4">
-        <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="p-4 relative z-50">
+        <div className="grid grid-cols-4 gap-4 mb-6 relative">
           <button
             className="px-4 py-2.5 rounded-xl text-gray-900 font-medium bg-white border-2 border-blue-600 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
-            onClick={() => setShowHowTo(true)}
+            onClick={(e) => {
+              console.log('How to use button clicked');
+              e.preventDefault();
+              e.stopPropagation();
+              setShowHowTo(prev => {
+                console.log('Setting showHowTo to:', !prev);
+                return !prev;
+              });
+            }}
           >
             <HelpCircle className="w-5 h-5 text-blue-600" />
             How to use
@@ -815,14 +864,30 @@ const ReportGenerator = ({ selectedFeature }) => {
           
           <button
             className="px-4 py-2.5 rounded-xl text-gray-900 font-medium bg-white border-2 border-blue-600 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
-            onClick={() => setShowLeaderboard(true)}
+            onClick={(e) => {
+              console.log('Leaderboard button clicked');
+              e.preventDefault();
+              e.stopPropagation();
+              setShowLeaderboard(prev => {
+                console.log('Setting showLeaderboard to:', !prev);
+                return !prev;
+              });
+            }}
           >
             <Trophy className="w-5 h-5 text-yellow-500" />
             Leaderboard
           </button>
 
           <button
-            onClick={() => setShowIssuesList(true)}
+            onClick={(e) => {
+              console.log('View Issues button clicked');
+              e.preventDefault();
+              e.stopPropagation();
+              setShowIssuesList(prev => {
+                console.log('Setting showIssuesList to:', !prev);
+                return !prev;
+              });
+            }}
             className="px-4 py-2.5 rounded-xl text-gray-900 font-medium bg-white border-2 border-blue-600 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
           >
             <AlertCircle className="w-5 h-5 text-blue-600" />
@@ -830,7 +895,15 @@ const ReportGenerator = ({ selectedFeature }) => {
           </button>
 
           <button
-            onClick={() => setIsIssueModalOpen(true)}
+            onClick={(e) => {
+              console.log('Log Issue button clicked');
+              e.preventDefault();
+              e.stopPropagation();
+              setIsIssueModalOpen(prev => {
+                console.log('Setting isIssueModalOpen to:', !prev);
+                return !prev;
+              });
+            }}
             className="px-4 py-2.5 rounded-xl text-gray-900 font-medium bg-white border-2 border-blue-600 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
           >
             <AlertCircle className="w-5 h-5 text-red-600" />
@@ -1055,13 +1128,144 @@ const ReportGenerator = ({ selectedFeature }) => {
         </div>
       </div>
 
-      <FeasibilityManager
-        settings={feasibilitySettings}
-        onSettingChange={handleFeasibilitySettingChange}
-        salesData={salesData}
-        open={showFeasibilitySettings}
-        onClose={() => setShowFeasibilitySettings(false)}
-      />
+      {/* Modal Portal Container */}
+      <div className="relative z-[9999]">
+        <Leaderboard 
+          isOpen={showLeaderboard} 
+          onClose={() => setShowLeaderboard(false)} 
+        />
+
+        <IssueModal 
+          isOpen={isIssueModalOpen} 
+          onClose={() => setIsIssueModalOpen(false)} 
+        />
+
+        <IssuesList 
+          isOpen={showIssuesList} 
+          onClose={() => setShowIssuesList(false)} 
+        />
+
+        <FeasibilityManager
+          settings={feasibilitySettings}
+          onSettingChange={handleFeasibilitySettingChange}
+          salesData={salesData}
+          open={showFeasibilitySettings}
+          onClose={() => setShowFeasibilitySettings(false)}
+          selectedFeature={selectedFeature ? {
+            ...selectedFeature,
+            properties: {
+              ...selectedFeature.properties,
+              copiedFrom: selectedFeature.properties.copiedFrom,
+              site__address: selectedFeature.properties.copiedFrom?.site__address,
+              site_suitability__LGA: selectedFeature.properties.copiedFrom?.site_suitability__LGA,
+              site_suitability__suburb: selectedFeature.properties.copiedFrom?.site_suitability__suburb
+            }
+          } : null}
+        />
+
+        {/* How To Use Modal */}
+        {showHowTo && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col"
+            >
+              <div className="flex items-center justify-between p-4 border-b">
+                <div className="flex items-center">
+                  <HelpCircle className="w-6 h-6 mr-2" />
+                  <h2 className="text-xl font-semibold">How to Use the Report Generator</h2>
+                </div>
+                <button 
+                  onClick={() => setShowHowTo(false)}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-8">
+                <div className="space-y-6">
+                  {[
+                    {
+                      step: 1,
+                      title: "Disable VPN",
+                      content: "Temporarily turn off Harmony / VPN."
+                    },
+                    {
+                      step: 2,
+                      title: "Search Property",
+                      content: "Use Land iQ Site Search to identify the property of interest."
+                    },
+                    {
+                      step: 3,
+                      title: "Generate Shortlist",
+                      content: "In Site Search, select the property and generate a shortlist using that selection."
+                    },
+                    {
+                      step: 4,
+                      title: "Activate Drawing Layer",
+                      content: "Left-click on the 'Site Boundary' drawing layer to activate it."
+                    },
+                    {
+                      step: 5,
+                      title: "Create Property Boundary",
+                      content: "Right click on the property on the map and wait until you see the shortlist appear and your property highlighted - then hover over the little arrow and click 'Create'."
+                    },
+                    {
+                      step: 6,
+                      title: "Complete Property Coverage",
+                      content: "If it didn't create a polygon that covers the whole property, click on the part that was added first and then right click along the boundary of any missing parts of the property and select 'Merge'. Do this until the complete property is covered. Once complete, on the left panel change the usage to be 'Site Boundary'."
+                    },
+                    {
+                      step: 7,
+                      title: "Add Developable Area (Optional)",
+                      content: "If you want to include a developable area, left-click on the 'Developable Area' drawing layer on the left panel and use Giraffe's drawing tools to draw the boundary. Once complete, on the left panel change the usage to be 'Developable Area'."
+                    },
+                    {
+                      step: 8,
+                      title: "Select Area Type",
+                      content: "On the right panel, select the developable area to use (just the Site Boundary or the Developable Area you've just drawn)."
+                    },
+                    {
+                      step: 9,
+                      title: "Configure Visibility",
+                      content: "Confirm in the check-box if you want to show the developable area as a blue-dash line or not in the report (uncheck this if you have selected to just use the Site Boundary and not a separate Developable Area)."
+                    },
+                    {
+                      step: 10,
+                      title: "Review and Generate",
+                      content: "A preview will load of the cover slide and if everything looks good to go, select the slides you want (default is all slides) and click on the blue 'Generate Report' button."
+                    },
+                    {
+                      step: 11,
+                      title: "Wait for Generation",
+                      content: "Report will generate and for a full report should take approximately 4 minutes to produce. If any of the slides fail or you would like to produce a sub-set of the full report you can check the appropriate slides and select Generate Report again as needed."
+                    }
+                  ].map((item, index) => (
+                    <motion.div
+                      key={item.step}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                      className="relative pl-12 pr-4"
+                    >
+                      <div className="absolute left-0 top-0 flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 font-semibold">
+                        {item.step}
+                      </div>
+                      <div>
+                        <h4 className="text-lg font-medium text-gray-900 mb-2">{item.title}</h4>
+                        <p className="text-gray-600 leading-relaxed">{item.content}</p>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

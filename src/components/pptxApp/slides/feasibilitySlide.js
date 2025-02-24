@@ -26,6 +26,9 @@ const calculateGfaUnderFsr = (totalSiteArea, fsr) => {
 
 // Helper function to calculate GFA under HOB
 const calculateGfaUnderHob = (developableArea, hob, settings) => {
+  // If no HoB control exists, return Infinity so FSR approach is used
+  if (!hob) return Infinity;
+  
   const maxStoreys = Math.floor(hob / settings.floorToFloorHeight);
   const siteCoverage = developableArea * settings.siteEfficiencyRatio;
   return siteCoverage * maxStoreys * settings.gbaToGfaRatio;
@@ -65,6 +68,58 @@ const getCouncilNameFromLGA = (lga) => {
   return councilEntry ? councilEntry[0] : lga;
 };
 
+// Helper function to extract postcode from address
+const extractPostcode = (address) => {
+  if (!address) return null;
+  
+  // First try to match NSW postcode format
+  const nswMatch = address.match(/NSW (\d{4})/);
+  if (nswMatch) return parseInt(nswMatch[1]);
+  
+  // If that fails, try to get the last 4 digits from the address
+  const lastWordMatch = address.split(' ').pop()?.match(/^(\d{4})$/);
+  if (lastWordMatch) return parseInt(lastWordMatch[1]);
+  
+  // If both attempts fail, return null
+  return null;
+};
+
+// Helper function to find closest postcode matches
+const findClosestPostcodeMatches = (targetPostcode, salesData) => {
+  if (!targetPostcode || !Array.isArray(salesData) || salesData.length === 0) return [];
+  
+  // Map sales data to include postcode and distance from target
+  const withPostcodes = salesData
+    .map(sale => ({
+      ...sale,
+      postcode: extractPostcode(sale.address),
+      distance: 0
+    }))
+    .filter(sale => sale.postcode !== null)
+    .map(sale => ({
+      ...sale,
+      distance: Math.abs(sale.postcode - targetPostcode)
+    }))
+    .sort((a, b) => a.distance - b.distance);
+
+  // Get all entries that share the minimum distance
+  const minDistance = withPostcodes[0]?.distance;
+  return withPostcodes.filter(sale => sale.distance === minDistance);
+};
+
+// Helper function to format postcode source info
+const formatPriceSource = (targetPostcode, matchedSales) => {
+  if (!matchedSales || matchedSales.length === 0) {
+    throw new Error('No comparable sales data available for price calculation');
+  }
+
+  const matchedPostcode = extractPostcode(matchedSales[0].address);
+  if (matchedPostcode === targetPostcode) {
+    return `Based on ${matchedSales.length} sales in ${targetPostcode}`;
+  }
+  return `Based on ${matchedSales.length} sales in postcode ${matchedPostcode} (nearest to target postcode ${targetPostcode})`;
+};
+
 export async function addFeasibilitySlide(pptx, properties, userSettings = {}) {
   let slide;
   try {
@@ -75,97 +130,75 @@ export async function addFeasibilitySlide(pptx, properties, userSettings = {}) {
       area: properties?.copiedFrom?.site_suitability__area
     });
 
-    slide = pptx.addSlide();
+    // Create two slides - one for each density type
+    const lowMidDensitySlide = pptx.addSlide();
+    const highDensitySlide = pptx.addSlide();
 
-    // Merge default settings with user settings
-    const settings = { ...DEFAULT_SETTINGS, ...userSettings };
+    // Merge default settings with user settings for both density types
+    const settings = {
+      lowMidDensity: { ...DEFAULT_SETTINGS, ...userSettings.lowMidDensity },
+      highDensity: { ...DEFAULT_SETTINGS, ...userSettings.highDensity }
+    };
 
-    // Calculate developable area and site coverage
-    const developableArea = properties?.copiedFrom?.site_suitability__area || 0;
-    const siteCoverage = developableArea * settings.siteEfficiencyRatio;
+    // Function to generate feasibility analysis for a given density type
+    const generateFeasibilityAnalysis = (slide, settings, densityType) => {
+      // Calculate developable area and site coverage
+      const developableArea = properties?.copiedFrom?.site_suitability__area || 0;
+      const siteCoverage = developableArea * settings.siteEfficiencyRatio;
 
-    // Calculate GFA under FSR and HOB
-    const fsr = properties?.copiedFrom?.site_suitability__floorspace_ratio || 0;
-    const hob = properties?.copiedFrom?.site_suitability__height_of_building || 0;
+      // Calculate GFA under FSR and HOB
+      const fsr = properties?.copiedFrom?.site_suitability__floorspace_ratio || 0;
+      const hob = properties?.copiedFrom?.site_suitability__height_of_building || 0;
 
-    console.log('Calculating GFA with:', {
-      developableArea,
-      fsr,
-      hob,
-      siteCoverage
-    });
+      console.log('Calculating GFA with:', {
+        developableArea,
+        fsr,
+        hob,
+        siteCoverage
+      });
 
-    const gfaUnderFsr = calculateGfaUnderFsr(developableArea, fsr);
-    const gfaUnderHob = calculateGfaUnderHob(developableArea, hob, settings);
+      const gfaUnderFsr = calculateGfaUnderFsr(developableArea, fsr);
+      const gfaUnderHob = calculateGfaUnderHob(developableArea, hob, settings);
 
-    // Use the lower GFA value
-    const gfa = Math.min(gfaUnderFsr, gfaUnderHob);
+      // Use FSR value if no HoB exists, otherwise use the lower of the two
+      const gfa = !hob ? gfaUnderFsr : Math.min(gfaUnderFsr, gfaUnderHob);
 
-    // Calculate development yield
-    const developmentYield = calculateDevelopmentYield(gfa, settings);
+      // Calculate development yield
+      const developmentYield = calculateDevelopmentYield(gfa, settings);
 
-    console.log('Feasibility calculation inputs:', {
-      suburb: properties?.site_suitability__suburb,
-      salesData: properties.salesData,
-      developmentYield,
-      gfa,
-      allProperties: Object.keys(properties)
-    });
+      // Use the sales data passed from ReportGenerator
+      const salesData = properties.salesData || [];
 
-    // Use the sales data passed from ReportGenerator
-    const salesData = properties.salesData || [];
-    console.log('Sales data received in feasibility slide:', {
-      isArray: Array.isArray(salesData),
-      length: salesData?.length,
-      suburb: properties?.site_suitability__suburb,
-      rawData: salesData.slice(0, 3), // Only log first 3 items to avoid console spam
-      propertyKeys: Object.keys(properties),
-      copiedFromKeys: Object.keys(properties?.copiedFrom || {}),
-      fullSuburbInfo: {
-        suburb: properties?.site_suitability__suburb,
-        rawSuburb: properties?.copiedFrom?.site_suitability__suburb,
-        hasSuburb: !!properties?.site_suitability__suburb || !!properties?.copiedFrom?.site_suitability__suburb
+      if (!Array.isArray(salesData) || salesData.length === 0) {
+        throw new Error('No sales data available for price calculation');
       }
-    });
 
-    if (!Array.isArray(salesData) || salesData.length === 0) {
-      console.warn('No sales data available for median price calculation', {
-        isArray: Array.isArray(salesData),
-        length: salesData?.length,
-        suburb: properties?.site_suitability__suburb,
-        salesDataType: typeof salesData,
-        propertiesHasSalesData: 'salesData' in properties,
-        propertyKeys: Object.keys(properties),
-        fullSuburbInfo: {
-          suburb: properties?.site_suitability__suburb,
-          rawSuburb: properties?.copiedFrom?.site_suitability__suburb,
-          hasSuburb: !!properties?.site_suitability__suburb || !!properties?.copiedFrom?.site_suitability__suburb
-        }
-      });
+      // Extract postcode from the site address
+      const sitePostcode = extractPostcode(properties.site__address);
+      if (!sitePostcode) {
+        throw new Error('Unable to extract postcode from site address');
+      }
       
-      // Instead of throwing error, use default values
-      const defaultMedianPrice = 750000; // Default median price as fallback
-      console.log('Using default median price:', defaultMedianPrice);
+      // Find properties with closest matching postcodes
+      const relevantSales = findClosestPostcodeMatches(sitePostcode, salesData);
+      if (relevantSales.length === 0) {
+        throw new Error('No comparable sales found with valid postcodes');
+      }
       
-      // Calculate total gross realisation with default price
-      const totalGrossRealisation = developmentYield * defaultMedianPrice;
+      // Calculate median price using the most relevant sales
+      const prices = relevantSales.map(item => item.price).sort((a, b) => a - b);
+      const medianPrice = prices[Math.floor(prices.length / 2)];
+      const priceSource = formatPriceSource(sitePostcode, relevantSales);
 
-      console.log('Gross realisation calculation with default price:', {
-        developmentYield,
-        defaultMedianPrice,
-        totalGrossRealisation
-      });
-
-      // Continue with the default price instead of throwing
-      const medianPrice = defaultMedianPrice;
-      const totalGrossRealisationValue = totalGrossRealisation;
+      // Calculate total gross realisation
+      const totalGrossRealisation = developmentYield * medianPrice;
 
       // Calculate GST and selling costs
-      const gst = totalGrossRealisationValue * 0.1;
-      const agentsCommission = totalGrossRealisationValue * settings.agentsSalesCommission;
-      const legalFees = totalGrossRealisationValue * settings.legalFeesOnSales;
-      const marketingCosts = totalGrossRealisationValue * settings.marketingCosts;
-      const netRealisation = totalGrossRealisationValue - gst - agentsCommission - legalFees - marketingCosts;
+      const gst = totalGrossRealisation * 0.1;
+      const agentsCommission = totalGrossRealisation * settings.agentsSalesCommission;
+      const legalFees = totalGrossRealisation * settings.legalFeesOnSales;
+      const marketingCosts = totalGrossRealisation * settings.marketingCosts;
+      const netRealisation = totalGrossRealisation - gst - agentsCommission - legalFees - marketingCosts;
 
       // Calculate profit and risk
       const profitAndRisk = netRealisation * settings.profitAndRisk;
@@ -206,7 +239,9 @@ export async function addFeasibilitySlide(pptx, properties, userSettings = {}) {
       const gfaRow = [
         'Gross Floor Area (GFA)',
         `${Math.round(gfa).toLocaleString()} m²`,
-        `Min of: FSR method based on FSR ${fsr}:1 (${Math.round(developableArea).toLocaleString()} m² × ${fsr} = ${Math.round(gfaUnderFsr).toLocaleString()} m²) or HOB method based on HOB ${hob}m (${Math.floor(hob / settings.floorToFloorHeight)} storeys × ${formatPercentage(settings.siteEfficiencyRatio)} site coverage × ${formatPercentage(settings.gbaToGfaRatio)} efficiency = ${Math.round(gfaUnderHob).toLocaleString()} m²)`
+        !hob 
+          ? `FSR ${fsr}:1 (${Math.round(developableArea).toLocaleString()} m² × ${fsr} = ${Math.round(gfaUnderFsr).toLocaleString()} m²)`
+          : `Min of: FSR ${fsr}:1 (${Math.round(developableArea).toLocaleString()} m² × ${fsr} = ${Math.round(gfaUnderFsr).toLocaleString()} m²) or HOB ${hob}m (${Math.floor(hob / settings.floorToFloorHeight)} storeys × ${formatPercentage(settings.siteEfficiencyRatio)} site coverage × ${formatPercentage(settings.gbaToGfaRatio)} efficiency = ${Math.round(gfaUnderHob).toLocaleString()} m²)`
       ];
 
       // Create table rows with calculations
@@ -224,7 +259,7 @@ export async function addFeasibilitySlide(pptx, properties, userSettings = {}) {
         ['Development Yield', `${developmentYield} units`, 'Total NSA ÷ Average Unit Size'],
         // Sales section
         [{ text: 'Sales Analysis', options: { fill: 'E6F3FF', bold: true, colspan: 3 } }],
-        ['Median Unit Price', formatCurrency(medianPrice), 'Median of recent comparable sales'],
+        ['Median Unit Price', formatCurrency(medianPrice), priceSource],
         ['Total Gross Realisation', formatCurrency(totalGrossRealisation), 'Development Yield × Median Unit Price'],
         // GST and Selling Costs section
         [{ text: 'GST and Selling Costs', options: { fill: 'E6F3FF', bold: true, colspan: 3 } }],
@@ -258,7 +293,7 @@ export async function addFeasibilitySlide(pptx, properties, userSettings = {}) {
         ...convertCmValues({
           x: '5%',
           y: '18%',
-          w: '90%',
+          w: '85%',
           h: '74%'
         }),
         colW: [3.5, 3, 4],
@@ -280,7 +315,7 @@ export async function addFeasibilitySlide(pptx, properties, userSettings = {}) {
       slide.addText([
         { text: properties.site__address, options: { color: styles.title.color } },
         { text: ' ', options: { breakLine: true } },
-        { text: 'Development Feasibility', options: { color: styles.subtitle.color } }
+        { text: `Development Feasibility - ${densityType}`, options: { color: styles.subtitle.color } }
       ], convertCmValues({
         ...styles.title,
         color: undefined
@@ -302,7 +337,7 @@ export async function addFeasibilitySlide(pptx, properties, userSettings = {}) {
       slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.footerLine));
 
       // Add source attribution
-      slide.addText('Source: getsoldprice.com.au, NSW Planning Portal (Construction Certificate API)', convertCmValues({
+      slide.addText(`Source: getsoldprice.com.au (${priceSource}), NSW Planning Portal (Construction Certificate API)`, convertCmValues({
         x: '5%',
         y: '91%',
         w: '90%',
@@ -316,187 +351,13 @@ export async function addFeasibilitySlide(pptx, properties, userSettings = {}) {
       // Add footer text
       slide.addText('Property and Development NSW', convertCmValues(styles.footer));
       slide.addText('16', convertCmValues(styles.pageNumber));
+    };
 
-      return slide;
-    }
+    // Generate feasibility analysis for both density types
+    generateFeasibilityAnalysis(lowMidDensitySlide, settings.lowMidDensity, 'Low-Mid Density');
+    generateFeasibilityAnalysis(highDensitySlide, settings.highDensity, 'High Density');
 
-    // Calculate median price
-    const prices = salesData.map(item => item.price).sort((a, b) => a - b);
-    const medianPrice = prices[Math.floor(prices.length / 2)];
-    
-    console.log('Median price calculation:', {
-      allPrices: prices,
-      medianPrice,
-      numberOfSales: prices.length
-    });
-
-    // Calculate total gross realisation
-    const totalGrossRealisation = developmentYield * medianPrice;
-
-    console.log('Gross realisation calculation:', {
-      developmentYield,
-      medianPrice,
-      totalGrossRealisation
-    });
-
-    // Calculate GST and selling costs
-    const gst = totalGrossRealisation * 0.1;
-    const agentsCommission = totalGrossRealisation * settings.agentsSalesCommission;
-    const legalFees = totalGrossRealisation * settings.legalFeesOnSales;
-    const marketingCosts = totalGrossRealisation * settings.marketingCosts;
-    const netRealisation = totalGrossRealisation - gst - agentsCommission - legalFees - marketingCosts;
-
-    // Calculate profit and risk
-    const profitAndRisk = netRealisation * settings.profitAndRisk;
-    const netRealisationAfterProfitAndRisk = netRealisation - profitAndRisk;
-
-    // Initialize construction cost variables
-    let constructionCostPerGfa = 3500; // Default fallback value if no data
-    let constructionCosts = 0;
-    let daApplicationFees = settings.daApplicationFees;
-    let professionalFees = 0;
-    let totalDevelopmentCosts = 0;
-
-    try {
-      // Get construction cost data from properties (already fetched in permissibility slide)
-      if (properties.constructionCertificates && Array.isArray(properties.constructionCertificates) && properties.constructionCertificates.length > 0) {
-        const latestCertificate = properties.constructionCertificates[0]; // Get the most recent certificate
-        if (latestCertificate.Cost && latestCertificate.GFA && latestCertificate.GFA > 0) {
-          constructionCostPerGfa = latestCertificate.Cost / latestCertificate.GFA;
-        }
-      }
-    } catch (error) {
-      console.error('Failed to get construction costs from properties, using default value:', error);
-    }
-
-    // Calculate development costs using either fetched or default construction cost
-    constructionCosts = constructionCostPerGfa * gfa;
-    professionalFees = constructionCosts * settings.professionalFees;
-    totalDevelopmentCosts = constructionCosts + daApplicationFees + professionalFees;
-
-    // Calculate finance costs
-    const monthlyInterestRate = settings.interestRate / 12;
-    const financeCosts = monthlyInterestRate * (settings.projectPeriod / 2) * totalDevelopmentCosts;
-
-    // Calculate residual land value
-    const residualLandValue = netRealisationAfterProfitAndRisk - totalDevelopmentCosts - financeCosts;
-
-    // Create the GFA row first
-    const gfaRow = [
-      'Gross Floor Area (GFA)',
-      `${Math.round(gfa).toLocaleString()} m²`,
-      `Min of: FSR ${fsr}:1 (${Math.round(developableArea).toLocaleString()} m² × ${fsr} = ${Math.round(gfaUnderFsr).toLocaleString()} m²) or HOB ${hob}m (${Math.floor(hob / settings.floorToFloorHeight)} storeys × ${formatPercentage(settings.siteEfficiencyRatio)} site coverage × ${formatPercentage(settings.gbaToGfaRatio)} efficiency = ${Math.round(gfaUnderHob).toLocaleString()} m²)`
-    ];
-
-    // Create table rows with calculations
-    const tableRows = [
-      // Headers with dark blue background
-      [
-        { text: 'Metrics', options: { fill: '002664', color: 'FFFFFF', bold: true } },
-        { text: 'Values', options: { fill: '002664', color: 'FFFFFF', bold: true } },
-        { text: 'Calculation Method', options: { fill: '002664', color: 'FFFFFF', bold: true } }
-      ],
-      // Development Metrics
-      [{ text: 'Development Metrics', options: { fill: 'E6F3FF', bold: true, colspan: 3 } }],
-      ['Site Coverage', `${Math.round(siteCoverage).toLocaleString()} m²`, `${formatPercentage(settings.siteEfficiencyRatio)} of Developable Area (${Math.round(developableArea).toLocaleString()} m²)`],
-      gfaRow,
-      ['Development Yield', `${developmentYield} units`, 'Total NSA ÷ Average Unit Size'],
-      // Sales section
-      [{ text: 'Sales Analysis', options: { fill: 'E6F3FF', bold: true, colspan: 3 } }],
-      ['Median Unit Price', formatCurrency(medianPrice), 'Median of recent comparable sales'],
-      ['Total Gross Realisation', formatCurrency(totalGrossRealisation), 'Development Yield × Median Unit Price'],
-      // GST and Selling Costs section
-      [{ text: 'GST and Selling Costs', options: { fill: 'E6F3FF', bold: true, colspan: 3 } }],
-      ['GST (10%)', formatCurrency(gst), 'Total Gross Realisation × 10%'],
-      ['Agent\'s Commission', formatCurrency(agentsCommission), `Total Gross Realisation × ${formatPercentage(settings.agentsSalesCommission)}`],
-      ['Legal Fees', formatCurrency(legalFees), `Total Gross Realisation × ${formatPercentage(settings.legalFeesOnSales)}`],
-      ['Marketing Costs', formatCurrency(marketingCosts), `Total Gross Realisation × ${formatPercentage(settings.marketingCosts)}`],
-      ['Net Realisation', formatCurrency(netRealisation), 'Total Gross Realisation - GST - Commission - Legal - Marketing'],
-      // Profit and Risk section
-      [{ text: 'Profit and Risk', options: { fill: 'E6F3FF', bold: true, colspan: 3 } }],
-      ['Profit Margin', formatCurrency(profitAndRisk), `Net Realisation × ${formatPercentage(settings.profitAndRisk)}`],
-      ['Net Realisation after Profit', formatCurrency(netRealisationAfterProfitAndRisk), 'Net Realisation - Profit Margin'],
-      // Development Costs section
-      [{ text: 'Development Costs', options: { fill: 'E6F3FF', bold: true, colspan: 3 } }],
-      ['Construction Cost (per m² GFA)', formatCurrency(constructionCostPerGfa), 'Based on recent construction certificates'],
-      ['Total Construction Costs', formatCurrency(constructionCosts), 'Construction Cost per m² × Total GFA'],
-      ['DA Application Fees', formatCurrency(daApplicationFees), 'Fixed cost'],
-      ['Professional Fees', formatCurrency(professionalFees), `Construction Costs × ${formatPercentage(settings.professionalFees)}`],
-      ['Total Development Costs', formatCurrency(totalDevelopmentCosts), 'Construction + DA + Professional Fees'],
-      // Finance Costs section
-      [{ text: 'Finance Costs', options: { fill: 'E6F3FF', bold: true, colspan: 3 } }],
-      ['Interest Rate', formatPercentage(settings.interestRate), 'Annual rate'],
-      ['Finance Costs', formatCurrency(financeCosts), 'Interest Rate × (Project Period ÷ 2) × Total Development Costs'],
-      // Residual Land Value
-      [{ text: 'Residual Land Value', options: { fill: 'E6F3FF', bold: true, colspan: 3 } }],
-      ['Residual Land Value', formatCurrency(residualLandValue), 'Net Realisation after Profit - Total Development Costs - Finance Costs']
-    ];
-
-    // Add the table to the slide with improved formatting
-    slide.addTable(tableRows, {
-      ...convertCmValues({
-        x: '5%',
-        y: '18%',
-        w: '85%',
-        h: '74%'
-      }),
-      colW: [3.5, 3, 4],
-      fontSize: 5,
-      fontFace: 'Public Sans',
-      border: { 
-        type: 'solid',
-        pt: 0.25,
-        color: 'CCCCCC'
-      },
-      align: 'left',
-      valign: 'middle',
-      margin: 0.05,
-      rowH: 0.05,
-      autoPage: false
-    });
-
-    // Add title
-    slide.addText([
-      { text: properties.site__address, options: { color: styles.title.color } },
-      { text: ' ', options: { breakLine: true } },
-      { text: 'Development Feasibility', options: { color: styles.subtitle.color } }
-    ], convertCmValues({
-      ...styles.title,
-      color: undefined
-    }));
-
-    // Add horizontal line under title
-    slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.titleLine));
-
-    // Add sensitive text
-    slide.addText("SENSITIVE: NSW GOVERNMENT", convertCmValues(styles.sensitiveText));
-
-    // Add NSW Logo
-    slide.addImage({
-      path: "/images/NSW-Government-official-logo.jpg",
-      ...convertCmValues(styles.nswLogo)
-    });
-
-    // Add footer line
-    slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.footerLine));
-
-    // Add source attribution
-    slide.addText('Source: getsoldprice.com.au, NSW Planning Portal (Construction Certificate API)', convertCmValues({
-      x: '5%',
-      y: '91%',
-      w: '90%',
-      h: '2%',
-      fontSize: 7,
-      color: '666666',
-      fontFace: 'Public Sans',
-      align: 'left'
-    }));
-
-    // Add footer text
-    slide.addText('Property and Development NSW', convertCmValues(styles.footer));
-    slide.addText('16', convertCmValues(styles.pageNumber));
-
-    return slide;
+    return [lowMidDensitySlide, highDensitySlide];
   } catch (error) {
     console.error('Error generating feasibility slide:', error);
     if (!slide) {
@@ -511,7 +372,7 @@ export async function addFeasibilitySlide(pptx, properties, userSettings = {}) {
       color: 'FF0000',
       align: 'center'
     });
-    return slide;
+    return [slide];
   }
 }
 
