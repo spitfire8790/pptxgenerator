@@ -428,12 +428,7 @@ export async function addDevelopmentSlide(pptx, properties) {
 
     // Construction Certificates Text
     const ccText = ccMapResult 
-      ? `There are ${ccMapResult.totalCount} residential construction certificates in ${properties.site_suitability__LGA} with a total value of ${new Intl.NumberFormat('en-AU', {
-          style: 'currency',
-          currency: 'AUD',
-          minimumFractionDigits: 0,
-          maximumFractionDigits: 0
-        }).format(ccMapResult.totalCost)}. The most common type is ${
+      ? `Over the last two years there have been ${ccMapResult.totalCount} residential construction certificates in ${properties.site_suitability__LGA} with a total value of $${Math.round(ccMapResult.totalCost / 1000000).toLocaleString()} million. The most common type is ${
           ccMapResult.typeStats.sort((a, b) => b.count - a.count)[0]?.type || 'unknown'
         }.`
       : 'No construction certificates found.';
@@ -455,7 +450,7 @@ export async function addDevelopmentSlide(pptx, properties) {
     slide.addText('Source: NSW Construction Certificate API. Filtered for cost >$500k and lodged within last 2 years.', convertCmValues({
       x: '50%',
       y: '88%',
-      w: '50%',
+      w: '45%',
       h: '4%',
       fontSize: 5,
       color: '363636',
