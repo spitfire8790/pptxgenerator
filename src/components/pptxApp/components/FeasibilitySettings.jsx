@@ -202,7 +202,13 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
     const gfaUnderFsr = developableArea * fsr;
 
     // Calculate GFA under HOB
-    const maxStoreys = Math.floor(hob / settings[density].floorToFloorHeight);
+    let maxStoreys = Math.floor(hob / settings[density].floorToFloorHeight);
+    
+    // Limit Low-Mid Density to maximum 3 storeys
+    if (density === 'lowMidDensity' && maxStoreys > 3) {
+      maxStoreys = 3;
+    }
+    
     const siteCoverage = developableArea * settings[density].siteEfficiencyRatio;
     const gfaUnderHob = siteCoverage * maxStoreys * settings[density].gbaToGfaRatio;
 
@@ -433,6 +439,12 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
                   <span className="ml-2">{selectedFeature?.properties?.copiedFrom?.site_suitability__height_of_building ? `${selectedFeature.properties.copiedFrom.site_suitability__height_of_building}m` : 'N/A'}</span>
                 </div>
               </div>
+              <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded-md text-sm">
+                <div className="flex items-center text-yellow-700">
+                  <Info className="mr-2" size={16} />
+                  <span><strong>Note:</strong> Low-Mid Density calculations are limited to a maximum of 3 storeys.</span>
+                </div>
+              </div>
             </div>
           )}
 
@@ -606,14 +618,22 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
           
           {/* Low-Mid Density Calculation */}
           {activeCalcTab === 'lowMidDensity' && (
-            <FeasibilityCalculation 
-              settings={settings} 
-              density="lowMidDensity" 
-              selectedFeature={selectedFeature}
-              salesData={salesData}
-              constructionData={constructionData}
-              housingScenarios={housingScenarios}
-            />
+            <>
+              <div className="mb-3 p-2 bg-yellow-50 border border-yellow-200 rounded-md text-sm">
+                <div className="flex items-center text-yellow-700">
+                  <Info className="mr-2" size={16} />
+                  <span><strong>Note:</strong> Low-Mid Density calculations are limited to a maximum of 3 storeys.</span>
+                </div>
+              </div>
+              <FeasibilityCalculation 
+                settings={settings} 
+                density="lowMidDensity" 
+                selectedFeature={selectedFeature}
+                salesData={salesData}
+                constructionData={constructionData}
+                housingScenarios={housingScenarios}
+              />
+            </>
           )}
           
           {/* High Density Calculation */}
