@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Ruler,
   Building2,
@@ -18,15 +18,116 @@ import {
   Calculator,
   HardHat,
   DollarSign,
-  Info
+  Info,
+  RefreshCw,
+  TrendingUp,
+  Settings2,
+  Landmark,
+  Map
 } from 'lucide-react';
+import FeasibilityCalculation from './FeasibilityCalculation';
 
-const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructionData, selectedFeature }) => {
+const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructionData, selectedFeature, onShowMedianPrices }) => {
   // Define property type descriptions
   const densityDescriptions = {
     lowMidDensity: "Includes: Dual OccupancyDuplex/Semi-detached, House, Manor House, Terrace, Townhouse, Villa",
     highDensity: "Includes: Apartment, Build-to-Rent, Shop Top Housing, Studio, Unit"
   };
+
+  // Track if dwelling price has been customized
+  const [customDwellingPrice, setCustomDwellingPrice] = useState({
+    lowMidDensity: false,
+    highDensity: false
+  });
+
+  // Store calculated median prices
+  const [medianPrices, setMedianPrices] = useState({
+    lowMidDensity: null,
+    highDensity: null
+  });
+
+  // Add state for active tab
+  const [activeTab, setActiveTab] = useState('settings');
+  
+  // Add state for active calculation sub-tab
+  const [activeCalcTab, setActiveCalcTab] = useState('lowMidDensity');
+  
+  // Add state for social and affordable housing scenarios
+  const [housingScenarios, setHousingScenarios] = useState({
+    socialPercentage: 30,
+    affordablePercentage: 30,
+    mixedSocialPercentage: 15,
+    mixedAffordablePercentage: 15
+  });
+
+  // Update median prices when sales data changes
+  useEffect(() => {
+    if (salesData) {
+      const lowMidValues = calculateDerivedValues('lowMidDensity');
+      const highValues = calculateDerivedValues('highDensity');
+      
+      setMedianPrices({
+        lowMidDensity: lowMidValues.dwellingPrice,
+        highDensity: highValues.dwellingPrice
+      });
+    }
+  }, [salesData]);
+
+  // Initialize dwelling price in settings if it doesn't exist
+  useEffect(() => {
+    if (salesData && (!settings.lowMidDensity.dwellingPrice || !settings.highDensity.dwellingPrice)) {
+      const lowMidValues = calculateDerivedValues('lowMidDensity');
+      const highValues = calculateDerivedValues('highDensity');
+      
+      if (lowMidValues.dwellingPrice && !settings.lowMidDensity.dwellingPrice) {
+        onSettingChange('dwellingPrice', lowMidValues.dwellingPrice, 'lowMidDensity');
+      }
+      
+      if (highValues.dwellingPrice && !settings.highDensity.dwellingPrice) {
+        onSettingChange('dwellingPrice', highValues.dwellingPrice, 'highDensity');
+      }
+    }
+  }, [salesData]);
+
+  // Set default values for Building Footprint if not already set
+  useEffect(() => {
+    // Check if siteEfficiencyRatio needs to be updated to the new default values
+    if (settings.lowMidDensity.siteEfficiencyRatio !== 0.6) {
+      onSettingChange('siteEfficiencyRatio', 0.6, 'lowMidDensity');
+    }
+    
+    if (settings.highDensity.siteEfficiencyRatio !== 0.4) {
+      onSettingChange('siteEfficiencyRatio', 0.4, 'highDensity');
+    }
+
+    // Set floor to floor height to 3.1m for both density types
+    if (settings.lowMidDensity.floorToFloorHeight !== 3.1) {
+      onSettingChange('floorToFloorHeight', 3.1, 'lowMidDensity');
+    }
+    
+    if (settings.highDensity.floorToFloorHeight !== 3.1) {
+      onSettingChange('floorToFloorHeight', 3.1, 'highDensity');
+    }
+
+    // Set GBA to GFA ratio for Low-Mid Density to 90%
+    if (settings.lowMidDensity.gbaToGfaRatio !== 0.9) {
+      onSettingChange('gbaToGfaRatio', 0.9, 'lowMidDensity');
+    }
+
+    // Set Development Contribution to 1% of Construction Costs if not already set
+    if (settings.lowMidDensity.developmentContribution !== 0.01) {
+      onSettingChange('developmentContribution', 0.01, 'lowMidDensity');
+    }
+    
+    if (settings.highDensity.developmentContribution !== 0.01) {
+      onSettingChange('developmentContribution', 0.01, 'highDensity');
+    }
+
+    // Set default project period for Low-Mid Density to 24 months
+    if (settings.lowMidDensity.projectPeriod !== 24) {
+      onSettingChange('projectPeriod', 24, 'lowMidDensity');
+    }
+  }, []);
 
   const handleChange = (setting, density) => (event) => {
     let value = event.target.value;
@@ -44,7 +145,26 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
       value = parseFloat(value);
     }
 
+    // Track if dwelling price is being customized
+    if (setting === 'dwellingPrice') {
+      setCustomDwellingPrice(prev => ({
+        ...prev,
+        [density]: true
+      }));
+    }
+
     onSettingChange(setting, value, density);
+  };
+
+  // Function to revert dwelling price to median calculation
+  const handleRevertPrice = (density) => {
+    if (medianPrices[density]) {
+      onSettingChange('dwellingPrice', medianPrices[density], density);
+      setCustomDwellingPrice(prev => ({
+        ...prev,
+        [density]: false
+      }));
+    }
   };
 
   const formatValue = (setting, value) => {
@@ -55,6 +175,9 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
         setting === 'constructionCostM2' ||
         setting === 'pricePerM2') {
       return value.toLocaleString('en-AU');
+    }
+    if (setting === 'developmentContribution') {
+      return (value * 100).toFixed(0);
     }
     if (setting.endsWith('Ratio') || 
         setting === 'agentsSalesCommission' || 
@@ -86,36 +209,8 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
     // Use FSR value if no HoB exists, otherwise use the lower of the two
     const gfa = !hob ? gfaUnderFsr : Math.min(gfaUnderFsr, gfaUnderHob);
 
-    // Get median GFA from construction data
-    const relevantTypes = density === 'lowMidDensity' 
-      ? ['Dwelling', 'Dwelling house', 'Dual occupancy', 'Dual occupancy (attached)', 'Dual occupancy (detached)', 'Manor house']
-      : ['Apartment', 'Build-to-rent', 'Shop Top Housing', 'Studio', 'Unit'];
-
-    console.log('Construction Data:', constructionData);
-    console.log('Relevant Types for', density, ':', relevantTypes);
-
-    // Get all GFA values for the relevant density category
-    const filteredApplications = constructionData?.Application
-      ?.filter(cc => 
-        cc.DevelopmentType?.some(type => relevantTypes.includes(type.DevelopmentType)) &&
-        cc.ProposedGrossFloorArea && 
-        cc.UnitsProposed && 
-        cc.UnitsProposed > 0
-      ) || [];
-
-    console.log('Filtered Applications:', filteredApplications);
-
-    const allGfaValues = filteredApplications
-      .map(cc => cc.ProposedGrossFloorArea / cc.UnitsProposed);
-
-    console.log('GFA per Unit Values:', allGfaValues);
-
-    // Calculate median GFA
-    const dwellingSize = allGfaValues.length > 0
-      ? allGfaValues.sort((a, b) => a - b)[Math.floor(allGfaValues.length / 2)]
-      : 0;
-
-    console.log('Calculated Median Dwelling Size:', dwellingSize);
+    // Get median dwelling size from construction data
+    const dwellingSize = constructionData?.dwellingSizes?.[density] || 0;
 
     // Filter sales data by property type based on density
     const LOW_MID_DENSITY_TYPES = ['duplex/semi-detached', 'duplex-semi-detached', 'house', 'terrace', 'townhouse', 'villa'];
@@ -124,7 +219,15 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
     const relevantSales = salesData?.filter(sale => {
       const propertyType = sale.property_type?.toLowerCase().trim();
       const propertyTypes = density === 'lowMidDensity' ? LOW_MID_DENSITY_TYPES : HIGH_DENSITY_TYPES;
-      return propertyTypes.some(type => propertyType?.includes(type));
+      
+      // Check if property type matches
+      const typeMatches = propertyTypes.some(type => propertyType?.includes(type));
+      
+      // Exclude properties with more than 4 bedrooms
+      const bedroomCount = sale.bedrooms ? parseInt(sale.bedrooms, 10) : null;
+      const validBedrooms = bedroomCount === null || bedroomCount <= 4;
+      
+      return typeMatches && validBedrooms;
     }) || [];
 
     // Get median price from filtered sales data
@@ -135,10 +238,15 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
     // Get construction cost from construction data
     const constructionCostM2 = constructionData[density === 'lowMidDensity' ? 'lowMidDensity' : 'highDensity'];
 
+    // Use custom dwelling price if set, otherwise use median price
+    const dwellingPrice = customDwellingPrice[density] 
+      ? settings[density].dwellingPrice 
+      : medianPrice;
+
     return {
       dwellingSize: Math.round(dwellingSize),
-      dwellingPrice: medianPrice,
-      pricePerM2: medianPrice && dwellingSize ? Math.round(medianPrice / dwellingSize) : null,
+      dwellingPrice: dwellingPrice,
+      pricePerM2: dwellingPrice && dwellingSize ? Math.round(dwellingPrice / dwellingSize) : null,
       constructionCostM2: Math.round(constructionCostM2)
     };
   };
@@ -146,11 +254,10 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
   const settingsConfig = [
     // Development Metrics section
     { id: 'section-development', label: 'Development Metrics', isSection: true },
-    { id: 'siteEfficiencyRatio', label: 'Site Efficiency Ratio', unit: '%', icon: Building2 },
+    { id: 'siteEfficiencyRatio', label: 'Building Footprint', unit: '%', icon: Building2 },
     { id: 'floorToFloorHeight', label: 'Floor to Floor Height', unit: 'm', icon: Ruler },
     { id: 'gbaToGfaRatio', label: 'GBA to GFA Ratio', unit: '%', icon: Maximize2 },
     { id: 'gfaToNsaRatio', label: 'GFA to NSA Ratio', unit: '%', icon: Home },
-    { id: 'unitSize', label: 'Dwelling Size (GFA)', unit: 'm²', icon: Users },
 
     // Construction Metrics section
     { id: 'section-construction', label: 'Construction Metrics', isSection: true },
@@ -165,8 +272,16 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
 
     // Dwelling Metrics section
     { id: 'section-dwelling', label: 'Dwelling Metrics', isSection: true },
-    { id: 'dwellingSize', label: 'Dwelling Size (GFA)', unit: 'm²', icon: SquareStack, isCalculated: true },
-    { id: 'dwellingPrice', label: 'Dwelling Price', unit: '$', icon: Building, isCalculated: true },
+    { 
+      id: 'dwellingPrice', 
+      label: 'Dwelling Price', 
+      unit: '$', 
+      icon: Building, 
+      isEditable: true,
+      hasRevert: true,
+      tooltip: 'Revert to median price from sales data',
+      showSalesButton: true
+    },
     { id: 'pricePerM2', label: 'Price per m² GFA', unit: '$/m²', icon: DollarSign, isCalculated: true },
 
     // Financial Metrics section
@@ -176,122 +291,342 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
     { id: 'marketingCosts', label: 'Marketing Costs', unit: '%', icon: Target },
     { id: 'profitAndRisk', label: 'Profit and Risk', unit: '%', icon: Briefcase },
     { id: 'daApplicationFees', label: 'DA Application Fees', unit: '$', icon: FileSpreadsheet },
+    { id: 'developmentContribution', label: 'Development Contribution', unit: '%', icon: Target },
     { id: 'professionalFees', label: 'Professional Fees', unit: '%', icon: GraduationCap },
     { id: 'interestRate', label: 'Interest Rate', unit: '%', icon: Percent },
     { id: 'projectPeriod', label: 'Project Period', unit: 'months', icon: Clock }
   ];
 
   const renderInput = (setting, density) => {
-    if (setting.isCalculated) {
+    // Handle dwelling price with revert option
+    if (setting.id === 'dwellingPrice') {
       const derivedValues = calculateDerivedValues(density);
+      const displayValue = customDwellingPrice[density] 
+        ? settings[density][setting.id] 
+        : derivedValues[setting.id];
+      
       return (
-        <div className="text-gray-500 text-center w-full">
-          {formatValue(setting.id, derivedValues[setting.id])}
+        <div className="flex items-center justify-center space-x-2">
+          <div className="flex items-center space-x-1">
+            <div className="relative w-32">
+              <input
+                type="text"
+                value={displayValue ? formatValue(setting.id, displayValue) : ''}
+                onChange={handleChange(setting.id, density)}
+                className="w-full px-2 py-1 border rounded text-right"
+              />
+              {setting.hasRevert && customDwellingPrice[density] && (
+                <button
+                  onClick={() => handleRevertPrice(density)}
+                  className="absolute right-2 top-1/2 transform -translate-y-1/2 text-blue-500 hover:text-blue-700"
+                  title={setting.tooltip}
+                >
+                  <RefreshCw size={14} />
+                </button>
+              )}
+            </div>
+            <span className="text-gray-500">{setting.unit}</span>
+          </div>
+          {setting.showSalesButton && (
+            <button
+              onClick={onShowMedianPrices}
+              className="text-blue-500 hover:text-blue-700 ml-2"
+              title="View sales data"
+            >
+              <Info size={16} />
+            </button>
+          )}
         </div>
       );
     }
-
+    
+    // Handle calculated values (read-only)
+    if (setting.isCalculated) {
+      const derivedValues = calculateDerivedValues(density);
+      const displayValue = derivedValues[setting.id];
+      
+      return (
+        <div className="flex items-center justify-center space-x-1">
+          <span className="w-32 text-right">{displayValue ? formatValue(setting.id, displayValue) : 'N/A'}</span>
+          <span className="text-gray-500">{setting.unit}</span>
+          {setting.description && (
+            <span className="text-xs text-gray-500 ml-2">{setting.description(density)}</span>
+          )}
+        </div>
+      );
+    }
+    
+    // Handle regular inputs
     return (
-      <div className="relative w-32 mx-auto">
+      <div className="flex items-center justify-center space-x-1">
         <input
           type="text"
           value={formatValue(setting.id, settings[density][setting.id])}
           onChange={handleChange(setting.id, density)}
-          className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm text-center"
-          step={setting.unit === '%' ? '0.1' : '1'}
-          min="0"
-          max={setting.unit === '%' ? '100' : undefined}
+          className="w-32 px-2 py-1 border rounded text-right"
         />
+        <span className="text-gray-500">{setting.unit}</span>
       </div>
     );
   };
 
+  // Function to handle tab switching
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+  };
+
+  // Function to handle calculation sub-tab switching
+  const handleCalcTabChange = (tab) => {
+    setActiveCalcTab(tab);
+  };
+
+  // Function to handle housing scenario changes
+  const handleHousingScenarioChange = (scenario) => (event) => {
+    const value = parseInt(event.target.value, 10);
+    setHousingScenarios(prev => ({
+      ...prev,
+      [scenario]: value
+    }));
+  };
+
   return (
-    <div className="bg-white rounded-lg p-6">
-      <h3 className="text-lg font-medium text-gray-900 mb-6">
-        Feasibility Settings
-      </h3>
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead>
-            <tr>
-              <th className="px-4 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">Assumption</th>
-              <th className="px-4 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[100px]">Unit</th>
-              <th className="px-2 py-3 bg-gray-50 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-[140px]">
-                <div className="relative group cursor-help">
-                  Low-Mid Density
-                  <div className="absolute z-10 invisible group-hover:visible bg-gray-900 text-white text-xs rounded p-2 w-48 left-1/2 -translate-x-1/2 top-6">
-                    {densityDescriptions.lowMidDensity}
-                    <div className="absolute w-2 h-2 bg-gray-900 transform rotate-45 -top-1 left-1/2 -translate-x-1"></div>
-                  </div>
+    <div className="p-4">
+      {/* Tab Navigation */}
+      <div className="flex border-b mb-4">
+        <button
+          className={`flex items-center px-4 py-2 font-medium ${activeTab === 'settings' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-blue-500'}`}
+          onClick={() => handleTabChange('settings')}
+        >
+          <Settings2 className="mr-2" size={16} /> Settings
+        </button>
+        <button
+          className={`flex items-center px-4 py-2 font-medium ${activeTab === 'calculation' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-blue-500'}`}
+          onClick={() => handleTabChange('calculation')}
+        >
+          <Calculator className="mr-2" size={16} /> Calculation
+        </button>
+      </div>
+
+      {/* Settings Tab Content */}
+      {activeTab === 'settings' && (
+        <div className="bg-white rounded-lg shadow p-4">
+          {/* Property Information Section */}
+          {selectedFeature && (
+            <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+              <h3 className="text-lg font-bold mb-2 flex items-center">
+                <Map className="mr-2" size={18} /> Property Information
+              </h3>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="flex items-center">
+                  <Landmark className="mr-2" size={16} />
+                  <span className="font-medium">Zone:</span>
+                  <span className="ml-2">{selectedFeature?.properties?.copiedFrom?.site_suitability__zone || 'R2'}</span>
                 </div>
-              </th>
-              <th className="px-2 py-3 bg-gray-50 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-[140px]">
-                <div className="relative group cursor-help">
-                  High Density
-                  <div className="absolute z-10 invisible group-hover:visible bg-gray-900 text-white text-xs rounded p-2 w-48 left-1/2 -translate-x-1/2 top-6">
-                    {densityDescriptions.highDensity}
-                    <div className="absolute w-2 h-2 bg-gray-900 transform rotate-45 -top-1 left-1/2 -translate-x-1"></div>
-                  </div>
+                <div className="flex items-center">
+                  <Building2 className="mr-2" size={16} />
+                  <span className="font-medium">FSR:</span>
+                  <span className="ml-2">{selectedFeature?.properties?.copiedFrom?.site_suitability__floorspace_ratio || 'N/A'}</span>
                 </div>
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {settingsConfig.map((setting) => {
-              if (setting.isSection) {
-                return (
-                  <tr key={setting.id}>
-                    <td colSpan="4" className="px-4 py-2 bg-gray-50">
-                      <div className="font-medium text-gray-900">{setting.label}</div>
+                <div className="flex items-center">
+                  <Ruler className="mr-2" size={16} />
+                  <span className="font-medium">HOB:</span>
+                  <span className="ml-2">{selectedFeature?.properties?.copiedFrom?.site_suitability__height_of_building ? `${selectedFeature.properties.copiedFrom.site_suitability__height_of_building}m` : 'N/A'}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <table className="w-full">
+            <thead>
+              <tr>
+                <th className="w-1/3 text-left py-2">Setting</th>
+                <th className="w-1/3 text-center py-2">
+                  <div className="flex justify-center items-center">
+                    <span title={densityDescriptions.lowMidDensity} className="cursor-help">
+                      Low-Mid Density
+                    </span>
+                  </div>
+                </th>
+                <th className="w-1/3 text-center py-2">
+                  <div className="flex justify-center items-center">
+                    <span title={densityDescriptions.highDensity} className="cursor-help">
+                      High Density
+                    </span>
+                  </div>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {settingsConfig.map((setting, index) => (
+                setting.isSection ? (
+                  <tr key={setting.id} className="bg-blue-50">
+                    <td colSpan="3" className="py-2 px-4 font-bold text-blue-900">
+                      {setting.label}
                     </td>
                   </tr>
-                );
-              }
+                ) : (
+                  <tr key={setting.id} className="border-t border-gray-100">
+                    <td className="py-2 px-4">
+                      <div className="flex items-center">
+                        {setting.icon && <setting.icon className="mr-2" size={16} />}
+                        <span>{setting.label}</span>
+                      </div>
+                    </td>
+                    <td className="py-2 px-4 text-center">
+                      {renderInput(setting, 'lowMidDensity')}
+                    </td>
+                    <td className="py-2 px-4 text-center">
+                      {renderInput(setting, 'highDensity')}
+                    </td>
+                  </tr>
+                )
+              ))}
+            </tbody>
+          </table>
 
-              const Icon = setting.icon;
-              return (
-                <tr key={setting.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-2">
-                    <div className="flex items-center gap-2">
-                      <Icon className="w-4 h-4 text-gray-500" />
-                      <span>{setting.label}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-2 text-gray-500">{setting.unit}</td>
-                  <td className="px-4 py-2 text-center">
-                    {setting.id === 'constructionCostM2' && constructionData.loading ? (
-                      <div className="flex items-center justify-center space-x-2">
-                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div>
-                        <span className="text-gray-500">Loading...</span>
-                      </div>
-                    ) : (
-                      <div className="flex justify-center">
-                        {renderInput(setting, 'lowMidDensity')}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-2 text-center">
-                    {setting.id === 'constructionCostM2' && constructionData.loading ? (
-                      <div className="flex items-center justify-center space-x-2">
-                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div>
-                        <span className="text-gray-500">Loading...</span>
-                      </div>
-                    ) : (
-                      <div className="flex justify-center">
-                        {renderInput(setting, 'highDensity')}
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      {constructionData.error && (
-        <div className="mt-4 p-3 bg-red-50 text-red-700 rounded-md">
-          {constructionData.error}
+          {/* Social/Affordable Housing Scenarios - Moved to bottom */}
+          <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+            <h3 className="text-lg font-bold mb-2 flex items-center">
+              <Home className="mr-2" size={18} /> Social/Affordable Housing Scenarios
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block mb-1 font-medium">Social Housing Percentage:</label>
+                <div className="flex items-center">
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={housingScenarios.socialPercentage}
+                    onChange={handleHousingScenarioChange('socialPercentage')}
+                    className="w-full mr-2"
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={housingScenarios.socialPercentage}
+                    onChange={handleHousingScenarioChange('socialPercentage')}
+                    className="w-16 px-2 py-1 border rounded text-right"
+                  />
+                  <span className="ml-1">%</span>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Social housing provides 0% revenue</p>
+              </div>
+              <div>
+                <label className="block mb-1 font-medium">Affordable Housing Percentage:</label>
+                <div className="flex items-center">
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={housingScenarios.affordablePercentage}
+                    onChange={handleHousingScenarioChange('affordablePercentage')}
+                    className="w-full mr-2"
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={housingScenarios.affordablePercentage}
+                    onChange={handleHousingScenarioChange('affordablePercentage')}
+                    className="w-16 px-2 py-1 border rounded text-right"
+                  />
+                  <span className="ml-1">%</span>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Affordable housing provides 75% revenue</p>
+              </div>
+              <div>
+                <label className="block mb-1 font-medium">Mixed Scenario - Social Housing:</label>
+                <div className="flex items-center">
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={housingScenarios.mixedSocialPercentage}
+                    onChange={handleHousingScenarioChange('mixedSocialPercentage')}
+                    className="w-full mr-2"
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={housingScenarios.mixedSocialPercentage}
+                    onChange={handleHousingScenarioChange('mixedSocialPercentage')}
+                    className="w-16 px-2 py-1 border rounded text-right"
+                  />
+                  <span className="ml-1">%</span>
+                </div>
+              </div>
+              <div>
+                <label className="block mb-1 font-medium">Mixed Scenario - Affordable Housing:</label>
+                <div className="flex items-center">
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={housingScenarios.mixedAffordablePercentage}
+                    onChange={handleHousingScenarioChange('mixedAffordablePercentage')}
+                    className="w-full mr-2"
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={housingScenarios.mixedAffordablePercentage}
+                    onChange={handleHousingScenarioChange('mixedAffordablePercentage')}
+                    className="w-16 px-2 py-1 border rounded text-right"
+                  />
+                  <span className="ml-1">%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Calculation Tab Content */}
+      {activeTab === 'calculation' && (
+        <div>
+          {/* Calculation Sub-Tabs */}
+          <div className="flex border-b mb-4">
+            <button
+              className={`flex items-center px-4 py-2 font-medium ${activeCalcTab === 'lowMidDensity' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-blue-500'}`}
+              onClick={() => handleCalcTabChange('lowMidDensity')}
+            >
+              <Building2 className="mr-2" size={16} /> Low-Mid Density
+            </button>
+            <button
+              className={`flex items-center px-4 py-2 font-medium ${activeCalcTab === 'highDensity' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-blue-500'}`}
+              onClick={() => handleCalcTabChange('highDensity')}
+            >
+              <Building className="mr-2" size={16} /> High Density
+            </button>
+          </div>
+          
+          {/* Low-Mid Density Calculation */}
+          {activeCalcTab === 'lowMidDensity' && (
+            <FeasibilityCalculation 
+              settings={settings} 
+              density="lowMidDensity" 
+              selectedFeature={selectedFeature}
+              salesData={salesData}
+              constructionData={constructionData}
+              housingScenarios={housingScenarios}
+            />
+          )}
+          
+          {/* High Density Calculation */}
+          {activeCalcTab === 'highDensity' && (
+            <FeasibilityCalculation 
+              settings={settings} 
+              density="highDensity" 
+              selectedFeature={selectedFeature}
+              salesData={salesData}
+              constructionData={constructionData}
+              housingScenarios={housingScenarios}
+            />
+          )}
         </div>
       )}
     </div>

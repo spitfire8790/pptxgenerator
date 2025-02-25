@@ -45,7 +45,6 @@
     "esri-leaflet": "^3.0.14",
     "file-saver": "^2.0.5",
     "framer-motion": "^11.11.10",
-    "html2canvas": "^1.4.1",
     "jszip": "^3.10.1",
     "leaflet": "^1.9.4",
     "lodash-es": "^4.17.21",

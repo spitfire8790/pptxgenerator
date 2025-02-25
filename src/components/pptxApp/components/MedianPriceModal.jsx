@@ -42,7 +42,7 @@ const capitalizeFirstLetter = (string) => {
 const LOW_MID_DENSITY_TYPES = ['duplex/semi-detached', 'duplex-semi-detached', 'house', 'terrace', 'townhouse', 'villa'];
 const HIGH_DENSITY_TYPES = ['apartment', 'studio', 'unit'];
 
-const MedianPriceModal = ({ open, onClose, salesData }) => {
+const MedianPriceModal = ({ open = true, onClose, salesData }) => {
   const [selectedDensity, setSelectedDensity] = useState('all');
   const [selectedPropertyType, setSelectedPropertyType] = useState('all');
   const [sortConfig, setSortConfig] = useState({ key: 'sold_date', direction: 'desc' });
@@ -239,7 +239,14 @@ const MedianPriceModal = ({ open, onClose, salesData }) => {
         <div className="flex-1 overflow-hidden p-4 flex flex-col">
           {medianPrices.length > 0 && (
             <div className="mb-6 flex-shrink-0">
-              <h3 className="text-lg font-medium mb-4">Median Prices by Bedroom Count</h3>
+              <h3 className="text-lg font-medium mb-4">
+                Median Prices by Bedroom Count
+                {processedSalesData.length > 0 && (
+                  <span className="text-sm font-normal text-gray-600 ml-2">
+                    (Median: {processedSalesData.map(s => s.bedrooms).sort((a, b) => a - b)[Math.floor(processedSalesData.length / 2)]} bedrooms, {formatPrice(processedSalesData.map(s => s.price).sort((a, b) => a - b)[Math.floor(processedSalesData.length / 2)])})
+                  </span>
+                )}
+              </h3>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={medianPrices} margin={{ top: 5, right: 30, left: 20, bottom: 35 }}>

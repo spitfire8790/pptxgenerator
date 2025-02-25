@@ -24,14 +24,159 @@ const HIGH_DENSITY_TYPES = [
   'Build-to-rent'
 ];
 
+// Cost thresholds for validation (in AUD)
+const MIN_COST_PER_M2 = 1000; // $1,000 per m²
+const MAX_COST_PER_M2 = 10000; // $10,000 per m²
+const MIN_GFA = 30; // 30m² minimum GFA
+
+// Helper function to check if any of the development types are of the specified density
+const hasMatchingDensityType = (developmentTypes, densityTypes) => {
+  if (!developmentTypes || !Array.isArray(developmentTypes)) return false;
+  return developmentTypes.some(type => densityTypes.includes(type.DevelopmentType));
+};
+
 const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClose, selectedFeature }) => {
   const [showMedianPrices, setShowMedianPrices] = useState(false);
   const [constructionData, setConstructionData] = useState({
     lowMidDensity: null,
     highDensity: null,
+    dwellingSizes: {
+      lowMidDensity: null,
+      highDensity: null
+    },
     loading: true,
     error: null
   });
+
+  const calculateMedianCost = (certificates, densityTypes) => {
+    if (!certificates?.length) return null;
+
+    // Filter for relevant development types and valid data
+    const validCertificates = certificates.filter(cert => 
+      hasMatchingDensityType(cert.DevelopmentType, densityTypes) &&
+      cert.CostOfDevelopment &&
+      cert.ProposedGrossFloorArea &&
+      cert.ProposedGrossFloorArea >= MIN_GFA
+    );
+
+    if (!validCertificates.length) return null;
+
+    // Calculate cost per m² for each valid certificate
+    const costPerM2List = validCertificates
+      .map(cert => ({
+        cost: cert.CostOfDevelopment / cert.ProposedGrossFloorArea,
+        gfa: cert.ProposedGrossFloorArea
+      }))
+      .filter(({ cost }) => cost >= MIN_COST_PER_M2 && cost <= MAX_COST_PER_M2);
+
+    if (!costPerM2List.length) return null;
+
+    // Calculate weighted median based on GFA
+    const totalGFA = costPerM2List.reduce((sum, { gfa }) => sum + gfa, 0);
+    const halfTotalGFA = totalGFA / 2;
+
+    // Sort by cost per m²
+    costPerM2List.sort((a, b) => a.cost - b.cost);
+
+    // Find weighted median
+    let cumulativeGFA = 0;
+    for (const item of costPerM2List) {
+      cumulativeGFA += item.gfa;
+      if (cumulativeGFA >= halfTotalGFA) {
+        return item.cost;
+      }
+    }
+
+    // Fallback to simple median if weighted calculation fails
+    return costPerM2List[Math.floor(costPerM2List.length / 2)].cost;
+  };
+
+  const calculateMedianDwellingSize = (certificates, densityTypes) => {
+    if (!certificates?.length) return null;
+
+    console.log(`Calculating median dwelling size for density types:`, densityTypes);
+
+    // Filter for relevant development types and valid data
+    const validCertificates = certificates.filter(cert => {
+      const isRelevantType = hasMatchingDensityType(cert.DevelopmentType, densityTypes);
+      const hasValidData = cert.ProposedGrossFloorArea && 
+                          cert.UnitsProposed && 
+                          cert.UnitsProposed > 0 && 
+                          cert.ProposedGrossFloorArea >= MIN_GFA;
+
+      if (isRelevantType && !hasValidData) {
+        console.log('Certificate excluded due to invalid data:', {
+          developmentType: cert.DevelopmentType?.map(t => t.DevelopmentType).join(', '),
+          gfa: cert.ProposedGrossFloorArea,
+          units: cert.UnitsProposed
+        });
+      }
+
+      return isRelevantType && hasValidData;
+    });
+
+    console.log(`Found ${validCertificates.length} valid certificates for dwelling size calculation`);
+    console.log('Valid certificates:', validCertificates.map(cert => ({
+      type: cert.DevelopmentType?.map(t => t.DevelopmentType).join(', '),
+      gfa: cert.ProposedGrossFloorArea,
+      units: cert.UnitsProposed,
+      gfaPerDwelling: cert.ProposedGrossFloorArea / cert.UnitsProposed
+    })));
+
+    if (!validCertificates.length) return null;
+
+    // Calculate GFA per dwelling for each valid certificate
+    const gfaPerDwellingList = validCertificates
+      .map(cert => ({
+        gfaPerDwelling: cert.ProposedGrossFloorArea / cert.UnitsProposed,
+        units: cert.UnitsProposed,
+        type: cert.DevelopmentType?.map(t => t.DevelopmentType).join(', ')
+      }))
+      .filter(({ gfaPerDwelling }) => {
+        const isValid = gfaPerDwelling >= MIN_GFA;
+        if (!isValid) {
+          console.log('Excluded dwelling due to small GFA:', {
+            gfaPerDwelling,
+            minRequired: MIN_GFA
+          });
+        }
+        return isValid;
+      });
+
+    console.log('GFA per dwelling list:', gfaPerDwellingList);
+
+    if (!gfaPerDwellingList.length) return null;
+
+    // Calculate weighted median based on number of units
+    const totalUnits = gfaPerDwellingList.reduce((sum, { units }) => sum + units, 0);
+    const halfTotalUnits = totalUnits / 2;
+
+    console.log('Total units:', totalUnits);
+    console.log('Half total units:', halfTotalUnits);
+
+    // Sort by GFA per dwelling
+    gfaPerDwellingList.sort((a, b) => a.gfaPerDwelling - b.gfaPerDwelling);
+
+    // Find weighted median
+    let cumulativeUnits = 0;
+    let medianValue = null;
+    for (const item of gfaPerDwellingList) {
+      cumulativeUnits += item.units;
+      console.log('Cumulative units:', cumulativeUnits, 'Current GFA:', item.gfaPerDwelling, 'Type:', item.type);
+      if (cumulativeUnits >= halfTotalUnits && !medianValue) {
+        medianValue = item.gfaPerDwelling;
+        console.log('Found median value:', medianValue, 'from type:', item.type);
+        break;
+      }
+    }
+
+    if (medianValue) return medianValue;
+
+    // Fallback to simple median if weighted calculation fails
+    const simpleMedian = gfaPerDwellingList[Math.floor(gfaPerDwellingList.length / 2)].gfaPerDwelling;
+    console.log('Using fallback simple median:', simpleMedian);
+    return simpleMedian;
+  };
 
   useEffect(() => {
     const fetchConstructionData = async () => {
@@ -110,65 +255,75 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
           throw new Error('Invalid response format from CC API');
         }
 
-        // Filter and process construction certificates
+        // Process construction certificates
         const validCertificates = data.Application.filter(cert => 
           cert.CostOfDevelopment && 
           cert.ProposedGrossFloorArea && 
-          cert.ProposedGrossFloorArea > 0 && 
-          cert.DevelopmentType
+          cert.ProposedGrossFloorArea >= MIN_GFA && 
+          cert.DevelopmentType &&
+          cert.DevelopmentType.length > 0 && 
+          (hasMatchingDensityType(cert.DevelopmentType, LOW_MID_DENSITY_TYPES) || 
+           hasMatchingDensityType(cert.DevelopmentType, HIGH_DENSITY_TYPES))
         );
 
-        console.log('Valid certificates:', validCertificates);
+        console.log('Valid certificates:', validCertificates.map(cert => ({
+          type: cert.DevelopmentType?.map(t => t.DevelopmentType).join(', '),
+          gfa: cert.ProposedGrossFloorArea,
+          units: cert.UnitsProposed,
+          cost: cert.CostOfDevelopment,
+          isLowMid: hasMatchingDensityType(cert.DevelopmentType, LOW_MID_DENSITY_TYPES),
+          isHigh: hasMatchingDensityType(cert.DevelopmentType, HIGH_DENSITY_TYPES)
+        })));
 
-        // Separate by density type and calculate median costs
-        const lowMidDensityCerts = validCertificates.filter(cert => 
-          cert.DevelopmentType?.some(type => LOW_MID_DENSITY_TYPES.includes(type.DevelopmentType))
-        );
+        // Calculate median costs and dwelling sizes for each density type
+        const lowMidDensityCost = calculateMedianCost(validCertificates, LOW_MID_DENSITY_TYPES);
+        const highDensityCost = calculateMedianCost(validCertificates, HIGH_DENSITY_TYPES);
 
-        const highDensityCerts = validCertificates.filter(cert => 
-          cert.DevelopmentType?.some(type => HIGH_DENSITY_TYPES.includes(type.DevelopmentType))
-        );
+        console.log('Calculating low-mid density dwelling size...');
+        const lowMidDensitySize = calculateMedianDwellingSize(validCertificates, LOW_MID_DENSITY_TYPES);
+        
+        console.log('Calculating high density dwelling size...');
+        const highDensitySize = calculateMedianDwellingSize(validCertificates, HIGH_DENSITY_TYPES);
 
-        // Calculate median cost per m² for each density type
-        const calculateMedianCost = (certificates) => {
-          if (!certificates.length) return null;
-          const costPerM2List = certificates
-            .map(cert => cert.CostOfDevelopment / cert.ProposedGrossFloorArea)
-            .filter(cost => cost > 0 && cost < 10000); // Filter out unrealistic values
-          
-          if (costPerM2List.length === 0) return null;
-          const sortedCosts = costPerM2List.sort((a, b) => a - b);
-          const medianIndex = Math.floor(sortedCosts.length / 2);
-          return sortedCosts[medianIndex];
-        };
+        // Count certificates by density type
+        const lowMidDensityCount = validCertificates.filter(cert => 
+          hasMatchingDensityType(cert.DevelopmentType, LOW_MID_DENSITY_TYPES)
+        ).length;
 
-        const lowMidDensityCost = calculateMedianCost(lowMidDensityCerts);
-        const highDensityCost = calculateMedianCost(highDensityCerts);
+        const highDensityCount = validCertificates.filter(cert => 
+          hasMatchingDensityType(cert.DevelopmentType, HIGH_DENSITY_TYPES)
+        ).length;
 
-        console.log('Construction cost analysis:', {
+        console.log('Construction data analysis:', {
           lga: councilName,
           totalCertificates: validCertificates.length,
           lowMidDensity: {
-            count: lowMidDensityCerts.length,
+            count: lowMidDensityCount,
             medianCost: lowMidDensityCost,
-            types: [...new Set(lowMidDensityCerts.map(c => c.DevelopmentType))]
+            medianSize: lowMidDensitySize,
+            types: LOW_MID_DENSITY_TYPES
           },
           highDensity: {
-            count: highDensityCerts.length,
+            count: highDensityCount,
             medianCost: highDensityCost,
-            types: [...new Set(highDensityCerts.map(c => c.DevelopmentType))]
+            medianSize: highDensitySize,
+            types: HIGH_DENSITY_TYPES
           }
         });
 
         setConstructionData({
           lowMidDensity: lowMidDensityCost,
           highDensity: highDensityCost,
+          dwellingSizes: {
+            lowMidDensity: lowMidDensitySize,
+            highDensity: highDensitySize
+          },
           loading: false,
           error: null,
           lastUpdated: new Date(),
           certificateCounts: {
-            lowMidDensity: lowMidDensityCerts.length,
-            highDensity: highDensityCerts.length
+            lowMidDensity: lowMidDensityCount,
+            highDensity: highDensityCount
           }
         });
 
@@ -185,51 +340,70 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
     fetchConstructionData();
   }, [open, selectedFeature?.properties?.site_suitability__LGA]);
 
+  // Function to handle showing median prices modal
+  const handleShowMedianPrices = () => {
+    setShowMedianPrices(true);
+  };
+
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl">
-        <div className="flex items-center justify-between p-4 border-b">
-          <div className="flex items-center">
-            <Calculator className="w-6 h-6 mr-2" />
-            <h2 className="text-xl font-semibold">Feasibility Calculator Settings</h2>
+    <>
+      <div className={`fixed inset-0 z-50 overflow-y-auto ${open ? 'block' : 'hidden'}`}>
+        <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+          <div className="fixed inset-0 transition-opacity" aria-hidden="true">
+            <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
           </div>
-          <div className="flex items-center space-x-2">
-            <button 
-              onClick={() => setShowMedianPrices(true)}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-900 rounded-lg transition-colors"
-              title="View Sales Analysis"
-            >
-              <Banknote className="w-5 h-5" />
-              <span>Sales</span>
-            </button>
-            <button 
-              onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
 
-        <div className="p-6">
-          <FeasibilitySettings 
-            settings={settings} 
-            onSettingChange={onSettingChange}
-            salesData={salesData}
-            constructionData={constructionData}
-            selectedFeature={selectedFeature}
-          />
+          <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+          <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-5xl sm:w-full">
+            <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+              <div className="sm:flex sm:items-start">
+                <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg leading-6 font-medium text-gray-900 flex items-center">
+                      <Calculator className="mr-2" /> Feasibility Calculator
+                    </h3>
+                    <button
+                      onClick={onClose}
+                      className="text-gray-400 hover:text-gray-500 focus:outline-none"
+                    >
+                      <X className="h-6 w-6" />
+                    </button>
+                  </div>
+                  
+                  {constructionData.loading ? (
+                    <div className="flex flex-col items-center justify-center py-12">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+                      <p className="mt-4 text-gray-600">Loading construction data...</p>
+                    </div>
+                  ) : (
+                    <FeasibilitySettings 
+                      settings={settings} 
+                      onSettingChange={onSettingChange} 
+                      salesData={salesData}
+                      constructionData={constructionData}
+                      selectedFeature={selectedFeature}
+                      onShowMedianPrices={handleShowMedianPrices}
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <MedianPriceModal
-        open={showMedianPrices}
-        onClose={() => setShowMedianPrices(false)}
-        salesData={salesData}
-      />
-    </div>
+      {/* Median Price Modal */}
+      {showMedianPrices && (
+        <MedianPriceModal 
+          open={showMedianPrices}
+          salesData={salesData} 
+          onClose={() => setShowMedianPrices(false)} 
+        />
+      )}
+    </>
   );
 };
 

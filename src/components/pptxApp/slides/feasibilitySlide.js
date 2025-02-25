@@ -4,40 +4,36 @@ import { lgaMapping } from '../utils/map/utils/councilLgaMapping';
 
 // Default values for configurable inputs
 const DEFAULT_SETTINGS = {
-  siteEfficiencyRatio: 0.80, // 80%
-  floorToFloorHeight: 3.5, // meters
-  gbaToGfaRatio: 0.75, // 75%
-  gfaToNsaRatio: 0.85, // 85%
-  unitSize: 75, // m2
-  agentsSalesCommission: 0.02, // 2%
-  legalFeesOnSales: 0.005, // 0.5%
-  marketingCosts: 0.0075, // 0.75%
-  profitAndRisk: 0.20, // 20%
-  daApplicationFees: 200000, // $200,000
-  professionalFees: 0.05, // 5%
-  interestRate: 0.075, // 7.5%
-  projectPeriod: 48, // months
-};
-
-// Helper function to calculate GFA under FSR
-const calculateGfaUnderFsr = (totalSiteArea, fsr) => {
-  return totalSiteArea * fsr;
-};
-
-// Helper function to calculate GFA under HOB
-const calculateGfaUnderHob = (developableArea, hob, settings) => {
-  // If no HoB control exists, return Infinity so FSR approach is used
-  if (!hob) return Infinity;
-  
-  const maxStoreys = Math.floor(hob / settings.floorToFloorHeight);
-  const siteCoverage = developableArea * settings.siteEfficiencyRatio;
-  return siteCoverage * maxStoreys * settings.gbaToGfaRatio;
-};
-
-// Helper function to calculate development yield
-const calculateDevelopmentYield = (gfa, settings) => {
-  const nsa = gfa * settings.gfaToNsaRatio;
-  return Math.floor(nsa / settings.unitSize);
+  lowMidDensity: {
+    siteEfficiencyRatio: 0.6, // 60%
+    floorToFloorHeight: 3.1, // meters
+    gbaToGfaRatio: 0.9, // 90%
+    gfaToNsaRatio: 0.85, // 85%
+    agentsSalesCommission: 0.02, // 2%
+    legalFeesOnSales: 0.005, // 0.5%
+    marketingCosts: 0.0075, // 0.75%
+    profitAndRisk: 0.20, // 20%
+    daApplicationFees: 200000, // $200,000
+    developmentContribution: 0.01, // 1%
+    professionalFees: 0.05, // 5%
+    interestRate: 0.075, // 7.5%
+    projectPeriod: 24, // months
+  },
+  highDensity: {
+    siteEfficiencyRatio: 0.4, // 40%
+    floorToFloorHeight: 3.1, // meters
+    gbaToGfaRatio: 0.75, // 75%
+    gfaToNsaRatio: 0.85, // 85%
+    agentsSalesCommission: 0.02, // 2%
+    legalFeesOnSales: 0.005, // 0.5%
+    marketingCosts: 0.0075, // 0.75%
+    profitAndRisk: 0.20, // 20%
+    daApplicationFees: 200000, // $200,000
+    developmentContribution: 0.01, // 1%
+    professionalFees: 0.05, // 5%
+    interestRate: 0.075, // 7.5%
+    projectPeriod: 24, // months
+  }
 };
 
 // Helper function to format currency
@@ -59,69 +55,8 @@ const formatPercentage = (value) => {
   }).format(value);
 };
 
-// Helper function to get council name from LGA
-const getCouncilNameFromLGA = (lga) => {
-  // Find the council name by matching the LGA value
-  const councilEntry = Object.entries(lgaMapping).find(([_, mappedLGA]) => 
-    mappedLGA.toLowerCase() === lga?.toLowerCase()
-  );
-  return councilEntry ? councilEntry[0] : lga;
-};
-
-// Helper function to extract postcode from address
-const extractPostcode = (address) => {
-  if (!address) return null;
-  
-  // First try to match NSW postcode format
-  const nswMatch = address.match(/NSW (\d{4})/);
-  if (nswMatch) return parseInt(nswMatch[1]);
-  
-  // If that fails, try to get the last 4 digits from the address
-  const lastWordMatch = address.split(' ').pop()?.match(/^(\d{4})$/);
-  if (lastWordMatch) return parseInt(lastWordMatch[1]);
-  
-  // If both attempts fail, return null
-  return null;
-};
-
-// Helper function to find closest postcode matches
-const findClosestPostcodeMatches = (targetPostcode, salesData) => {
-  if (!targetPostcode || !Array.isArray(salesData) || salesData.length === 0) return [];
-  
-  // Map sales data to include postcode and distance from target
-  const withPostcodes = salesData
-    .map(sale => ({
-      ...sale,
-      postcode: extractPostcode(sale.address),
-      distance: 0
-    }))
-    .filter(sale => sale.postcode !== null)
-    .map(sale => ({
-      ...sale,
-      distance: Math.abs(sale.postcode - targetPostcode)
-    }))
-    .sort((a, b) => a.distance - b.distance);
-
-  // Get all entries that share the minimum distance
-  const minDistance = withPostcodes[0]?.distance;
-  return withPostcodes.filter(sale => sale.distance === minDistance);
-};
-
-// Helper function to format postcode source info
-const formatPriceSource = (targetPostcode, matchedSales) => {
-  if (!matchedSales || matchedSales.length === 0) {
-    throw new Error('No comparable sales data available for price calculation');
-  }
-
-  const matchedPostcode = extractPostcode(matchedSales[0].address);
-  if (matchedPostcode === targetPostcode) {
-    return `Based on ${matchedSales.length} sales in ${targetPostcode}`;
-  }
-  return `Based on ${matchedSales.length} sales in postcode ${matchedPostcode} (nearest to target postcode ${targetPostcode})`;
-};
-
 export async function addFeasibilitySlide(pptx, properties, userSettings = {}) {
-  let slide;
+  let lowMidDensitySlide, highDensitySlide;
   try {
     console.log('Starting to add feasibility slide with properties:', {
       suburb: properties?.site_suitability__suburb,
@@ -131,67 +66,51 @@ export async function addFeasibilitySlide(pptx, properties, userSettings = {}) {
     });
 
     // Create two slides - one for each density type
-    const lowMidDensitySlide = pptx.addSlide();
-    const highDensitySlide = pptx.addSlide();
+    lowMidDensitySlide = pptx.addSlide();
+    highDensitySlide = pptx.addSlide();
 
     // Merge default settings with user settings for both density types
     const settings = {
-      lowMidDensity: { ...DEFAULT_SETTINGS, ...userSettings.lowMidDensity },
-      highDensity: { ...DEFAULT_SETTINGS, ...userSettings.highDensity }
+      lowMidDensity: { ...DEFAULT_SETTINGS.lowMidDensity, ...userSettings.lowMidDensity },
+      highDensity: { ...DEFAULT_SETTINGS.highDensity, ...userSettings.highDensity }
     };
 
     // Function to generate feasibility analysis for a given density type
     const generateFeasibilityAnalysis = (slide, settings, densityType) => {
       // Calculate developable area and site coverage
       const developableArea = properties?.copiedFrom?.site_suitability__area || 0;
+      // Get the site area (which may be larger than the developable area)
+      const siteArea = properties?.copiedFrom?.site_area || developableArea;
       const siteCoverage = developableArea * settings.siteEfficiencyRatio;
 
       // Calculate GFA under FSR and HOB
       const fsr = properties?.copiedFrom?.site_suitability__floorspace_ratio || 0;
       const hob = properties?.copiedFrom?.site_suitability__height_of_building || 0;
 
-      console.log('Calculating GFA with:', {
-        developableArea,
-        fsr,
-        hob,
-        siteCoverage
-      });
-
-      const gfaUnderFsr = calculateGfaUnderFsr(developableArea, fsr);
-      const gfaUnderHob = calculateGfaUnderHob(developableArea, hob, settings);
+      // Use site area for FSR calculation
+      const gfaUnderFsr = siteArea * fsr;
+      
+      // Calculate GFA under HOB
+      const maxStoreys = Math.floor(hob / settings.floorToFloorHeight);
+      const gfaUnderHob = siteCoverage * maxStoreys * settings.gbaToGfaRatio;
 
       // Use FSR value if no HoB exists, otherwise use the lower of the two
       const gfa = !hob ? gfaUnderFsr : Math.min(gfaUnderFsr, gfaUnderHob);
 
-      // Calculate development yield
-      const developmentYield = calculateDevelopmentYield(gfa, settings);
-
-      // Use the sales data passed from ReportGenerator
-      const salesData = properties.salesData || [];
-
-      if (!Array.isArray(salesData) || salesData.length === 0) {
-        throw new Error('No sales data available for price calculation');
-      }
-
-      // Extract postcode from the site address
-      const sitePostcode = extractPostcode(properties.site__address);
-      if (!sitePostcode) {
-        throw new Error('Unable to extract postcode from site address');
-      }
+      // Calculate NSA and development yield
+      const nsa = gfa * settings.gfaToNsaRatio;
       
-      // Find properties with closest matching postcodes
-      const relevantSales = findClosestPostcodeMatches(sitePostcode, salesData);
-      if (relevantSales.length === 0) {
-        throw new Error('No comparable sales found with valid postcodes');
-      }
+      // Get dwelling size from construction data or use default
+      const dwellingSize = properties.constructionData?.dwellingSizes?.[densityType.toLowerCase().replace('-', '')] || 80; // Default fallback
       
-      // Calculate median price using the most relevant sales
-      const prices = relevantSales.map(item => item.price).sort((a, b) => a - b);
-      const medianPrice = prices[Math.floor(prices.length / 2)];
-      const priceSource = formatPriceSource(sitePostcode, relevantSales);
+      // Calculate development yield using dwelling size from construction data
+      const developmentYield = Math.floor(nsa / dwellingSize);
+
+      // Get dwelling price from settings
+      const dwellingPrice = settings.dwellingPrice || 750000; // Default fallback
 
       // Calculate total gross realisation
-      const totalGrossRealisation = developmentYield * medianPrice;
+      const totalGrossRealisation = developmentYield * dwellingPrice;
 
       // Calculate GST and selling costs
       const gst = totalGrossRealisation * 0.1;
@@ -204,45 +123,46 @@ export async function addFeasibilitySlide(pptx, properties, userSettings = {}) {
       const profitAndRisk = netRealisation * settings.profitAndRisk;
       const netRealisationAfterProfitAndRisk = netRealisation - profitAndRisk;
 
-      // Initialize construction cost variables
-      let constructionCostPerGfa = 3500; // Default fallback value if no data
-      let constructionCosts = 0;
-      let daApplicationFees = settings.daApplicationFees;
-      let professionalFees = 0;
-      let totalDevelopmentCosts = 0;
-
-      try {
-        // Get construction cost data from properties (already fetched in permissibility slide)
-        if (properties.constructionCertificates && Array.isArray(properties.constructionCertificates) && properties.constructionCertificates.length > 0) {
-          const latestCertificate = properties.constructionCertificates[0]; // Get the most recent certificate
-          if (latestCertificate.Cost && latestCertificate.GFA && latestCertificate.GFA > 0) {
-            constructionCostPerGfa = latestCertificate.Cost / latestCertificate.GFA;
-          }
-        }
-      } catch (error) {
-        console.error('Failed to get construction costs from properties, using default value:', error);
+      // Get construction cost
+      const constructionCostPerGfa = properties.constructionData?.[densityType.toLowerCase().replace('-', '')] || 3500; // Default fallback
+      
+      // Calculate development costs
+      const constructionCosts = constructionCostPerGfa * gfa;
+      const daApplicationFees = settings.daApplicationFees;
+      const professionalFees = constructionCosts * settings.professionalFees;
+      
+      // Calculate Development Contribution
+      const developmentContribution = constructionCosts * settings.developmentContribution;
+      
+      // Calculate Land Tax
+      const propertyValue = properties?.copiedFrom?.site_suitability__property_value || 0;
+      const generalThreshold = 1000000; // $1,000,000 threshold
+      const premiumThreshold = 4000000; // $4,000,000 threshold
+      
+      let landTaxPerYear = 0;
+      if (propertyValue > premiumThreshold) {
+        // Premium threshold: $88,036 plus 2% of land value above the threshold
+        landTaxPerYear = 88036 + (propertyValue - premiumThreshold) * 0.02;
+      } else if (propertyValue > generalThreshold) {
+        // General threshold: $100 plus 1.6% of land value above the threshold up to the premium threshold
+        landTaxPerYear = 100 + (propertyValue - generalThreshold) * 0.016;
       }
+      
+      // Calculate total Land Tax for the project period
+      const projectYears = settings.projectPeriod / 12;
+      const landTax = landTaxPerYear * projectYears;
 
-      // Calculate development costs using either fetched or default construction cost
-      constructionCosts = constructionCostPerGfa * gfa;
-      professionalFees = constructionCosts * settings.professionalFees;
-      totalDevelopmentCosts = constructionCosts + daApplicationFees + professionalFees;
+      const totalDevelopmentCosts = constructionCosts + daApplicationFees + professionalFees + developmentContribution;
 
       // Calculate finance costs
       const monthlyInterestRate = settings.interestRate / 12;
       const financeCosts = monthlyInterestRate * (settings.projectPeriod / 2) * totalDevelopmentCosts;
 
       // Calculate residual land value
-      const residualLandValue = netRealisationAfterProfitAndRisk - totalDevelopmentCosts - financeCosts;
-
-      // Create the GFA row first
-      const gfaRow = [
-        'Gross Floor Area (GFA)',
-        `${Math.round(gfa).toLocaleString()} m²`,
-        !hob 
-          ? `FSR ${fsr}:1 (${Math.round(developableArea).toLocaleString()} m² × ${fsr} = ${Math.round(gfaUnderFsr).toLocaleString()} m²)`
-          : `Min of: FSR ${fsr}:1 (${Math.round(developableArea).toLocaleString()} m² × ${fsr} = ${Math.round(gfaUnderFsr).toLocaleString()} m²) or HOB ${hob}m (${Math.floor(hob / settings.floorToFloorHeight)} storeys × ${formatPercentage(settings.siteEfficiencyRatio)} site coverage × ${formatPercentage(settings.gbaToGfaRatio)} efficiency = ${Math.round(gfaUnderHob).toLocaleString()} m²)`
-      ];
+      const residualLandValue = netRealisationAfterProfitAndRisk - totalDevelopmentCosts - financeCosts - landTax;
+      
+      // Calculate residual land value per m²
+      const residualLandValuePerM2 = residualLandValue / developableArea;
 
       // Create table rows with calculations
       const tableRows = [
@@ -254,62 +174,63 @@ export async function addFeasibilitySlide(pptx, properties, userSettings = {}) {
         ],
         // Development Metrics
         [{ text: 'Development Metrics', options: { fill: 'E6F3FF', bold: true, colspan: 3 } }],
-        ['Site Coverage', `${Math.round(siteCoverage).toLocaleString()} m²`, `${formatPercentage(settings.siteEfficiencyRatio)} of Developable Area (${Math.round(developableArea).toLocaleString()} m²)`],
-        gfaRow,
-        ['Development Yield', `${developmentYield} units`, 'Total NSA ÷ Average Unit Size'],
-        // Sales section
+        ['Building Footprint', `${Math.round(siteCoverage).toLocaleString()} m²`, `${formatPercentage(settings.siteEfficiencyRatio)} of Developable Area (${Math.round(developableArea).toLocaleString()} m²)`],
+        ['Gross Floor Area (GFA)', `${Math.round(gfa).toLocaleString()} m²`, 
+          !hob 
+            ? `FSR ${fsr}:1 (${Math.round(siteArea).toLocaleString()} m² × ${fsr} = ${Math.round(gfaUnderFsr).toLocaleString()} m²)`
+            : `Minimum of two calculations:
+1) FSR approach: ${fsr}:1 (${Math.round(siteArea).toLocaleString()} m² × ${fsr} = ${Math.round(gfaUnderFsr).toLocaleString()} m²)
+2) HOB approach: ${hob}m (${Math.floor(hob / settings.floorToFloorHeight)} storeys × ${formatPercentage(settings.siteEfficiencyRatio)} building footprint × ${formatPercentage(settings.gbaToGfaRatio)} efficiency = ${Math.round(gfaUnderHob).toLocaleString()} m²)`
+        ],
+        ['Development Yield', `${developmentYield} units`, `Total NSA (${Math.round(nsa).toLocaleString()} m²) ÷ Average Unit Size (${Math.round(dwellingSize).toLocaleString()} m²)`],
+        
+        // Sales Analysis
         [{ text: 'Sales Analysis', options: { fill: 'E6F3FF', bold: true, colspan: 3 } }],
-        ['Median Unit Price', formatCurrency(medianPrice), priceSource],
-        ['Total Gross Realisation', formatCurrency(totalGrossRealisation), 'Development Yield × Median Unit Price'],
-        // GST and Selling Costs section
+        ['Median Unit Price', formatCurrency(dwellingPrice), 'Based on sales data'],
+        [{ text: 'Total Gross Realisation', options: { bold: true, fill: 'F2F2F2' } }, 
+         { text: formatCurrency(totalGrossRealisation), options: { bold: true, fill: 'F2F2F2' } }, 
+         { text: 'Development Yield × Median Unit Price', options: { fill: 'F2F2F2' } }],
+        
+        // GST and Selling Costs
         [{ text: 'GST and Selling Costs', options: { fill: 'E6F3FF', bold: true, colspan: 3 } }],
         ['GST (10%)', formatCurrency(gst), 'Total Gross Realisation × 10%'],
         ['Agent\'s Commission', formatCurrency(agentsCommission), `Total Gross Realisation × ${formatPercentage(settings.agentsSalesCommission)}`],
         ['Legal Fees', formatCurrency(legalFees), `Total Gross Realisation × ${formatPercentage(settings.legalFeesOnSales)}`],
         ['Marketing Costs', formatCurrency(marketingCosts), `Total Gross Realisation × ${formatPercentage(settings.marketingCosts)}`],
-        ['Net Realisation', formatCurrency(netRealisation), 'Total Gross Realisation - GST - Commission - Legal - Marketing'],
-        // Profit and Risk section
+        [{ text: 'Net Realisation', options: { bold: true, fill: 'F2F2F2' } }, 
+         { text: formatCurrency(netRealisation), options: { bold: true, fill: 'F2F2F2' } }, 
+         { text: 'Total Gross Realisation - GST - Commission - Legal - Marketing', options: { fill: 'F2F2F2' } }],
+        
+        // Profit and Risk
         [{ text: 'Profit and Risk', options: { fill: 'E6F3FF', bold: true, colspan: 3 } }],
         ['Profit Margin', formatCurrency(profitAndRisk), `Net Realisation × ${formatPercentage(settings.profitAndRisk)}`],
-        ['Net Realisation after Profit', formatCurrency(netRealisationAfterProfitAndRisk), 'Net Realisation - Profit Margin'],
-        // Development Costs section
+        [{ text: 'Net Realisation after Profit', options: { bold: true, fill: 'F2F2F2' } }, 
+         { text: formatCurrency(netRealisationAfterProfitAndRisk), options: { bold: true, fill: 'F2F2F2' } }, 
+         { text: 'Net Realisation - Profit Margin', options: { fill: 'F2F2F2' } }],
+        
+        // Development Costs
         [{ text: 'Development Costs', options: { fill: 'E6F3FF', bold: true, colspan: 3 } }],
         ['Construction Cost (per m² GFA)', formatCurrency(constructionCostPerGfa), 'Based on recent construction certificates'],
         ['Total Construction Costs', formatCurrency(constructionCosts), 'Construction Cost per m² × Total GFA'],
         ['DA Application Fees', formatCurrency(daApplicationFees), 'Fixed cost'],
         ['Professional Fees', formatCurrency(professionalFees), `Construction Costs × ${formatPercentage(settings.professionalFees)}`],
-        ['Total Development Costs', formatCurrency(totalDevelopmentCosts), 'Construction + DA + Professional Fees'],
-        // Finance Costs section
-        [{ text: 'Finance Costs', options: { fill: 'E6F3FF', bold: true, colspan: 3 } }],
+        ['Development Contribution', formatCurrency(developmentContribution), `Construction Costs × ${formatPercentage(settings.developmentContribution)}`],
+        [{ text: 'Total Development Costs', options: { bold: true, fill: 'F2F2F2' } }, 
+         { text: formatCurrency(totalDevelopmentCosts), options: { bold: true, fill: 'F2F2F2' } }, 
+         { text: 'Construction + DA + Professional Fees + Development Contribution', options: { fill: 'F2F2F2' } }],
+        
+        // Finance and Holding Costs
+        [{ text: 'Finance and Holding Costs', options: { fill: 'E6F3FF', bold: true, colspan: 3 } }],
+        ['Land Tax', formatCurrency(landTax), `Annual Land Tax (${formatCurrency(landTaxPerYear)}) × Project Duration (${projectYears.toFixed(1)} years)`],
         ['Interest Rate', formatPercentage(settings.interestRate), 'Annual rate'],
         ['Finance Costs', formatCurrency(financeCosts), 'Interest Rate × (Project Period ÷ 2) × Total Development Costs'],
+        
         // Residual Land Value
         [{ text: 'Residual Land Value', options: { fill: 'E6F3FF', bold: true, colspan: 3 } }],
-        ['Residual Land Value', formatCurrency(residualLandValue), 'Net Realisation after Profit - Total Development Costs - Finance Costs']
+        [{ text: 'Residual Land Value', options: { bold: true, fill: 'F2F2F2' } }, 
+         { text: formatCurrency(residualLandValue), options: { bold: true, fill: 'F2F2F2' } }, 
+         { text: 'Net Realisation after Profit - Total Development Costs - Finance Costs - Land Tax', options: { fill: 'F2F2F2' } }]
       ];
-
-      // Add the table to the slide with improved formatting
-      slide.addTable(tableRows, {
-        ...convertCmValues({
-          x: '5%',
-          y: '18%',
-          w: '85%',
-          h: '74%'
-        }),
-        colW: [3.5, 3, 4],
-        fontSize: 5,
-        fontFace: 'Public Sans',
-        border: { 
-          type: 'solid',
-          pt: 0.25,
-          color: 'CCCCCC'
-        },
-        align: 'left',
-        valign: 'middle',
-        margin: 0.05,
-        rowH: 0.05,
-        autoPage: false
-      });
 
       // Add title
       slide.addText([
@@ -333,11 +254,34 @@ export async function addFeasibilitySlide(pptx, properties, userSettings = {}) {
         ...convertCmValues(styles.nswLogo)
       });
 
+      // Add the table to the slide with improved formatting
+      slide.addTable(tableRows, {
+        ...convertCmValues({
+          x: '5%',
+          y: '18%',
+          w: '90%',
+          h: '74%'
+        }),
+        colW: [3.5, 3, 4],
+        fontSize: 5,
+        fontFace: 'Public Sans',
+        border: { 
+          type: 'solid',
+          pt: 0.25,
+          color: 'CCCCCC'
+        },
+        align: 'left',
+        valign: 'middle',
+        margin: 0.05,
+        rowH: 0.05,
+        autoPage: false
+      });
+
       // Add footer line
       slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.footerLine));
 
       // Add source attribution
-      slide.addText(`Source: getsoldprice.com.au (${priceSource}), NSW Planning Portal (Construction Certificate API)`, convertCmValues({
+      slide.addText(`Source: NSW Planning Portal, Property and Development NSW Feasibility Analysis`, convertCmValues({
         x: '5%',
         y: '91%',
         w: '90%',
@@ -360,10 +304,10 @@ export async function addFeasibilitySlide(pptx, properties, userSettings = {}) {
     return [lowMidDensitySlide, highDensitySlide];
   } catch (error) {
     console.error('Error generating feasibility slide:', error);
-    if (!slide) {
-      slide = pptx.addSlide();
+    if (!lowMidDensitySlide) {
+      lowMidDensitySlide = pptx.addSlide();
     }
-    slide.addText('Error generating feasibility slide: ' + error.message, {
+    lowMidDensitySlide.addText('Error generating feasibility slide: ' + error.message, {
       x: '10%',
       y: '45%',
       w: '80%',
@@ -372,7 +316,7 @@ export async function addFeasibilitySlide(pptx, properties, userSettings = {}) {
       color: 'FF0000',
       align: 'center'
     });
-    return [slide];
+    return [lowMidDensitySlide];
   }
 }
 

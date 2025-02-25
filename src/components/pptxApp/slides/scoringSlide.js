@@ -196,7 +196,7 @@ export async function createScoringSlide(pres, propertyData) {
 
     // Calculate total score
     const totalScore = Object.values(scores).reduce((sum, score) => sum + (parseInt(score) || 0), 0);
-    const maxScore = 51;  // Updated to include historical imagery score
+    const maxScore = 17 * 3;  // 17 criteria, each with a max score of 3
     const percentage = Math.round((totalScore / maxScore) * 100);
 
     console.log('Creating table with scores:', scores);
