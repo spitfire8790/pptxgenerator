@@ -122,7 +122,9 @@ export async function createScoringSlide(pres, propertyData) {
     // Helper function to format score with color
     const formatScoreWithColor = (score) => {
       let fill;
-      switch (parseInt(score)) {
+      const scoreValue = parseInt(score) || 0;
+      
+      switch (scoreValue) {
         case 1:
           fill = 'FFE6E6'; // Light red
           break;
@@ -135,33 +137,16 @@ export async function createScoringSlide(pres, propertyData) {
         default:
           fill = 'FFFFFF'; // White
       }
+      
       return {
-        text: score.toString(),
+        text: scoreValue.toString(),
         options: { 
           align: 'center',
           bold: true,
           fill: fill,
-          color: '363636'  // Keep text color consistent
+          color: '363636',  // Keep text color consistent
+          valign: 'middle'
         }
-      };
-    };
-
-    // Helper function to format criteria cell
-    const formatCriteriaCell = (text) => {
-      return {
-        text: text,
-        options: { align: 'left' }
-      };
-    };
-
-    // Helper function to format group cell
-    const formatGroupCell = (text, rowspan) => {
-      return text ? {
-        text: text,
-        options: { rowspan, valign: 'middle' }
-      } : {
-        text: '',
-        options: { rowspan: 1 }
       };
     };
 
@@ -196,7 +181,7 @@ export async function createScoringSlide(pres, propertyData) {
 
     // Calculate total score
     const totalScore = Object.values(scores).reduce((sum, score) => sum + (parseInt(score) || 0), 0);
-    const maxScore = 17 * 3;  // 17 criteria, each with a max score of 3
+    const maxScore = 16 * 3;  // 16 criteria, each with a max score of 3
     const percentage = Math.round((totalScore / maxScore) * 100);
 
     console.log('Creating table with scores:', scores);
@@ -208,66 +193,111 @@ export async function createScoringSlide(pres, propertyData) {
        { text: 'Criteria', options: { fill: '002664', color: 'FFFFFF' } }, 
        { text: 'Scoring', options: { fill: '002664', color: 'FFFFFF' } }],
       // Primary Site Attributes
-      [formatGroupCell('Primary Site Attributes\n\n', 1), 
-       formatCriteriaCell('Developable Area'), formatScoreWithColor(scores.developableArea)],
+      [{ 
+        text: 'Primary Site Attributes\n\n',
+        options: { 
+          rowspan: 1,
+          valign: 'middle'
+        }
+      }, 'Developable Area', formatScoreWithColor(scores.developableArea)],
       // Secondary Site Attributes
-      [formatGroupCell('Secondary Site Attributes\n\n', 2), 
-       formatCriteriaCell('Site Contour'), formatScoreWithColor(scores.contours)],
-      [null, formatCriteriaCell('Site Regularity'), formatScoreWithColor(scores.siteRegularity)],
+      [{ 
+        text: 'Secondary Site Attributes\n\n',
+        options: { 
+          rowspan: 2,
+          valign: 'middle'
+        }
+      }, 'Site Contour', formatScoreWithColor(scores.contours)],
+      ['Site Regularity', formatScoreWithColor(scores.siteRegularity)],
       // Planning
-      [formatGroupCell('Planning\n\n', 3), 
-       formatCriteriaCell('Zoning'), formatScoreWithColor(scores.zoning)],
-      [null, formatCriteriaCell('Heritage'), formatScoreWithColor(scores.heritage)],
-      [null, formatCriteriaCell('Acid Sulfate Soils'), formatScoreWithColor(scores.acidSulfateSoils)],
+      [{ 
+        text: 'Planning\n\n',
+        options: { 
+          rowspan: 3,
+          valign: 'middle'
+        }
+      }, 'Zoning', formatScoreWithColor(scores.zoning)],
+      ['Heritage', formatScoreWithColor(scores.heritage)],
+      ['Acid Sulfate Soils', formatScoreWithColor(scores.acidSulfateSoils)],
       // Access & Services
-      [formatGroupCell('Access & Services\n\n', 4), 
-       formatCriteriaCell('Servicing'), formatScoreWithColor(scores.servicing)],
-      [null, formatCriteriaCell('Access'), formatScoreWithColor(scores.roads)],
-      [null, formatCriteriaCell('Proximity to Strategic Centre'), formatScoreWithColor(scores.udpPrecincts)],
-      [null, formatCriteriaCell('Public Transport Access Level (PTAL)'), formatScoreWithColor(scores.ptal)],
+      [{ 
+        text: 'Access & Services\n\n',
+        options: { 
+          rowspan: 4,
+          valign: 'middle'
+        }
+      }, 'Servicing', formatScoreWithColor(scores.servicing)],
+      ['Access', formatScoreWithColor(scores.roads)],
+      ['Proximity to Strategic Centre', formatScoreWithColor(scores.udpPrecincts)],
+      ['Public Transport Access Level (PTAL)', formatScoreWithColor(scores.ptal)],
       // Utilisation & Improvements
-      [formatGroupCell('Utilisation & Improvements\n\n', 1), 
-       formatCriteriaCell('Built Form'), formatScoreWithColor(scores.geoscape)],
+      [{ 
+        text: 'Utilisation & Improvements\n\n',
+        options: { 
+          rowspan: 1,
+          valign: 'middle'
+        }
+      }, 'Built Form', formatScoreWithColor(scores.geoscape)],
       // Hazards
-      [formatGroupCell('Hazards\n\n', 2), 
-       formatCriteriaCell('Flood risk (1% AEP)'), formatScoreWithColor(scores.flood)],
-      [null, formatCriteriaCell('Bushfire Risk'), formatScoreWithColor(scores.bushfire)],
+      [{ 
+        text: 'Hazards\n\n',
+        options: { 
+          rowspan: 2,
+          valign: 'middle'
+        }
+      }, 'Flood risk (1% AEP)', formatScoreWithColor(scores.flood)],
+      ['Bushfire Risk', formatScoreWithColor(scores.bushfire)],
       // Site Contamination
-      [formatGroupCell('Site Contamination\n\n', 2), 
-       formatCriteriaCell('Contaminated sites Register'), formatScoreWithColor(scores.contamination)],
-      [null, formatCriteriaCell('Usage & potential site remediation'), formatScoreWithColor(scores.historicalImagery)],
+      [{ 
+        text: 'Site Contamination\n\n',
+        options: { 
+          rowspan: 2,
+          valign: 'middle'
+        }
+      }, 'Contaminated sites Register', formatScoreWithColor(scores.contamination)],
+      ['Usage & potential site remediation', formatScoreWithColor(scores.historicalImagery)],
       // Environmental
-      [formatGroupCell('Environmental\n\n', 1), 
-       formatCriteriaCell('Threatened Ecological Communities'), formatScoreWithColor(scores.tec)],
+      [{ 
+        text: 'Environmental\n\n',
+        options: { 
+          rowspan: 1,
+          valign: 'middle'
+        }
+      }, 'Threatened Ecological Communities', formatScoreWithColor(scores.tec)],
       // Total Score
-      [{ text: 'Total Score\n\n', options: { rowspan: 1, valign: 'middle', bold: true }}, 
-       { text: '', options: {} }, 
-       { text: `${totalScore}/${maxScore} (${percentage}%)`, options: { bold: true, align: 'center' }}]
+      [{ 
+        text: 'Total Score\n\n',
+        options: { 
+          rowspan: 1,
+          valign: 'middle',
+          bold: true
+        }
+      }, '', { text: `${totalScore}/${maxScore} (${percentage}%)`, options: { bold: true, align: 'center' }}]
     ];
 
-    // Filter out any undefined or null values from the table data
-    const cleanTableData = tableData.map(row => 
-      row.map(cell => cell === null ? { text: '', options: {} } : cell)
-    );
+    console.log('Table data structure:', JSON.stringify(tableData, null, 2));
 
-    console.log('Table data structure:', JSON.stringify(cleanTableData, null, 2));
-
-    // Add table with styling
-    slide.addTable(cleanTableData, {
-      x: '5%',
-      y: '18%',
-      w: '62%',
-      colW: [2, 5, 1],
-      border: { type: 'solid', color: '363636', pt: 0.5 },
-      rowH: 0.25,  // Single value instead of array
-      align: 'left',
-      valign: 'middle',
-      fontSize: 7,
-      fontFace: 'Public Sans',
-      color: '363636',
-      autoPage: false,
-      margin: 2
-    });
+    try {
+      // Add table with styling
+      slide.addTable(tableData, {
+        x: '5%',
+        y: '18%',
+        w: '62%',
+        colW: [2, 5, 1.5],  // Adjusted column widths
+        border: { type: 'solid', color: '363636', pt: 0.5 },
+        rowH: 0.3,  // Slightly increased row height
+        align: 'left',
+        valign: 'middle',
+        fontSize: 7,
+        fontFace: 'Public Sans',
+        color: '363636',
+        autoPage: false,
+        margin: 2
+      });
+      console.log('Table added successfully');
+    } catch (error) {
+      console.error('Error adding table:', error);
+    }
 
     // Move recommendation box to align with table
     const recommendationBox = slide.addShape('rect', {
@@ -349,9 +379,10 @@ export async function createScoringSlide(pres, propertyData) {
       bullet: true
     });
 
+    console.log('Scoring slide created successfully');
     return slide;
   } catch (error) {
     console.error('Error creating scoring slide:', error);
-    return null;
+    throw error;  // Re-throw to make sure the error is visible
   }
 } 

@@ -659,7 +659,7 @@ export async function captureDevelopmentApplicationsMap(feature, developableArea
     const config = {
       width: 2048,
       height: 2048,
-      padding: 0.3
+      padding: 0.5
     };
     
     console.log('Calculating bounds...');

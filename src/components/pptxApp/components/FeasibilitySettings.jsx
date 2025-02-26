@@ -213,10 +213,38 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
     const gfaUnderHob = siteCoverage * maxStoreys * settings[density].gbaToGfaRatio;
 
     // Use FSR value if no HoB exists, otherwise use the lower of the two
-    const gfa = !hob ? gfaUnderFsr : Math.min(gfaUnderFsr, gfaUnderHob);
+    let gfa = !hob ? gfaUnderFsr : Math.min(gfaUnderFsr, gfaUnderHob);
+    
+    // For Low-Mid Density, also limit the GFA to what would be possible with 3 storeys
+    if (density === 'lowMidDensity') {
+      const maxGfaFor3Storeys = siteCoverage * 3 * settings[density].gbaToGfaRatio;
+      gfa = Math.min(gfa, maxGfaFor3Storeys);
+    }
 
-    // Get median dwelling size from construction data
-    const dwellingSize = constructionData?.dwellingSizes?.[density] || 0;
+    // Get median dwelling size from construction data, filtered by bedroom count
+    let dwellingSize = 0;
+    if (constructionData?.dwellingSizesByBedroom?.[density]) {
+      // Get sizes for properties with fewer than 4 bedrooms
+      const validSizes = [];
+      for (let i = 0; i <= 3; i++) {
+        if (constructionData.dwellingSizesByBedroom[density][i]) {
+          validSizes.push(constructionData.dwellingSizesByBedroom[density][i]);
+        }
+      }
+      
+      // Calculate median if we have valid sizes
+      if (validSizes.length > 0) {
+        // Sort sizes and get the median
+        validSizes.sort((a, b) => a - b);
+        dwellingSize = validSizes[Math.floor(validSizes.length / 2)];
+      } else {
+        // Fallback to the overall median if no bedroom-specific data
+        dwellingSize = constructionData?.dwellingSizes?.[density] || 0;
+      }
+    } else {
+      // Fallback to the overall median if no bedroom-specific data
+      dwellingSize = constructionData?.dwellingSizes?.[density] || 0;
+    }
 
     // Filter sales data by property type based on density
     const LOW_MID_DENSITY_TYPES = ['duplex/semi-detached', 'duplex-semi-detached', 'house', 'terrace', 'townhouse', 'villa'];
@@ -273,11 +301,19 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
       unit: '$/m²', 
       icon: HardHat, 
       isCalculated: true,
-      description: density => `Based on ${constructionData?.certificateCounts?.[density] || 0} approved DAs`
+      tooltip: density => `Based on ${constructionData?.certificateCounts?.[density] || 0} approved DAs`
     },
 
     // Dwelling Metrics section
     { id: 'section-dwelling', label: 'Dwelling Metrics', isSection: true },
+    { 
+      id: 'dwellingSize', 
+      label: 'Median Dwelling Size', 
+      unit: 'm²', 
+      icon: Maximize2, 
+      isCalculated: true,
+      tooltip: density => `Based on properties with <4 bedrooms from ${constructionData?.certificateCounts?.[density] || 0} approved DAs`
+    },
     { 
       id: 'dwellingPrice', 
       label: 'Dwelling Price', 
@@ -288,7 +324,6 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
       tooltip: 'Revert to median price from sales data',
       showSalesButton: true
     },
-    { id: 'pricePerM2', label: 'Price per m² GFA', unit: '$/m²', icon: DollarSign, isCalculated: true },
 
     // Financial Metrics section
     { id: 'section-financial', label: 'Financial Metrics', isSection: true },
@@ -353,11 +388,14 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
       
       return (
         <div className="flex items-center justify-center space-x-1">
-          <span className="w-32 text-right">{displayValue ? formatValue(setting.id, displayValue) : 'N/A'}</span>
-          <span className="text-gray-500">{setting.unit}</span>
-          {setting.description && (
-            <span className="text-xs text-gray-500 ml-2">{setting.description(density)}</span>
-          )}
+          <div 
+            className="flex items-center space-x-1 cursor-help" 
+            title={setting.tooltip ? setting.tooltip(density) : ''}
+          >
+            <span className="w-32 text-right">{displayValue ? formatValue(setting.id, displayValue) : 'N/A'}</span>
+            <span className="text-gray-500">{setting.unit}</span>
+            {setting.tooltip && <Info size={14} className="text-gray-400 ml-1" />}
+          </div>
         </div>
       );
     }
@@ -437,12 +475,6 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
                   <Ruler className="mr-2" size={16} />
                   <span className="font-medium">HOB:</span>
                   <span className="ml-2">{selectedFeature?.properties?.copiedFrom?.site_suitability__height_of_building ? `${selectedFeature.properties.copiedFrom.site_suitability__height_of_building}m` : 'N/A'}</span>
-                </div>
-              </div>
-              <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded-md text-sm">
-                <div className="flex items-center text-yellow-700">
-                  <Info className="mr-2" size={16} />
-                  <span><strong>Note:</strong> Low-Mid Density calculations are limited to a maximum of 3 storeys.</span>
                 </div>
               </div>
             </div>
@@ -618,22 +650,14 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
           
           {/* Low-Mid Density Calculation */}
           {activeCalcTab === 'lowMidDensity' && (
-            <>
-              <div className="mb-3 p-2 bg-yellow-50 border border-yellow-200 rounded-md text-sm">
-                <div className="flex items-center text-yellow-700">
-                  <Info className="mr-2" size={16} />
-                  <span><strong>Note:</strong> Low-Mid Density calculations are limited to a maximum of 3 storeys.</span>
-                </div>
-              </div>
-              <FeasibilityCalculation 
-                settings={settings} 
-                density="lowMidDensity" 
-                selectedFeature={selectedFeature}
-                salesData={salesData}
-                constructionData={constructionData}
-                housingScenarios={housingScenarios}
-              />
-            </>
+            <FeasibilityCalculation 
+              settings={settings} 
+              density="lowMidDensity" 
+              selectedFeature={selectedFeature}
+              salesData={salesData}
+              constructionData={constructionData}
+              housingScenarios={housingScenarios}
+            />
           )}
           
           {/* High Density Calculation */}
