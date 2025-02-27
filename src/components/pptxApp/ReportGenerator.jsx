@@ -110,9 +110,9 @@ const getStepDescription = (stepId) => {
       return 'Capturing map screenshots...';
     case 'cover':
       return 'Creating title page and overview...';
-    case 'snapshot':
+    case 'propertySnapshot':
       return 'Adding aerial imagery and property details...';
-    case 'primaryAttributes':
+    case 'primarySiteAttributes':
       return 'Processing site attributes and measurements...';
     case 'secondaryAttributes':
       return 'Adding topography and site characteristics...';
@@ -231,8 +231,8 @@ const ReportGenerator = ({ selectedFeature }) => {
   const [status, setStatus] = useState(null);
   const [selectedSlides, setSelectedSlides] = useState({
     cover: true,
-    snapshot: true,
-    primaryAttributes: true,
+    propertySnapshot: true,
+    primarySiteAttributes: true,
     secondaryAttributes: true,
     planning: true,
     planningTwo: true,
@@ -246,7 +246,7 @@ const ReportGenerator = ({ selectedFeature }) => {
     scoring: true,
     context: true,
     development: true,
-    feasibility: true
+    feasibility: false
   });
   const [developableArea, setDevelopableArea] = useState(null);
   const [showDevelopableArea, setShowDevelopableArea] = useState(true);
@@ -527,7 +527,7 @@ const ReportGenerator = ({ selectedFeature }) => {
         }
       }
       
-      if (selectedSlides.snapshot) {
+      if (selectedSlides.propertySnapshot) {
         addLog('Capturing aerial and snapshot images...', 'image');
         try {
           screenshots.aerialScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.AERIAL);
@@ -547,7 +547,7 @@ const ReportGenerator = ({ selectedFeature }) => {
         screenshots.hobScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.HOB, true, developableArea, showDevelopableArea);
       }
       
-      if (selectedSlides.primaryAttributes) {
+      if (selectedSlides.primarySiteAttributes) {
         screenshots.compositeMapScreenshot = await capturePrimarySiteAttributesMap(selectedFeature, developableArea, showDevelopableArea);
       }
       
@@ -626,9 +626,19 @@ const ReportGenerator = ({ selectedFeature }) => {
         copiedFrom: selectedFeature.properties.copiedFrom,
         reportDate,
         selectedSlides,
+        site_suitability__principal_zone_identifier: selectedFeature.properties.copiedFrom?.site_suitability__principal_zone_identifier,
+        site_suitability__area: selectedFeature.properties.copiedFrom?.site_suitability__area,  
+        site_suitability__site_width: selectedFeature.properties.copiedFrom?.site_suitability__site_width,
+        site__related_lot_references: selectedFeature.properties.copiedFrom?.site__related_lot_references,
+        site_suitability__public_transport_access_level_AM: selectedFeature.properties.copiedFrom?.site_suitability__public_transport_access_level_AM,
+        site_suitability__current_government_land_use: selectedFeature.properties.copiedFrom?.site_suitability__current_government_land_use,
+        site_suitability__floorspace_ratio: selectedFeature.properties.copiedFrom?.site_suitability__floorspace_ratio,  
+        site_suitability__height_of_building: selectedFeature.properties.copiedFrom?.site_suitability__height_of_building,
+        site_suitability__NSW_government_agency: selectedFeature.properties.copiedFrom?.site_suitability__NSW_government_agency,
         site__geometry: selectedFeature.geometry.coordinates[0],
         site__address: selectedFeature.properties.copiedFrom?.site__address || 'Unnamed Location',
         site_suitability__LGA: selectedFeature.properties.copiedFrom?.site_suitability__LGA,
+        site_suitability__electorate: selectedFeature.properties.copiedFrom?.site_suitability__electorate,
         site_suitability__suburb: selectedFeature.properties.copiedFrom?.site_suitability__suburb?.toUpperCase(),
         developableArea: developableArea?.features || null,
         showDevelopableArea,
@@ -648,17 +658,6 @@ const ReportGenerator = ({ selectedFeature }) => {
         )
       };
 
-      console.log('Property data being passed to report generation:', {
-        address: propertyData.site__address,
-        LGA: propertyData.site_suitability__LGA,
-        suburb: propertyData.site_suitability__suburb,
-        FSR: propertyData.copiedFrom?.site_suitability__floorspace_ratio,
-        HOB: propertyData.copiedFrom?.site_suitability__height_of_building,
-        area: propertyData.copiedFrom?.site_suitability__area,
-        salesDataLength: propertyData.salesData?.length,
-        sampleSalesData: propertyData.salesData?.slice(0, 3)
-      });
-
       // Generate the report with progress tracking
       await generateReport(propertyData, (progress) => {
         setProgress(progress);
@@ -666,8 +665,8 @@ const ReportGenerator = ({ selectedFeature }) => {
         // Create an array of selected slide steps in order
         const selectedSteps = [
           ...(selectedSlides.cover ? ['cover'] : []),
-          ...(selectedSlides.snapshot ? ['snapshot'] : []),
-          ...(selectedSlides.primaryAttributes ? ['primaryAttributes'] : []),
+          ...(selectedSlides.propertySnapshot ? ['propertySnapshot'] : []),
+          ...(selectedSlides.primarySiteAttributes ? ['primarySiteAttributes'] : []),
           ...(selectedSlides.secondaryAttributes ? ['secondaryAttributes'] : []),
           ...(selectedSlides.planning ? ['planning'] : []),
           ...(selectedSlides.planningTwo ? ['planningTwo'] : []),

@@ -1,6 +1,12 @@
 import { convertCmValues } from '../utils/units';
 
 export async function addPermissibilitySlide(pptx, properties) {
+  console.log('Permissibility slide data:', {
+    zoneCode: properties.site_suitability__principal_zone_identifier,
+    LGA: properties.site_suitability__LGA,
+    copiedFrom: properties.copiedFrom
+  });
+
   let slide;
   try {
     console.log('Starting to add permissibility slide...');
@@ -604,7 +610,7 @@ const styles = {
     y: '94%',
     w: '4%',
     h: '4%',
-    fontSize: 13,
+    fontSize: 8,
     color: '002664',
     fontFace: 'Public Sans',
     align: 'left'

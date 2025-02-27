@@ -194,7 +194,7 @@ export async function createScoringSlide(pres, propertyData) {
        { text: 'Scoring', options: { fill: '002664', color: 'FFFFFF' } }],
       // Primary Site Attributes
       [{ 
-        text: 'Primary Site Attributes\n\n',
+        text: 'Primary Site Attributes',
         options: { 
           rowspan: 1,
           valign: 'middle'
@@ -202,7 +202,7 @@ export async function createScoringSlide(pres, propertyData) {
       }, 'Developable Area', formatScoreWithColor(scores.developableArea)],
       // Secondary Site Attributes
       [{ 
-        text: 'Secondary Site Attributes\n\n',
+        text: 'Secondary Site Attributes',
         options: { 
           rowspan: 2,
           valign: 'middle'
@@ -211,7 +211,7 @@ export async function createScoringSlide(pres, propertyData) {
       ['Site Regularity', formatScoreWithColor(scores.siteRegularity)],
       // Planning
       [{ 
-        text: 'Planning\n\n',
+        text: 'Planning',
         options: { 
           rowspan: 3,
           valign: 'middle'
@@ -221,7 +221,7 @@ export async function createScoringSlide(pres, propertyData) {
       ['Acid Sulfate Soils', formatScoreWithColor(scores.acidSulfateSoils)],
       // Access & Services
       [{ 
-        text: 'Access & Services\n\n',
+        text: 'Access & Services',
         options: { 
           rowspan: 4,
           valign: 'middle'
@@ -232,7 +232,7 @@ export async function createScoringSlide(pres, propertyData) {
       ['Public Transport Access Level (PTAL)', formatScoreWithColor(scores.ptal)],
       // Utilisation & Improvements
       [{ 
-        text: 'Utilisation & Improvements\n\n',
+        text: 'Utilisation & Improvements',
         options: { 
           rowspan: 1,
           valign: 'middle'
@@ -240,7 +240,7 @@ export async function createScoringSlide(pres, propertyData) {
       }, 'Built Form', formatScoreWithColor(scores.geoscape)],
       // Hazards
       [{ 
-        text: 'Hazards\n\n',
+        text: 'Hazards',
         options: { 
           rowspan: 2,
           valign: 'middle'
@@ -249,7 +249,7 @@ export async function createScoringSlide(pres, propertyData) {
       ['Bushfire Risk', formatScoreWithColor(scores.bushfire)],
       // Site Contamination
       [{ 
-        text: 'Site Contamination\n\n',
+        text: 'Site Contamination',
         options: { 
           rowspan: 2,
           valign: 'middle'
@@ -258,7 +258,7 @@ export async function createScoringSlide(pres, propertyData) {
       ['Usage & potential site remediation', formatScoreWithColor(scores.historicalImagery)],
       // Environmental
       [{ 
-        text: 'Environmental\n\n',
+        text: 'Environmental',
         options: { 
           rowspan: 1,
           valign: 'middle'
@@ -266,7 +266,7 @@ export async function createScoringSlide(pres, propertyData) {
       }, 'Threatened Ecological Communities', formatScoreWithColor(scores.tec)],
       // Total Score
       [{ 
-        text: 'Total Score\n\n',
+        text: 'Total Score',
         options: { 
           rowspan: 1,
           valign: 'middle',
@@ -283,7 +283,7 @@ export async function createScoringSlide(pres, propertyData) {
         x: '5%',
         y: '18%',
         w: '62%',
-        colW: [2, 5, 1.5],  // Adjusted column widths
+        colW: [2, 4.8, 1.5],  // Adjusted column widths
         border: { type: 'solid', color: '363636', pt: 0.5 },
         rowH: 0.3,  // Slightly increased row height
         align: 'left',

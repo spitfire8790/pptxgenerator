@@ -52,13 +52,13 @@ export async function generateReport(properties, onProgress) {
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 
-    if (properties.selectedSlides.snapshot !== false) {
+    if (properties.selectedSlides.propertySnapshot !== false) {
       await addPropertySnapshotSlide(pptx, properties);
       updateProgress();
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 
-    if (properties.selectedSlides.primaryAttributes !== false) {
+    if (properties.selectedSlides.primarySiteAttributes !== false) {
       await addPrimarySiteAttributesSlide(pptx, properties);
       updateProgress();
       await new Promise(resolve => setTimeout(resolve, 300));
