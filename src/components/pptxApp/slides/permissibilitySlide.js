@@ -680,9 +680,23 @@ export async function addPermissibilitySlide(pptx, properties) {
             // Add footer line
             lmrSlide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.footerLine));
 
+            // Add source footnote
+            lmrSlide.addText('Source: ', {
+              ...convertCmValues({
+                x: '5%',
+                y: '90%',
+                w: '90%',
+                h: '3%'
+              }),
+              fontSize: 8,
+              color: '363636',
+              fontFace: 'Public Sans',
+              align: 'left'
+            });
+
             // Add footer text
             lmrSlide.addText('Property and Development NSW', convertCmValues(styles.footer));
-            lmrSlide.addText('16', convertCmValues(styles.pageNumber)); // Increment page number
+            lmrSlide.addText('17', convertCmValues(styles.pageNumber));
             
             // Format the permissible options for the table
             const lmrOptionsTableTitle = [
@@ -768,9 +782,16 @@ export async function addPermissibilitySlide(pptx, properties) {
               // Format the site requirements text
               const siteRequirements = Object.entries(option.requirements || {})
                 .map(([key, value]) => {
-                  // Skip the distance requirement for Residential Flat Buildings as we're now using ranges
-                  if (option.type === 'Residential Flat Buildings' && key === 'distance') {
-                    return null;
+                  // Special handling for Residential Flat Buildings based on zone
+                  if (option.type === 'Residential Flat Buildings') {
+                    const zoneCode = properties.site_suitability__principal_zone_identifier?.split(' ')?.[0]?.trim() || '';
+                    
+                    if (zoneCode === 'R1' || zoneCode === 'R2') {
+                      if (key === 'area') return 'Min. Area: 500m²';
+                      if (key === 'width') return 'Min. Width: 12m';
+                    } else if (zoneCode === 'R3' || zoneCode === 'R4') {
+                      return null; // No minimum requirements for R3/R4
+                    }
                   }
                   
                   // Format area values with commas for thousands
@@ -825,85 +846,100 @@ export async function addPermissibilitySlide(pptx, properties) {
               const fsrText = (() => {
                 const current = typeof option.currentFSR === 'number' ? option.currentFSR.toFixed(2) : 'Unknown';
                 
-                // Special handling for Residential Flat Buildings to show ranges
-                if (option.type === 'Residential Flat Buildings' && option.fsrRange) {
-                  const minFSR = option.fsrRange.min.toFixed(2);
-                  const maxFSR = option.fsrRange.max.toFixed(2);
+                // Special handling for Residential Flat Buildings
+                if (option.type === 'Residential Flat Buildings') {
+                  const zoneCode = properties.site_suitability__principal_zone_identifier?.split(' ')?.[0]?.trim() || '';
                   
-                  // If min and max are the same, just show one value
-                  const rangeText = minFSR === maxFSR 
-                    ? minFSR 
-                    : `${minFSR} - ${maxFSR}`;
-                  
-                  if (typeof option.currentFSR === 'number') {
-                    // Calculate difference using the average value for display
-                    const avgFSR = (option.fsrRange.min + option.fsrRange.max) / 2;
-                    const difference = avgFSR - option.currentFSR;
-                    const minDifference = option.fsrRange.min - option.currentFSR;
-                    const maxDifference = option.fsrRange.max - option.currentFSR;
+                  if (zoneCode === 'R1' || zoneCode === 'R2') {
+                    const maxFSR = 0.8;
                     
-                    // Determine if all changes are positive, negative, or mixed
-                    const allPositive = minDifference >= 0;
-                    const allNegative = maxDifference <= 0;
-                    
-                    let changeSymbol, changeColor, changeText;
-                    
-                    if (allPositive) {
-                      changeSymbol = '↑';
-                      changeColor = '4CAF50';
-                      changeText = minFSR === maxFSR 
-                        ? `${Math.abs(difference).toFixed(2)}` 
-                        : `${Math.abs(minDifference).toFixed(2)} - ${Math.abs(maxDifference).toFixed(2)}`;
-                    } else if (allNegative) {
-                      changeSymbol = '↓';
-                      changeColor = 'FF3B3B';
-                      changeText = minFSR === maxFSR 
-                        ? `${Math.abs(difference).toFixed(2)}` 
-                        : `${Math.abs(maxDifference).toFixed(2)} - ${Math.abs(minDifference).toFixed(2)}`;
+                    if (typeof option.currentFSR === 'number') {
+                      const difference = maxFSR - option.currentFSR;
+                      const changeSymbol = difference > 0 ? '↑' : (difference < 0 ? '↓' : '=');
+                      const changeColor = difference > 0 ? '4CAF50' : (difference < 0 ? 'FF3B3B' : '363636');
+                      
+                      return [
+                        { text: `Current: ${current}\n`, options: { color: '363636' } },
+                        { text: `New: ${maxFSR.toFixed(2)}\n`, options: { color: '363636', bold: true } },
+                        { 
+                          text: `${changeSymbol} ${Math.abs(difference).toFixed(2)}`, 
+                          options: { color: changeColor, bold: true } 
+                        }
+                      ];
                     } else {
-                      // Mixed case (some positive, some negative)
-                      changeSymbol = '↕';
-                      changeColor = '363636';
-                      changeText = `${minDifference.toFixed(2)} to ${maxDifference.toFixed(2)}`;
+                      return [
+                        { text: `Current: ${current}\n`, options: { color: '363636' } },
+                        { text: `New: ${maxFSR.toFixed(2)}`, options: { color: '363636', bold: true } }
+                      ];
                     }
+                  } else if (zoneCode === 'R3' || zoneCode === 'R4') {
+                    const minFSR = 1.5;
+                    const maxFSR = 2.2;
                     
-                    return [
-                      { text: `Current: ${current}\n`, options: { color: '363636' } },
-                      { text: `New: ${rangeText}\n`, options: { color: '363636', bold: true } },
-                      { 
-                        text: `${changeSymbol} ${changeText}`, 
-                        options: { color: changeColor, bold: true } 
+                    if (typeof option.currentFSR === 'number') {
+                      const avgFSR = (minFSR + maxFSR) / 2;
+                      const difference = avgFSR - option.currentFSR;
+                      const minDifference = minFSR - option.currentFSR;
+                      const maxDifference = maxFSR - option.currentFSR;
+                      
+                      // Determine if all changes are positive, negative, or mixed
+                      const allPositive = minDifference >= 0;
+                      const allNegative = maxDifference <= 0;
+                      
+                      let changeSymbol, changeColor, changeText;
+                      
+                      if (allPositive) {
+                        changeSymbol = '↑';
+                        changeColor = '4CAF50';
+                        changeText = `${Math.abs(minDifference).toFixed(2)} - ${Math.abs(maxDifference).toFixed(2)}`;
+                      } else if (allNegative) {
+                        changeSymbol = '↓';
+                        changeColor = 'FF3B3B';
+                        changeText = `${Math.abs(maxDifference).toFixed(2)} - ${Math.abs(minDifference).toFixed(2)}`;
+                      } else {
+                        changeSymbol = '↕';
+                        changeColor = '363636';
+                        changeText = `${minDifference.toFixed(2)} to ${maxDifference.toFixed(2)}`;
                       }
-                    ];
-                  } else {
-                    return [
-                      { text: `Current: ${current}\n`, options: { color: '363636' } },
-                      { text: `New: ${rangeText}`, options: { color: '363636', bold: true } }
-                    ];
+                      
+                      return [
+                        { text: `Current: ${current}\n`, options: { color: '363636' } },
+                        { text: `New: ${minFSR.toFixed(2)} - ${maxFSR.toFixed(2)}\n`, options: { color: '363636', bold: true } },
+                        { 
+                          text: `${changeSymbol} ${changeText}`, 
+                          options: { color: changeColor, bold: true } 
+                        }
+                      ];
+                    } else {
+                      return [
+                        { text: `Current: ${current}\n`, options: { color: '363636' } },
+                        { text: `New: ${minFSR.toFixed(2)} - ${maxFSR.toFixed(2)}`, options: { color: '363636', bold: true } }
+                      ];
+                    }
                   }
-                } else {
-                  // Standard handling for other housing types
-                  const potential = option.potentialFSR.toFixed(2);
+                }
+                
+                // Standard handling for other housing types
+                const potential = option.potentialFSR.toFixed(2);
+                
+                if (typeof option.currentFSR === 'number') {
+                  const difference = option.potentialFSR - option.currentFSR;
+                  const changeSymbol = difference > 0 ? '↑' : (difference < 0 ? '↓' : '=');
+                  const changeColor = difference > 0 ? '4CAF50' : (difference < 0 ? 'FF3B3B' : '363636');
                   
-                  if (typeof option.currentFSR === 'number') {
-                    const difference = option.potentialFSR - option.currentFSR;
-                    const changeSymbol = difference > 0 ? '↑' : (difference < 0 ? '↓' : '=');
-                    const changeColor = difference > 0 ? '4CAF50' : (difference < 0 ? 'FF3B3B' : '363636');
-                    
-                    return [
-                      { text: `Current: ${current}\n`, options: { color: '363636' } },
-                      { text: `New: ${potential}\n`, options: { color: '363636', bold: true } },
-                      { 
-                        text: `${changeSymbol} ${Math.abs(difference).toFixed(2)}`, 
-                        options: { color: changeColor, bold: true } 
-                      }
-                    ];
-                  } else {
-                    return [
-                      { text: `Current: ${current}\n`, options: { color: '363636' } },
-                      { text: `New: ${potential}`, options: { color: '363636', bold: true } }
-                    ];
-                  }
+                  return [
+                    { text: `Current: ${current}\n`, options: { color: '363636' } },
+                    { text: `New: ${potential}\n`, options: { color: '363636', bold: true } },
+                    { 
+                      text: `${changeSymbol} ${Math.abs(difference).toFixed(2)}`, 
+                      options: { color: changeColor, bold: true } 
+                    }
+                  ];
+                } else {
+                  return [
+                    { text: `Current: ${current}\n`, options: { color: '363636' } },
+                    { text: `New: ${potential}`, options: { color: '363636', bold: true } }
+                  ];
                 }
               })();
               
@@ -911,85 +947,100 @@ export async function addPermissibilitySlide(pptx, properties) {
               const hobText = (() => {
                 const current = typeof option.currentHOB === 'number' ? option.currentHOB.toFixed(1) + 'm' : 'Unknown';
                 
-                // Special handling for Residential Flat Buildings to show ranges
-                if (option.type === 'Residential Flat Buildings' && option.hobRange) {
-                  const minHOB = option.hobRange.min.toFixed(1);
-                  const maxHOB = option.hobRange.max.toFixed(1);
+                // Special handling for Residential Flat Buildings
+                if (option.type === 'Residential Flat Buildings') {
+                  const zoneCode = properties.site_suitability__principal_zone_identifier?.split(' ')?.[0]?.trim() || '';
                   
-                  // If min and max are the same, just show one value
-                  const rangeText = minHOB === maxHOB 
-                    ? `${minHOB}m` 
-                    : `${minHOB}m - ${maxHOB}m`;
-                  
-                  if (typeof option.currentHOB === 'number') {
-                    // Calculate difference using the average value for display
-                    const avgHOB = (option.hobRange.min + option.hobRange.max) / 2;
-                    const difference = avgHOB - option.currentHOB;
-                    const minDifference = option.hobRange.min - option.currentHOB;
-                    const maxDifference = option.hobRange.max - option.currentHOB;
+                  if (zoneCode === 'R1' || zoneCode === 'R2') {
+                    const maxHOB = 9.5;
                     
-                    // Determine if all changes are positive, negative, or mixed
-                    const allPositive = minDifference >= 0;
-                    const allNegative = maxDifference <= 0;
-                    
-                    let changeSymbol, changeColor, changeText;
-                    
-                    if (allPositive) {
-                      changeSymbol = '↑';
-                      changeColor = '4CAF50';
-                      changeText = minHOB === maxHOB 
-                        ? `${Math.abs(difference).toFixed(1)}m` 
-                        : `${Math.abs(minDifference).toFixed(1)}m - ${Math.abs(maxDifference).toFixed(1)}m`;
-                    } else if (allNegative) {
-                      changeSymbol = '↓';
-                      changeColor = 'FF3B3B';
-                      changeText = minHOB === maxHOB 
-                        ? `${Math.abs(difference).toFixed(1)}m` 
-                        : `${Math.abs(maxDifference).toFixed(1)}m - ${Math.abs(minDifference).toFixed(1)}m`;
+                    if (typeof option.currentHOB === 'number') {
+                      const difference = maxHOB - option.currentHOB;
+                      const changeSymbol = difference > 0 ? '↑' : (difference < 0 ? '↓' : '=');
+                      const changeColor = difference > 0 ? '4CAF50' : (difference < 0 ? 'FF3B3B' : '363636');
+                      
+                      return [
+                        { text: `Current: ${current}\n`, options: { color: '363636' } },
+                        { text: `New: ${maxHOB.toFixed(1)}m\n`, options: { color: '363636', bold: true } },
+                        { 
+                          text: `${changeSymbol} ${Math.abs(difference).toFixed(1)}m`, 
+                          options: { color: changeColor, bold: true } 
+                        }
+                      ];
                     } else {
-                      // Mixed case (some positive, some negative)
-                      changeSymbol = '↕';
-                      changeColor = '363636';
-                      changeText = `${minDifference.toFixed(1)}m to ${maxDifference.toFixed(1)}m`;
+                      return [
+                        { text: `Current: ${current}\n`, options: { color: '363636' } },
+                        { text: `New: ${maxHOB.toFixed(1)}m`, options: { color: '363636', bold: true } }
+                      ];
                     }
+                  } else if (zoneCode === 'R3' || zoneCode === 'R4') {
+                    const minHOB = 17.5;
+                    const maxHOB = 22.0;
                     
-                    return [
-                      { text: `Current: ${current}\n`, options: { color: '363636' } },
-                      { text: `New: ${rangeText}\n`, options: { color: '363636', bold: true } },
-                      { 
-                        text: `${changeSymbol} ${changeText}`, 
-                        options: { color: changeColor, bold: true } 
+                    if (typeof option.currentHOB === 'number') {
+                      const avgHOB = (minHOB + maxHOB) / 2;
+                      const difference = avgHOB - option.currentHOB;
+                      const minDifference = minHOB - option.currentHOB;
+                      const maxDifference = maxHOB - option.currentHOB;
+                      
+                      // Determine if all changes are positive, negative, or mixed
+                      const allPositive = minDifference >= 0;
+                      const allNegative = maxDifference <= 0;
+                      
+                      let changeSymbol, changeColor, changeText;
+                      
+                      if (allPositive) {
+                        changeSymbol = '↑';
+                        changeColor = '4CAF50';
+                        changeText = `${Math.abs(minDifference).toFixed(1)}m - ${Math.abs(maxDifference).toFixed(1)}m`;
+                      } else if (allNegative) {
+                        changeSymbol = '↓';
+                        changeColor = 'FF3B3B';
+                        changeText = `${Math.abs(maxDifference).toFixed(1)}m - ${Math.abs(minDifference).toFixed(1)}m`;
+                      } else {
+                        changeSymbol = '↕';
+                        changeColor = '363636';
+                        changeText = `${minDifference.toFixed(1)}m to ${maxDifference.toFixed(1)}m`;
                       }
-                    ];
-                  } else {
-                    return [
-                      { text: `Current: ${current}\n`, options: { color: '363636' } },
-                      { text: `New: ${rangeText}`, options: { color: '363636', bold: true } }
-                    ];
+                      
+                      return [
+                        { text: `Current: ${current}\n`, options: { color: '363636' } },
+                        { text: `New: ${minHOB.toFixed(1)}m - ${maxHOB.toFixed(1)}m\n`, options: { color: '363636', bold: true } },
+                        { 
+                          text: `${changeSymbol} ${changeText}`, 
+                          options: { color: changeColor, bold: true } 
+                        }
+                      ];
+                    } else {
+                      return [
+                        { text: `Current: ${current}\n`, options: { color: '363636' } },
+                        { text: `New: ${minHOB.toFixed(1)}m - ${maxHOB.toFixed(1)}m`, options: { color: '363636', bold: true } }
+                      ];
+                    }
                   }
-                } else {
-                  // Standard handling for other housing types
-                  const potential = option.potentialHOB.toFixed(1) + 'm';
+                }
+                
+                // Standard handling for other housing types
+                const potential = option.potentialHOB.toFixed(1) + 'm';
+                
+                if (typeof option.currentHOB === 'number') {
+                  const difference = option.potentialHOB - option.currentHOB;
+                  const changeSymbol = difference > 0 ? '↑' : (difference < 0 ? '↓' : '=');
+                  const changeColor = difference > 0 ? '4CAF50' : (difference < 0 ? 'FF3B3B' : '363636');
                   
-                  if (typeof option.currentHOB === 'number') {
-                    const difference = option.potentialHOB - option.currentHOB;
-                    const changeSymbol = difference > 0 ? '↑' : (difference < 0 ? '↓' : '=');
-                    const changeColor = difference > 0 ? '4CAF50' : (difference < 0 ? 'FF3B3B' : '363636');
-                    
-                    return [
-                      { text: `Current: ${current}\n`, options: { color: '363636' } },
-                      { text: `New: ${potential}\n`, options: { color: '363636', bold: true } },
-                      { 
-                        text: `${changeSymbol} ${Math.abs(difference).toFixed(1)}m`, 
-                        options: { color: changeColor, bold: true } 
-                      }
-                    ];
-                  } else {
-                    return [
-                      { text: `Current: ${current}\n`, options: { color: '363636' } },
-                      { text: `New: ${potential}`, options: { color: '363636', bold: true } }
-                    ];
-                  }
+                  return [
+                    { text: `Current: ${current}\n`, options: { color: '363636' } },
+                    { text: `New: ${potential}\n`, options: { color: '363636', bold: true } },
+                    { 
+                      text: `${changeSymbol} ${Math.abs(difference).toFixed(1)}m`, 
+                      options: { color: changeColor, bold: true } 
+                    }
+                  ];
+                } else {
+                  return [
+                    { text: `Current: ${current}\n`, options: { color: '363636' } },
+                    { text: `New: ${potential}`, options: { color: '363636', bold: true } }
+                  ];
                 }
               })();
               
