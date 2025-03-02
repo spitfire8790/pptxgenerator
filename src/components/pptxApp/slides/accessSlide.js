@@ -150,7 +150,7 @@ export async function addAccessSlide(pptx, propertyData) {
     slide.addText([
       { text: propertyData.site__address, options: { color: styles.title.color } },
       { text: ' ', options: { breakLine: true } },
-      { text: 'Access', options: { color: styles.subtitle.color } }
+      { text: 'Access and Proximity to Strategic Centres', options: { color: styles.subtitle.color } }
     ], convertCmValues({
       ...styles.title,
       color: undefined

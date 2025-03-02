@@ -977,46 +977,10 @@ export async function addPermissibilitySlide(pptx, properties) {
                     const minHOB = 17.5;
                     const maxHOB = 22.0;
                     
-                    if (typeof option.currentHOB === 'number') {
-                      const avgHOB = (minHOB + maxHOB) / 2;
-                      const difference = avgHOB - option.currentHOB;
-                      const minDifference = minHOB - option.currentHOB;
-                      const maxDifference = maxHOB - option.currentHOB;
-                      
-                      // Determine if all changes are positive, negative, or mixed
-                      const allPositive = minDifference >= 0;
-                      const allNegative = maxDifference <= 0;
-                      
-                      let changeSymbol, changeColor, changeText;
-                      
-                      if (allPositive) {
-                        changeSymbol = '↑';
-                        changeColor = '4CAF50';
-                        changeText = `${Math.abs(minDifference).toFixed(1)}m - ${Math.abs(maxDifference).toFixed(1)}m`;
-                      } else if (allNegative) {
-                        changeSymbol = '↓';
-                        changeColor = 'FF3B3B';
-                        changeText = `${Math.abs(maxDifference).toFixed(1)}m - ${Math.abs(minDifference).toFixed(1)}m`;
-                      } else {
-                        changeSymbol = '↕';
-                        changeColor = '363636';
-                        changeText = `${minDifference.toFixed(1)}m to ${maxDifference.toFixed(1)}m`;
-                      }
-                      
-                      return [
-                        { text: `Current: ${current}\n`, options: { color: '363636' } },
-                        { text: `New: ${minHOB.toFixed(1)}m - ${maxHOB.toFixed(1)}m\n`, options: { color: '363636', bold: true } },
-                        { 
-                          text: `${changeSymbol} ${changeText}`, 
-                          options: { color: changeColor, bold: true } 
-                        }
-                      ];
-                    } else {
-                      return [
-                        { text: `Current: ${current}\n`, options: { color: '363636' } },
-                        { text: `New: ${minHOB.toFixed(1)}m - ${maxHOB.toFixed(1)}m`, options: { color: '363636', bold: true } }
-                      ];
-                    }
+                    return [
+                      { text: `Current: ${current}\n`, options: { color: '363636' } },
+                      { text: `New: ${minHOB.toFixed(1)}m - ${maxHOB.toFixed(1)}m`, options: { color: '363636', bold: true } }
+                    ];
                   }
                 }
                 
