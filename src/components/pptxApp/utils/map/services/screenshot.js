@@ -1658,7 +1658,8 @@ async function getRoadFeatures(centerX, centerY, size) {
   });
 
   try {
-    const response = await proxyRequest(`${url}?${params}`);
+    // Pass a longer timeout option (120 seconds instead of the default 30)
+    const response = await proxyRequest(`${url}?${params}`, { timeout: 120000 });
     console.log('Road features response:', response);
     
     if (response?.features?.length > 0) {
@@ -2315,6 +2316,173 @@ function drawRoundedTextBox(ctx, text, x, y, padding = 10, cornerRadius = 5) {
   ctx.fillText(text, x + padding, y + (boxHeight / 2));
 }
 
+// Helper function to check if a property overlaps with LMR areas by directly querying the LMR layers
+export async function checkLMROverlap(feature, centerX, centerY, size) {
+  console.log('Checking LMR overlap for feature using direct query...');
+  
+  try {
+    // Create a temporary canvas for checking overlaps
+    const canvas = createCanvas(2048, 2048);
+    const ctx = canvas.getContext('2d');
+    
+    // Define the LMR layers to check
+    const lmrLayers = [
+      { id: 4, name: 'Indicative LMR Housing Area' },
+      { id: 2, name: 'TOD Accelerated Rezoning Area' },
+      { id: 3, name: 'TOD Area' }
+    ];
+    
+    // Define the LMR area colors to check for
+    const lmrColors = {
+      'Indicative LMR Housing Area': [239, 216, 175], // rgb(239, 216, 175)
+      'TOD Accelerated Rezoning Area': [182, 154, 177], // rgb(182, 154, 177)
+      'TOD Area': [208, 181, 204] // rgb(208, 181, 204)
+    };
+    
+    // Convert feature coordinates to canvas coordinates
+    const coordinates = feature.geometry.coordinates[0];
+    const canvasCoords = coordinates.map(coord => {
+      const x = ((coord[0] - (centerX - size/2)) / size) * canvas.width;
+      const y = canvas.height - ((coord[1] - (centerY - size/2)) / size) * canvas.height;
+      return [x, y];
+    });
+    
+    // Draw the property boundary as a filled shape
+    ctx.beginPath();
+    canvasCoords.forEach((coord, i) => {
+      if (i === 0) ctx.moveTo(coord[0], coord[1]);
+      else ctx.lineTo(coord[0], coord[1]);
+    });
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(255, 255, 255, 1)';
+    ctx.fill();
+    
+    // Get the bounding box of the property
+    const bounds = canvasCoords.reduce((acc, coord) => ({
+      minX: Math.min(acc.minX, coord[0]),
+      minY: Math.min(acc.minY, coord[1]),
+      maxX: Math.max(acc.maxX, coord[0]),
+      maxY: Math.max(acc.maxY, coord[1])
+    }), {
+      minX: Infinity,
+      minY: Infinity,
+      maxX: -Infinity,
+      maxY: -Infinity
+    });
+    
+    // Add a small buffer to ensure we check pixels that might be on the edge
+    const buffer = 5;
+    const minX = Math.max(0, Math.floor(bounds.minX) - buffer);
+    const minY = Math.max(0, Math.floor(bounds.minY) - buffer);
+    const maxX = Math.min(canvas.width, Math.ceil(bounds.maxX) + buffer);
+    const maxY = Math.min(canvas.height, Math.ceil(bounds.maxY) + buffer);
+    
+    // Load and draw the LMR layer
+    const { bbox } = calculateMercatorParams(centerX, centerY, size);
+    const lmrConfig = {
+      url: 'https://spatialportalarcgis.dpie.nsw.gov.au/sarcgis/rest/services/LMR/LMR/MapServer',
+      size: canvas.width,
+      padding: 0.2
+    };
+    
+    const lmrParams = new URLSearchParams({
+      f: 'image',
+      format: 'png32',
+      transparent: 'true',
+      size: `${lmrConfig.size},${lmrConfig.size}`,
+      bbox: bbox,
+      bboxSR: 3857,
+      imageSR: 3857,
+      layers: 'show:0,1,2,3,4',
+      dpi: 300
+    });
+
+    const lmrUrl = `${lmrConfig.url}/export?${lmrParams.toString()}`;
+    const lmrProxyUrl = await proxyRequest(lmrUrl);
+    
+    if (!lmrProxyUrl) {
+      throw new Error('Failed to get proxy URL for LMR layer');
+    }
+    
+    const lmrLayer = await loadImage(lmrProxyUrl);
+    ctx.drawImage(lmrLayer, 0, 0, canvas.width, canvas.height);
+    
+    // Get the image data from the canvas
+    const imageData = ctx.getImageData(minX, minY, maxX - minX, maxY - minY);
+    
+    // Check for overlaps
+    const overlaps = {};
+    const pixelCounts = {};
+    
+    // Initialize pixel counts
+    Object.keys(lmrColors).forEach(key => {
+      overlaps[key] = false;
+      pixelCounts[key] = 0;
+    });
+    
+    // Sample pixels at regular intervals to improve performance
+    const sampleRate = 2; // Check every 2nd pixel
+    const significantPixelThreshold = 50; // Require more pixels to confirm overlap
+    
+    // Check each pixel
+    for (let y = 0; y < maxY - minY; y += sampleRate) {
+      for (let x = 0; x < maxX - minX; x += sampleRate) {
+        const i = (y * (maxX - minX) + x) * 4;
+        
+        // Check if this pixel matches any of the LMR colors
+        Object.entries(lmrColors).forEach(([key, color]) => {
+          // Use stricter color matching to avoid false positives
+          const colorMatch = 
+            Math.abs(imageData.data[i] - color[0]) < 20 && 
+            Math.abs(imageData.data[i + 1] - color[1]) < 20 && 
+            Math.abs(imageData.data[i + 2] - color[2]) < 20 && 
+            imageData.data[i + 3] > 100; // Higher alpha threshold
+          
+          if (colorMatch) {
+            pixelCounts[key]++;
+          }
+        });
+      }
+    }
+    
+    // Determine which areas have significant overlap
+    Object.entries(pixelCounts).forEach(([key, count]) => {
+      // Set overlap to true only if we have a significant number of matching pixels
+      overlaps[key] = count > significantPixelThreshold;
+    });
+    
+    console.log('LMR overlap check results:', overlaps);
+    console.log('LMR pixel counts:', pixelCounts);
+    
+    // Determine which area has the most overlap
+    let maxPixels = 0;
+    let primaryOverlap = null;
+    
+    Object.entries(pixelCounts).forEach(([key, count]) => {
+      if (count > maxPixels && count > significantPixelThreshold) {
+        maxPixels = count;
+        primaryOverlap = key;
+      }
+    });
+    
+    // Return the results
+    return {
+      hasOverlap: Object.values(overlaps).some(v => v),
+      overlaps,
+      primaryOverlap,
+      pixelCounts
+    };
+  } catch (error) {
+    console.error('Error checking LMR overlap:', error);
+    return {
+      hasOverlap: false,
+      overlaps: {},
+      primaryOverlap: null,
+      pixelCounts: {}
+    };
+  }
+}
+
 export async function captureUDPPrecinctMap(feature, developableArea = null, showDevelopableArea = true) {
   if (!feature) return null;
   console.log('Starting UDP precinct map capture...');
@@ -2323,7 +2491,7 @@ export async function captureUDPPrecinctMap(feature, developableArea = null, sho
     const config = {
       width: 2048,
       height: 2048,
-      padding: 5
+      padding: 6
     };
     
     const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
@@ -2362,6 +2530,56 @@ export async function captureUDPPrecinctMap(feature, developableArea = null, sho
     }
 
     try {
+      // 1.5. LMR layers from ArcGIS REST service
+      console.log('Loading LMR layers...');
+      const lmrConfig = {
+        url: 'https://spatialportalarcgis.dpie.nsw.gov.au/sarcgis/rest/services/LMR/LMR/MapServer',
+        size: config.width,
+        padding: config.padding
+      };
+      
+      // Create GDA94 bbox for the LMR service
+      const gda94Bbox = `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`;
+      
+      const lmrParams = new URLSearchParams({
+        f: 'image',
+        format: 'png32',
+        transparent: 'true',
+        size: `${lmrConfig.size},${lmrConfig.size}`,
+        bbox: gda94Bbox,
+        bboxSR: 4283, // GDA94
+        imageSR: 3857, // 
+        layers: 'show:0,1,2,3,4', // Show all LMR layers
+        dpi: 300
+      });
+
+      const lmrUrl = `${lmrConfig.url}/export?${lmrParams.toString()}`;
+      console.log('Requesting LMR layers through proxy...', lmrUrl);
+      
+      const lmrProxyUrl = await proxyRequest(lmrUrl);
+      if (lmrProxyUrl) {
+        console.log('Loading LMR image from proxy URL...');
+        const lmrLayer = await loadImage(lmrProxyUrl);
+        console.log('LMR layers loaded successfully');
+        drawImage(ctx, lmrLayer, canvas.width, canvas.height, 1); // Adjust opacity as needed
+        
+        // Check if the property overlaps with any LMR areas
+        const lmrOverlap = await checkLMROverlap(feature, centerX, centerY, size);
+        console.log('LMR overlap results:', lmrOverlap);
+        
+        // Store the LMR overlap results in the feature properties for scoring
+        if (!feature.properties) {
+          feature.properties = {};
+        }
+        feature.properties.lmrOverlap = lmrOverlap;
+      } else {
+        console.warn('Failed to get proxy URL for LMR layers');
+      }
+    } catch (error) {
+      console.warn('Failed to load LMR layers:', error);
+    }
+
+    try {
       // 2. UDP Precincts layer
       console.log('Loading UDP precincts...');
       const udpResponse = await fetch('/UDP_Precincts.geojson');
@@ -2389,8 +2607,8 @@ export async function captureUDPPrecinctMap(feature, developableArea = null, sho
                 polygonCoords.forEach(coords => {
                   drawBoundary(ctx, coords, centerX, centerY, size, config.width, {
                     fill: true,
-                    strokeStyle: 'rgba(255, 165, 0, 0.8)',
-                    fillStyle: 'rgba(255, 165, 0, 0.5)',
+                    strokeStyle: 'rgba(4, 170, 229, 0.8)',
+                    fillStyle: 'rgba(4, 170, 229, 0.5)',
                     lineWidth: 2
                   });
                 });
@@ -2400,8 +2618,8 @@ export async function captureUDPPrecinctMap(feature, developableArea = null, sho
               precinctFeature.geometry.coordinates.forEach(coords => {
                 drawBoundary(ctx, coords, centerX, centerY, size, config.width, {
                   fill: true,
-                  strokeStyle: 'rgba(255, 165, 0, 0.8)',
-                  fillStyle: 'rgba(255, 165, 0, 0.5)',
+                  strokeStyle: 'rgba(4, 170, 229, 0.8)',
+                  fillStyle: 'rgba(4, 170, 229, 0.5)',
                   lineWidth: 2
                 });
               });
@@ -2471,7 +2689,7 @@ export async function captureUDPPrecinctMap(feature, developableArea = null, sho
     }
 
     // Add legend
-    const legendHeight = 200;
+    const legendHeight = 350; // Increased height to accommodate more items
     const legendWidth = 400;
     const padding = 20;
     const legendX = canvas.width - legendWidth - padding;
@@ -2488,11 +2706,16 @@ export async function captureUDPPrecinctMap(feature, developableArea = null, sho
     ctx.font = 'bold 28px Public Sans';
     ctx.fillStyle = '#002664';
     ctx.textBaseline = 'top';
-    ctx.fillText('UDP Growth Precincts', legendX + padding, legendY + padding);
+    ctx.fillText('Planning Precincts', legendX + padding, legendY + padding);
 
-    // Legend items
+    // Legend items - include both UDP and LMR layers
     const legendItems = [
-      { color: 'rgba(255, 165, 0, 0.5)', label: 'UDP Growth Precinct' }
+      { color: 'rgba(4, 170, 229, 0.5)', label: 'UDP Growth Precinct' },
+      { color: 'rgb(118, 117, 114)', label: 'LMR Station', type: 'point' },
+      { color: 'rgb(209, 225, 240)', label: 'LMR Centre', type: 'point' },
+      { color: 'rgb(182, 154, 177)', label: 'TOD Accelerated Rezoning Area', type: 'area' },
+      { color: 'rgb(208, 181, 204)', label: 'TOD Area', type: 'area' },
+      { color: 'rgb(239, 216, 175)', label: 'Indicative LMR Housing Area', type: 'area' }
     ];
 
     ctx.textBaseline = 'middle';
@@ -2501,12 +2724,23 @@ export async function captureUDPPrecinctMap(feature, developableArea = null, sho
     legendItems.forEach((item, index) => {
       const y = legendY + padding + 60 + (index * 45);
       
-      // Draw color box
-      ctx.fillStyle = item.color;
-      ctx.fillRect(legendX + padding, y - 10, 20, 20);
-      ctx.strokeStyle = '#363636';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(legendX + padding, y - 10, 20, 20);
+      if (item.type === 'point') {
+        // Draw circle for point features
+        ctx.beginPath();
+        ctx.arc(legendX + padding + 10, y, 10, 0, 2 * Math.PI);
+        ctx.fillStyle = item.color;
+        ctx.fill();
+        ctx.strokeStyle = '#363636';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      } else {
+        // Draw color box for area features
+        ctx.fillStyle = item.color;
+        ctx.fillRect(legendX + padding, y - 10, 20, 20);
+        ctx.strokeStyle = '#363636';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(legendX + padding, y - 10, 20, 20);
+      }
       
       // Draw label
       ctx.fillStyle = '#363636';

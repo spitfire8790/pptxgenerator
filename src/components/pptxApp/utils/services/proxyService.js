@@ -78,9 +78,12 @@ export async function proxyRequest(url, options = {}) {
       hasBody: !!options.body
     });
     
-    // Set a timeout of 30 seconds for the request
+    // Set a timeout for the request - use provided timeout or default to 30 seconds
+    const timeoutMs = options.timeout || 30000;
+    console.log(`Setting request timeout to ${timeoutMs}ms`);
+    
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     
     try {
       const response = await fetch(proxyUrl, {
@@ -141,8 +144,8 @@ export async function proxyRequest(url, options = {}) {
       
       // If this was an abort error, provide a clearer message
       if (fetchError.name === 'AbortError') {
-        console.error('Proxy request timed out after 30 seconds');
-        throw new Error('Request to proxy timed out after 30 seconds');
+        console.error(`Proxy request timed out after ${timeoutMs/1000} seconds`);
+        throw new Error(`Request to proxy timed out after ${timeoutMs/1000} seconds`);
       }
       
       throw fetchError;

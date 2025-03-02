@@ -953,9 +953,27 @@ const scoringCriteria = {
       console.log('precinctFeatures:', JSON.stringify(precinctFeatures, null, 2));
       console.log('developableArea:', JSON.stringify(developableArea, null, 2));
 
+      // Check for LMR overlap first (this takes precedence if present)
+      const lmrOverlap = precinctFeatures?.lmrOverlap || 
+                         (precinctFeatures?.properties?.lmrOverlap) || 
+                         { hasOverlap: false, primaryOverlap: null };
+      
+      console.log('LMR overlap data:', lmrOverlap);
+      
+      // If we have LMR overlap, return score 3 immediately
+      if (lmrOverlap.hasOverlap && lmrOverlap.primaryOverlap) {
+        console.log('Property overlaps with LMR area:', lmrOverlap.primaryOverlap);
+        return { 
+          score: 3, 
+          minDistance: 0, 
+          nearestPrecinct: null,
+          lmrOverlap: lmrOverlap
+        };
+      }
+
       if (!developableArea?.[0]) {
         console.log('No developable area - returning score 0');
-        return { score: 0, minDistance: Infinity, nearestPrecinct: null };
+        return { score: 0, minDistance: Infinity, nearestPrecinct: null, lmrOverlap };
       }
 
       try {
@@ -1049,24 +1067,33 @@ const scoringCriteria = {
         });
 
         let score;
+        // Check for LMR proximity (if we don't have direct overlap)
+        // We'll use the pixel counts to estimate proximity to LMR areas
+        const hasNearbyLMR = Object.values(lmrOverlap.pixelCounts || {}).some(count => count > 0);
+        
         if (minDistance === 0 || minDistance <= 800) {
           score = 3;
-        } else if (minDistance <= 1600) {
+        } else if (minDistance <= 1600 || hasNearbyLMR) {
           score = 2;
         } else {
           score = 1;
         }
 
-        console.log('\nFinal result:', { score, minDistance, nearestPrecinct });
-        return { score, minDistance, nearestPrecinct };
+        console.log('\nFinal result:', { score, minDistance, nearestPrecinct, lmrOverlap, hasNearbyLMR });
+        return { score, minDistance, nearestPrecinct, lmrOverlap, hasNearbyLMR };
       } catch (error) {
         console.error('Error calculating UDP precincts score:', error);
         console.error('Error stack:', error.stack);
-        return { score: 0, minDistance: Infinity, nearestPrecinct: null };
+        return { score: 0, minDistance: Infinity, nearestPrecinct: null, lmrOverlap };
       }
     },
     getScoreDescription: (scoreObj) => {
-      const { score, minDistance, nearestPrecinct } = scoreObj;
+      const { score, minDistance, nearestPrecinct, lmrOverlap, hasNearbyLMR } = scoreObj;
+      
+      // Check for LMR overlap first (highest priority)
+      if (lmrOverlap?.hasOverlap && lmrOverlap.primaryOverlap) {
+        return `The site is within a ${lmrOverlap.primaryOverlap}.`;
+      }
       
       // Special case for when the site is within a precinct
       if (minDistance === 0) {
@@ -1085,9 +1112,12 @@ const scoringCriteria = {
         case 3:
           return `Developable area is within ${formattedDistance} of a UDP growth precinct (${nearestPrecinct}).`;
         case 2:
+          if (hasNearbyLMR) {
+            return `Developable area is in close proximity to a TOD area or LMR area.`;
+          }
           return `Developable area is within ${formattedDistance} of a UDP growth precinct (${nearestPrecinct}).`;
         case 1:
-          return `Developable area is greater than 1.6 kilometres from a UDP precinct.`;
+          return `Developable area is greater than 1.6 kilometres from a UDP precinct. Additionally, the site is not in close proximity to a TOD area or LMR area.`;
         default:
           return "UDP precinct proximity not assessed";
       }

@@ -12,7 +12,7 @@ import {
   Bar,
   ReferenceLine
 } from 'recharts';
-import { Calculator, TrendingUp, DollarSign, HardHat, Percent, Home } from 'lucide-react';
+import { Calculator, TrendingUp, DollarSign, HardHat, Percent, Home, Building2 } from 'lucide-react';
 
 // Helper function to format currency
 const formatCurrency = (amount) => {
@@ -43,303 +43,89 @@ const formatPercentage = (value) => {
   }).format(value);
 };
 
-const FeasibilityCalculation = ({ settings, density, selectedFeature, salesData, constructionData }) => {
-  const [calculationResults, setCalculationResults] = useState(null);
+// Function to generate housing impact analysis data
+const generateHousingImpactAnalysis = (settings, density, selectedFeature, calculationResults) => {
+  // Generate data points from 0% to 100% in 5% increments
+  const data = [];
+  const breakeven = {
+    social: null,
+    affordable: null,
+    mixed: null
+  };
+
+  // Get base values from calculation results
+  const baseResidualLandValue = calculationResults.residualLandValue;
+  const dwellingPrice = settings[density].dwellingPrice;
+  const totalDwellings = calculationResults.developmentYield;
+
+  // Calculate revenue reduction per dwelling for each type
+  const socialReduction = dwellingPrice; // 100% reduction (no revenue)
+  const affordableReduction = dwellingPrice * 0.25; // 25% reduction (75% revenue)
+  const mixedReduction = dwellingPrice * 0.625; // Average of social and affordable (37.5% revenue)
+
+  let lastPositiveSocial = null;
+  let lastPositiveAffordable = null;
+  let lastPositiveMixed = null;
+
+  for (let i = 0; i <= 100; i += 5) {
+    const percentage = i;
+    const affectedDwellings = Math.round(totalDwellings * (percentage / 100));
+    
+    // Calculate residual land value for each scenario
+    const socialResidualLandValue = baseResidualLandValue - (affectedDwellings * socialReduction);
+    const affordableResidualLandValue = baseResidualLandValue - (affectedDwellings * affordableReduction);
+    const mixedResidualLandValue = baseResidualLandValue - (affectedDwellings * mixedReduction);
+
+    // Track breakeven points (where residual land value crosses zero)
+    if (socialResidualLandValue >= 0) lastPositiveSocial = { percentage, units: affectedDwellings };
+    if (affordableResidualLandValue >= 0) lastPositiveAffordable = { percentage, units: affectedDwellings };
+    if (mixedResidualLandValue >= 0) lastPositiveMixed = { percentage, units: affectedDwellings };
+
+    data.push({
+      percentage,
+      socialResidualLandValue,
+      affordableResidualLandValue,
+      mixedResidualLandValue
+    });
+  }
+
+  // Set breakeven points
+  breakeven.social = lastPositiveSocial;
+  breakeven.affordable = lastPositiveAffordable;
+  breakeven.mixed = lastPositiveMixed;
+
+  return {
+    data,
+    breakeven
+  };
+};
+
+const FeasibilityCalculation = ({ 
+  settings, 
+  density, 
+  selectedFeature,
+  salesData,
+  constructionData,
+  housingScenarios,
+  lmrOptions,
+  useLMR = false,
+  calculationResults = null,
+  lmrResults = null
+}) => {
   const [sensitivityData, setSensitivityData] = useState({
     housingImpact: []
   });
 
-  // Calculate feasibility based on current settings
   useEffect(() => {
-    if (!settings || !selectedFeature) return;
-
-    const results = calculateFeasibility(settings, density, selectedFeature);
-    setCalculationResults(results);
+    if (!calculationResults) return;
 
     // Generate sensitivity analysis data
-    const housingImpactData = generateHousingImpactAnalysis(settings, density, selectedFeature, results);
+    const housingImpactData = generateHousingImpactAnalysis(settings, density, selectedFeature, calculationResults);
 
     setSensitivityData({
       housingImpact: housingImpactData
     });
-  }, [settings, density, selectedFeature]);
-
-  // Main feasibility calculation function
-  const calculateFeasibility = (settings, density, propertyData) => {
-    const currentSettings = settings[density];
-    
-    // Calculate developable area and site coverage
-    const developableArea = propertyData?.properties?.copiedFrom?.site_suitability__area || 0;
-    // Get the site area (which may be larger than the developable area)
-    const siteArea = propertyData?.properties?.copiedFrom?.site_area || developableArea;
-    const siteCoverage = developableArea * currentSettings.siteEfficiencyRatio;
-
-    // Calculate GFA under FSR and HOB
-    const fsr = propertyData?.properties?.copiedFrom?.site_suitability__floorspace_ratio || 0;
-    const hob = propertyData?.properties?.copiedFrom?.site_suitability__height_of_building || 0;
-
-    // Use site area for FSR calculation
-    const gfaUnderFsr = siteArea * fsr;
-    
-    // Calculate GFA under HOB
-    const maxStoreys = Math.floor(hob / currentSettings.floorToFloorHeight);
-    const gfaUnderHob = siteCoverage * maxStoreys * currentSettings.gbaToGfaRatio;
-
-    // Use FSR value if no HoB exists, otherwise use the lower of the two
-    const gfa = !hob ? gfaUnderFsr : Math.min(gfaUnderFsr, gfaUnderHob);
-
-    // Calculate NSA and development yield
-    const nsa = gfa * currentSettings.gfaToNsaRatio;
-    
-    // Get dwelling size from construction data or use default
-    const dwellingSize = constructionData?.dwellingSizes?.[density] || 80; // Default fallback
-    
-    // Calculate development yield using dwelling size from construction data
-    const developmentYield = Math.floor(nsa / dwellingSize);
-
-    // Calculate total gross realisation
-    const totalGrossRealisation = developmentYield * currentSettings.dwellingPrice;
-
-    // Calculate GST and selling costs
-    const gst = totalGrossRealisation * 0.1;
-    const agentsCommission = totalGrossRealisation * currentSettings.agentsSalesCommission;
-    const legalFees = totalGrossRealisation * currentSettings.legalFeesOnSales;
-    const marketingCosts = totalGrossRealisation * currentSettings.marketingCosts;
-    const netRealisation = totalGrossRealisation - gst - agentsCommission - legalFees - marketingCosts;
-
-    // Calculate profit and risk
-    const profitAndRisk = netRealisation * currentSettings.profitAndRisk;
-    const netRealisationAfterProfitAndRisk = netRealisation - profitAndRisk;
-
-    // Get construction cost
-    const constructionCostPerGfa = constructionData?.[density] || 3500; // Default fallback
-    
-    // Calculate development costs
-    const constructionCosts = constructionCostPerGfa * gfa;
-    const daApplicationFees = currentSettings.daApplicationFees;
-    const professionalFees = constructionCosts * currentSettings.professionalFees;
-    
-    // Calculate Development Contribution
-    const developmentContribution = constructionCosts * currentSettings.developmentContribution;
-    
-    // Calculate Land Tax
-    const propertyValue = propertyData?.properties?.copiedFrom?.site_suitability__property_value || 0;
-    const generalThreshold = 1000000; // $1,000,000 threshold
-    const premiumThreshold = 4000000; // $4,000,000 threshold
-    
-    let landTaxPerYear = 0;
-    if (propertyValue > premiumThreshold) {
-      // Premium threshold: $88,036 plus 2% of land value above the threshold
-      landTaxPerYear = 88036 + (propertyValue - premiumThreshold) * 0.02;
-    } else if (propertyValue > generalThreshold) {
-      // General threshold: $100 plus 1.6% of land value above the threshold up to the premium threshold
-      landTaxPerYear = 100 + (propertyValue - generalThreshold) * 0.016;
-    }
-    
-    // Calculate total Land Tax for the project period
-    const projectYears = currentSettings.projectPeriod / 12;
-    const landTax = landTaxPerYear * projectYears;
-
-    const totalDevelopmentCosts = constructionCosts + daApplicationFees + professionalFees + developmentContribution;
-
-    // Calculate finance costs
-    const monthlyInterestRate = currentSettings.interestRate / 12;
-    const financeCosts = monthlyInterestRate * (currentSettings.projectPeriod / 2) * totalDevelopmentCosts;
-
-    // Calculate residual land value
-    const residualLandValue = netRealisationAfterProfitAndRisk - totalDevelopmentCosts - financeCosts - landTax;
-    
-    // Calculate residual land value per m²
-    const residualLandValuePerM2 = residualLandValue / developableArea;
-
-    return {
-      developableArea,
-      siteArea,
-      siteCoverage,
-      fsr,
-      hob,
-      gfaUnderFsr,
-      gfaUnderHob,
-      gfa,
-      nsa,
-      dwellingSize,
-      developmentYield,
-      totalGrossRealisation,
-      gst,
-      agentsCommission,
-      legalFees,
-      marketingCosts,
-      netRealisation,
-      profitAndRisk,
-      netRealisationAfterProfitAndRisk,
-      constructionCostPerGfa,
-      constructionCosts,
-      daApplicationFees,
-      professionalFees,
-      developmentContribution,
-      propertyValue,
-      landTaxPerYear,
-      landTax,
-      totalDevelopmentCosts,
-      financeCosts,
-      residualLandValue,
-      residualLandValuePerM2,
-      projectPeriod: currentSettings.projectPeriod
-    };
-  };
-
-  // Generate social/affordable housing impact analysis data
-  const generateHousingImpactAnalysis = (settings, density, propertyData, baseResults) => {
-    // Update percentages to include more values up to 100%
-    const percentages = [0, 5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 80, 90, 100];
-    const basePrice = settings[density].dwellingPrice;
-    const data = [];
-    
-    // For each percentage, calculate three scenarios:
-    // 1. All social housing (0% revenue)
-    // 2. All affordable housing (75% revenue)
-    // 3. 50/50 mix of social and affordable housing
-    
-    percentages.forEach(percentage => {
-      // Calculate the number of dwellings affected
-      const totalDwellings = baseResults.developmentYield;
-      const affectedDwellings = Math.round(totalDwellings * (percentage / 100));
-      
-      if (affectedDwellings === 0 && percentage !== 0) return;
-      
-      // Create modified settings for each scenario
-      const modifiedSettings = JSON.parse(JSON.stringify(settings));
-      
-      // Scenario 1: All social housing (0% revenue)
-      const socialSettings = JSON.parse(JSON.stringify(modifiedSettings));
-      const socialDwellings = affectedDwellings;
-      const marketDwellings = totalDwellings - socialDwellings;
-      
-      // Adjust total gross realisation for social housing (0% revenue for social dwellings)
-      const socialTotalGrossRealisation = marketDwellings * basePrice;
-      
-      // Calculate feasibility with modified values
-      const socialResults = { ...calculateFeasibility(socialSettings, density, propertyData) };
-      socialResults.totalGrossRealisation = socialTotalGrossRealisation;
-      socialResults.gst = socialTotalGrossRealisation * 0.1;
-      socialResults.agentsCommission = socialTotalGrossRealisation * settings[density].agentsSalesCommission;
-      socialResults.legalFees = socialTotalGrossRealisation * settings[density].legalFeesOnSales;
-      socialResults.marketingCosts = socialTotalGrossRealisation * settings[density].marketingCosts;
-      socialResults.netRealisation = socialTotalGrossRealisation - socialResults.gst - socialResults.agentsCommission - socialResults.legalFees - socialResults.marketingCosts;
-      socialResults.profitAndRisk = socialResults.netRealisation * settings[density].profitAndRisk;
-      socialResults.netRealisationAfterProfitAndRisk = socialResults.netRealisation - socialResults.profitAndRisk;
-      socialResults.residualLandValue = socialResults.netRealisationAfterProfitAndRisk - socialResults.totalDevelopmentCosts - socialResults.financeCosts;
-      socialResults.residualLandValuePerM2 = socialResults.residualLandValue / socialResults.developableArea;
-      
-      // Scenario 2: All affordable housing (75% revenue)
-      const affordableSettings = JSON.parse(JSON.stringify(modifiedSettings));
-      const affordableDwellings = affectedDwellings;
-      const affordableMarketDwellings = totalDwellings - affordableDwellings;
-      
-      // Adjust total gross realisation for affordable housing (75% revenue for affordable dwellings)
-      const affordableTotalGrossRealisation = (affordableMarketDwellings * basePrice) + (affordableDwellings * basePrice * 0.75);
-      
-      // Calculate feasibility with modified values
-      const affordableResults = { ...calculateFeasibility(affordableSettings, density, propertyData) };
-      affordableResults.totalGrossRealisation = affordableTotalGrossRealisation;
-      affordableResults.gst = affordableTotalGrossRealisation * 0.1;
-      affordableResults.agentsCommission = affordableTotalGrossRealisation * settings[density].agentsSalesCommission;
-      affordableResults.legalFees = affordableTotalGrossRealisation * settings[density].legalFeesOnSales;
-      affordableResults.marketingCosts = affordableTotalGrossRealisation * settings[density].marketingCosts;
-      affordableResults.netRealisation = affordableTotalGrossRealisation - affordableResults.gst - affordableResults.agentsCommission - affordableResults.legalFees - affordableResults.marketingCosts;
-      affordableResults.profitAndRisk = affordableResults.netRealisation * settings[density].profitAndRisk;
-      affordableResults.netRealisationAfterProfitAndRisk = affordableResults.netRealisation - affordableResults.profitAndRisk;
-      affordableResults.residualLandValue = affordableResults.netRealisationAfterProfitAndRisk - affordableResults.totalDevelopmentCosts - affordableResults.financeCosts;
-      affordableResults.residualLandValuePerM2 = affordableResults.residualLandValue / affordableResults.developableArea;
-      
-      // Scenario 3: 50/50 mix of social and affordable housing
-      const mixedSettings = JSON.parse(JSON.stringify(modifiedSettings));
-      const mixedSocialDwellings = Math.floor(affectedDwellings / 2);
-      const mixedAffordableDwellings = affectedDwellings - mixedSocialDwellings;
-      const mixedMarketDwellings = totalDwellings - mixedSocialDwellings - mixedAffordableDwellings;
-      
-      // Adjust total gross realisation for mixed housing
-      const mixedTotalGrossRealisation = (mixedMarketDwellings * basePrice) + (mixedAffordableDwellings * basePrice * 0.75);
-      
-      // Calculate feasibility with modified values
-      const mixedResults = { ...calculateFeasibility(mixedSettings, density, propertyData) };
-      mixedResults.totalGrossRealisation = mixedTotalGrossRealisation;
-      mixedResults.gst = mixedTotalGrossRealisation * 0.1;
-      mixedResults.agentsCommission = mixedTotalGrossRealisation * settings[density].agentsSalesCommission;
-      mixedResults.legalFees = mixedTotalGrossRealisation * settings[density].legalFeesOnSales;
-      mixedResults.marketingCosts = mixedTotalGrossRealisation * settings[density].marketingCosts;
-      mixedResults.netRealisation = mixedTotalGrossRealisation - mixedResults.gst - mixedResults.agentsCommission - mixedResults.legalFees - mixedResults.marketingCosts;
-      mixedResults.profitAndRisk = mixedResults.netRealisation * settings[density].profitAndRisk;
-      mixedResults.netRealisationAfterProfitAndRisk = mixedResults.netRealisation - mixedResults.profitAndRisk;
-      mixedResults.residualLandValue = mixedResults.netRealisationAfterProfitAndRisk - mixedResults.totalDevelopmentCosts - mixedResults.financeCosts;
-      mixedResults.residualLandValuePerM2 = mixedResults.residualLandValue / mixedResults.developableArea;
-      
-      data.push({
-        percentage,
-        socialResidualLandValue: socialResults.residualLandValue,
-        socialPercentChange: Math.round((socialResults.residualLandValue - baseResults.residualLandValue) / baseResults.residualLandValue * 100),
-        affordableResidualLandValue: affordableResults.residualLandValue,
-        affordablePercentChange: Math.round((affordableResults.residualLandValue - baseResults.residualLandValue) / baseResults.residualLandValue * 100),
-        mixedResidualLandValue: mixedResults.residualLandValue,
-        mixedPercentChange: Math.round((mixedResults.residualLandValue - baseResults.residualLandValue) / baseResults.residualLandValue * 100),
-        // Add actual unit counts for clarity
-        totalDwellings,
-        socialDwellings,
-        affordableDwellings,
-        mixedSocialDwellings,
-        mixedAffordableDwellings
-      });
-    });
-    
-    // Calculate breakeven points (where residual land value becomes negative)
-    const calculateBreakeven = (dataPoints, valueKey) => {
-      // Find the first negative value
-      const firstNegativeIndex = dataPoints.findIndex(point => point[valueKey] < 0);
-      
-      // If no negative values found, return null
-      if (firstNegativeIndex === -1) return null;
-      
-      // If the first data point is already negative, return 0
-      if (firstNegativeIndex === 0) return 0;
-      
-      // Get the points before and after the breakeven
-      const beforePoint = dataPoints[firstNegativeIndex - 1];
-      const afterPoint = dataPoints[firstNegativeIndex];
-      
-      // Linear interpolation to find the exact breakeven percentage
-      const beforeValue = beforePoint[valueKey];
-      const afterValue = afterPoint[valueKey];
-      const beforePercentage = beforePoint.percentage;
-      const afterPercentage = afterPoint.percentage;
-      
-      // Calculate the interpolated percentage where value = 0
-      const interpolatedPercentage = beforePercentage + 
-        (0 - beforeValue) * (afterPercentage - beforePercentage) / (afterValue - beforeValue);
-      
-      // Calculate the number of units at this percentage
-      const totalDwellings = beforePoint.totalDwellings; // Same for all points
-      const units = Math.round(totalDwellings * (interpolatedPercentage / 100));
-      
-      return {
-        percentage: interpolatedPercentage,
-        units
-      };
-    };
-    
-    // Calculate breakeven points for each scenario
-    const socialBreakeven = calculateBreakeven(data, 'socialResidualLandValue');
-    const affordableBreakeven = calculateBreakeven(data, 'affordableResidualLandValue');
-    const mixedBreakeven = calculateBreakeven(data, 'mixedResidualLandValue');
-    
-    return {
-      data,
-      breakeven: {
-        social: socialBreakeven,
-        affordable: affordableBreakeven,
-        mixed: mixedBreakeven
-      }
-    };
-  };
+  }, [calculationResults, settings, density, selectedFeature]);
 
   // If no calculation results yet, show loading
   if (!calculationResults) {
@@ -358,10 +144,154 @@ const FeasibilityCalculation = ({ settings, density, selectedFeature, salesData,
     );
   };
 
+  // Add LMR information section
+  const renderLMRInfo = () => {
+    if (!lmrOptions?.isInLMRArea) return null;
+
+    const selectedOption = lmrOptions.selectedOptions[density];
+    const isUsingLMR = settings[density].useLMR;
+
+    return (
+      <div className="mb-8 bg-white p-4 rounded-lg shadow">
+        <h3 className="text-lg font-bold mb-4 flex items-center">
+          <Building2 className="mr-2" /> LMR Development Controls
+        </h3>
+        <div className="grid grid-cols-1 gap-4">
+          <div className="flex items-center justify-between">
+            <span className="font-medium">Status:</span>
+            <span className={isUsingLMR ? "text-green-600" : "text-gray-600"}>
+              {isUsingLMR ? "Using LMR Controls" : "Using Current Controls"}
+            </span>
+          </div>
+          {isUsingLMR && selectedOption && (
+            <>
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Development Type:</span>
+                <span>{selectedOption.type}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-medium">FSR:</span>
+                <span>
+                  {selectedOption.fsrRange 
+                    ? `${selectedOption.fsrRange.min}-${selectedOption.fsrRange.max}`
+                    : selectedOption.potentialFSR}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-medium">HOB:</span>
+                <span>
+                  {selectedOption.hobRange 
+                    ? `${selectedOption.hobRange.min}-${selectedOption.hobRange.max}m`
+                    : `${selectedOption.potentialHOB}m`}
+                </span>
+              </div>
+              {selectedOption.type === 'Residential Flat Buildings' && (
+                <div className="mt-2 p-2 bg-blue-50 rounded">
+                  <p className="text-sm text-blue-800">
+                    {selectedOption.fsrRange 
+                      ? `FSR and HOB values are based on distance to centers/stations`
+                      : `Fixed FSR and HOB values for ${selectedFeature?.properties?.copiedFrom?.site_suitability__zone || 'current'} zone`}
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // Add comparison with LMR results if available
+  const renderComparison = () => {
+    if (!lmrResults || !lmrOptions?.isInLMRArea) return null;
+
+    const currentResults = calculationResults;
+    const comparison = {
+      gfa: {
+        current: currentResults?.gfa || 0,
+        lmr: lmrResults?.gfa || 0,
+        difference: (lmrResults?.gfa || 0) - (currentResults?.gfa || 0)
+      },
+      developmentYield: {
+        current: currentResults?.developmentYield || 0,
+        lmr: lmrResults?.developmentYield || 0,
+        difference: (lmrResults?.developmentYield || 0) - (currentResults?.developmentYield || 0)
+      },
+      netRealisation: {
+        current: currentResults?.netRealisation || 0,
+        lmr: lmrResults?.netRealisation || 0,
+        difference: (lmrResults?.netRealisation || 0) - (currentResults?.netRealisation || 0)
+      },
+      residualLandValue: {
+        current: currentResults?.residualLandValue || 0,
+        lmr: lmrResults?.residualLandValue || 0,
+        difference: (lmrResults?.residualLandValue || 0) - (currentResults?.residualLandValue || 0)
+      }
+    };
+
+    return (
+      <div className="mb-8 bg-white p-4 rounded-lg shadow">
+        <h3 className="text-lg font-bold mb-4 flex items-center">
+          <TrendingUp className="mr-2" /> LMR Impact Analysis
+        </h3>
+        <table className="w-full">
+          <thead>
+            <tr className="bg-gray-50">
+              <th className="px-4 py-2 text-left">Metric</th>
+              <th className="px-4 py-2 text-right">Current</th>
+              <th className="px-4 py-2 text-right">LMR</th>
+              <th className="px-4 py-2 text-right">Difference</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="px-4 py-2">GFA</td>
+              <td className="px-4 py-2 text-right">{comparison.gfa.current.toLocaleString()}m²</td>
+              <td className="px-4 py-2 text-right">{comparison.gfa.lmr.toLocaleString()}m²</td>
+              <td className={`px-4 py-2 text-right ${comparison.gfa.difference > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {comparison.gfa.difference > 0 ? '+' : ''}{comparison.gfa.difference.toLocaleString()}m²
+              </td>
+            </tr>
+            <tr>
+              <td className="px-4 py-2">Development Yield</td>
+              <td className="px-4 py-2 text-right">{comparison.developmentYield.current} units</td>
+              <td className="px-4 py-2 text-right">{comparison.developmentYield.lmr} units</td>
+              <td className={`px-4 py-2 text-right ${comparison.developmentYield.difference > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {comparison.developmentYield.difference > 0 ? '+' : ''}{comparison.developmentYield.difference} units
+              </td>
+            </tr>
+            <tr>
+              <td className="px-4 py-2">Net Realisation</td>
+              <td className="px-4 py-2 text-right">{formatCurrency(comparison.netRealisation.current)}</td>
+              <td className="px-4 py-2 text-right">{formatCurrency(comparison.netRealisation.lmr)}</td>
+              <td className={`px-4 py-2 text-right ${comparison.netRealisation.difference > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {comparison.netRealisation.difference > 0 ? '+' : ''}{formatCurrency(comparison.netRealisation.difference)}
+              </td>
+            </tr>
+            <tr className="font-bold">
+              <td className="px-4 py-2">Residual Land Value</td>
+              <td className="px-4 py-2 text-right">{formatCurrency(comparison.residualLandValue.current)}</td>
+              <td className="px-4 py-2 text-right">{formatCurrency(comparison.residualLandValue.lmr)}</td>
+              <td className={`px-4 py-2 text-right ${comparison.residualLandValue.difference > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {comparison.residualLandValue.difference > 0 ? '+' : ''}{formatCurrency(comparison.residualLandValue.difference)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
   return (
     <div className="p-4">
+      {/* Add LMR Information Section */}
+      {renderLMRInfo()}
+
+      {/* Add LMR Comparison Section */}
+      {renderComparison()}
+
       <h2 className="text-xl font-bold mb-4 flex items-center">
-        <Calculator className="mr-2" /> Feasibility Calculation - {density === 'lowMidDensity' ? 'Low-Mid Density' : 'High Density'}
+        <Calculator className="mr-2" /> Development Feasibility - {density === 'lowMidDensity' ? 'Low-Mid Density' : 'High Density'}
       </h2>
       
       {/* Feasibility Calculation Table */}

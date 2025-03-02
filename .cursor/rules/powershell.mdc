@@ -1,0 +1,6 @@
+---
+description: Always use powershell as user is on a Windows machine. Never use unix.
+globs: 
+alwaysApply: false
+---
+

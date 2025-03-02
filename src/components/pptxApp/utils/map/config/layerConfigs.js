@@ -20,7 +20,7 @@ export const LAYER_CONFIGS = {
     opacity: 1,
     width: 2048,
     height: 2048,
-    padding: 1,
+    padding: 0.7,
     dpi: 300,
     fallbackUrl: 'https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer',
     fallbackFormat: 'png32',

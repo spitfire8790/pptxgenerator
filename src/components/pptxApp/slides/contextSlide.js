@@ -188,14 +188,20 @@ export async function addContextSlide(pptx, properties) {
       rotate: 270    // Use rotate instead of transform
     }));
 
-   // Capture GPR map and features
-   const gprResult = await captureGPRMap(properties.site__geometry, properties.developableArea);
-   console.log('GPR capture result:', {
-    hasImage: !!gprResult?.image,
-    featureCount: gprResult?.features?.length || 0,
-    imageLength: gprResult?.image?.length || 0,
-    imageType: typeof gprResult?.image
-   });
+   // Only capture GPR map when generating the slide
+   let gprResult = null;
+   try {
+     gprResult = await captureGPRMap(properties.site__geometry, properties.developableArea);
+     console.log('GPR capture result:', {
+      hasImage: !!gprResult?.image,
+      featureCount: gprResult?.features?.length || 0,
+      imageLength: gprResult?.image?.length || 0,
+      imageType: typeof gprResult?.image
+     });
+   } catch (captureError) {
+     console.error('Error capturing GPR map:', captureError);
+     gprResult = null;
+   }
 
    if (gprResult?.image) {
      try {
@@ -369,8 +375,15 @@ export async function addContextSlide(pptx, properties) {
     rotate: 270    // Use rotate instead of transform
   }));
 
-  // Add services and amenities map
-  const servicesResult = await captureServicesAndAmenitiesMap(properties.site__geometry, properties.developableArea);
+  // Only capture services and amenities map when generating the slide
+  let servicesResult = null;
+  try {
+    servicesResult = await captureServicesAndAmenitiesMap(properties.site__geometry, properties.developableArea);
+  } catch (captureError) {
+    console.error('Error capturing services and amenities map:', captureError);
+    servicesResult = null;
+  }
+
   if (servicesResult?.image) {
     try {
       // Add the image with correct dimensions

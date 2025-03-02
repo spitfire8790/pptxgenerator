@@ -3,6 +3,7 @@ import { Calculator, Banknote, X } from 'lucide-react';
 import FeasibilitySettings from './FeasibilitySettings';
 import MedianPriceModal from './MedianPriceModal';
 import { lgaMapping } from '../utils/map/utils/councilLgaMapping';
+import { getAllPermissibleHousingTypes } from '../utils/lmrPermissibility';
 
 const LOW_MID_DENSITY_TYPES = [
   'Dwelling',
@@ -46,6 +47,30 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
     },
     loading: true,
     error: null
+  });
+  
+  // Add state for LMR options
+  const [lmrOptions, setLmrOptions] = useState({
+    isInLMRArea: false,
+    loading: false,
+    error: null,
+    housingOptions: [],
+    selectedOptions: {
+      lowMidDensity: null,
+      highDensity: null
+    }
+  });
+
+  // Add this after the state declarations
+  const [calculationResults, setCalculationResults] = useState({
+    current: {
+      lowMidDensity: null,
+      highDensity: null
+    },
+    lmr: {
+      lowMidDensity: null,
+      highDensity: null
+    }
   });
 
   const calculateMedianCost = (certificates, densityTypes) => {
@@ -178,6 +203,95 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
     return simpleMedian;
   };
 
+  // Add function to fetch LMR data
+  const fetchLMRData = async (propertyData) => {
+    if (!propertyData || !propertyData.properties) {
+      return;
+    }
+    
+    try {
+      setLmrOptions(prev => ({ ...prev, loading: true, error: null }));
+      
+      // Check if property is in LMR area
+      const isInLMRArea = propertyData.properties.isInLMRArea || 
+                          (propertyData.properties.copiedFrom && 
+                           propertyData.properties.copiedFrom.isInLMRArea);
+      
+      console.log('LMR status check:', { isInLMRArea });
+      
+      if (!isInLMRArea) {
+        setLmrOptions({
+          isInLMRArea: false,
+          loading: false,
+          error: null,
+          housingOptions: [],
+          selectedOptions: {
+            lowMidDensity: null,
+            highDensity: null
+          }
+        });
+        return;
+      }
+      
+      // Get permissible housing types
+      const housingOptions = await getAllPermissibleHousingTypes(propertyData.properties);
+      console.log('LMR housing options:', housingOptions);
+      
+      // Find best options for each density type
+      const lowMidDensityOptions = housingOptions.filter(option => 
+        ['Dual Occupancy', 'Multi Dwelling Housing', 'Multi Dwelling Housing (Terraces)']
+          .includes(option.type) && option.isPermissible
+      );
+      
+      const highDensityOptions = housingOptions.filter(option => 
+        ['Residential Flat Buildings'].includes(option.type) && option.isPermissible
+      );
+      
+      // Sort by potential FSR (highest first)
+      lowMidDensityOptions.sort((a, b) => {
+        // For RFB with ranges, use the max value
+        const aFSR = a.fsrRange ? a.fsrRange.max : a.potentialFSR;
+        const bFSR = b.fsrRange ? b.fsrRange.max : b.potentialFSR;
+        return bFSR - aFSR;
+      });
+      
+      highDensityOptions.sort((a, b) => {
+        // For RFB with ranges, use the max value
+        const aFSR = a.fsrRange ? a.fsrRange.max : a.potentialFSR;
+        const bFSR = b.fsrRange ? b.fsrRange.max : b.potentialFSR;
+        return bFSR - aFSR;
+      });
+      
+      // Select best options (highest FSR)
+      const bestLowMidOption = lowMidDensityOptions.length > 0 ? lowMidDensityOptions[0] : null;
+      const bestHighDensityOption = highDensityOptions.length > 0 ? highDensityOptions[0] : null;
+      
+      setLmrOptions({
+        isInLMRArea,
+        loading: false,
+        error: null,
+        housingOptions,
+        allOptions: {
+          lowMidDensity: lowMidDensityOptions,
+          highDensity: highDensityOptions
+        },
+        selectedOptions: {
+          lowMidDensity: bestLowMidOption,
+          highDensity: bestHighDensityOption
+        }
+      });
+      
+    } catch (error) {
+      console.error('Error fetching LMR data:', error);
+      setLmrOptions(prev => ({
+        ...prev,
+        loading: false,
+        error: error.message || 'Failed to fetch LMR data'
+      }));
+    }
+  };
+
+  // Update useEffect to fetch LMR data
   useEffect(() => {
     const fetchConstructionData = async () => {
       if (!open || !selectedFeature) {
@@ -327,6 +441,9 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
           }
         });
 
+        // After setting construction data, fetch LMR data
+        await fetchLMRData(selectedFeature);
+
       } catch (error) {
         console.error('Error fetching construction data:', error);
         setConstructionData(prev => ({
@@ -344,6 +461,215 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
   const handleShowMedianPrices = () => {
     setShowMedianPrices(true);
   };
+  
+  // Function to handle LMR option selection
+  const handleLMROptionChange = (option, densityType) => {
+    setLmrOptions(prev => ({
+      ...prev,
+      selectedOptions: {
+        ...prev.selectedOptions,
+        [densityType]: option
+      }
+    }));
+  };
+
+  // Add this after the fetchConstructionData function
+  const calculateFeasibility = async (settings, propertyData, density, useLMR = false, lmrOption = null) => {
+    try {
+      // Get property data
+      const developableArea = propertyData?.properties?.copiedFrom?.site_suitability__area || 0;
+      const siteArea = propertyData?.properties?.copiedFrom?.site_area || developableArea;
+      
+      // Get FSR and HOB based on whether we're using LMR or current controls
+      let fsr, hob;
+      if (useLMR && lmrOption) {
+        // Use LMR values based on zone and distance to centers/stations
+        const zoneCode = propertyData?.properties?.copiedFrom?.site_suitability__principal_zone_identifier?.split('-')?.[0]?.trim();
+        
+        if (lmrOption.type === 'Residential Flat Buildings') {
+          // For RFBs, FSR and HOB depend on the zone and distance to centers/stations
+          if (zoneCode === 'R1' || zoneCode === 'R2') {
+            // Fixed values for R1/R2 zones
+            fsr = 1.3;
+            hob = 14.5;
+          } else if (zoneCode === 'R3' || zoneCode === 'R4') {
+            // Values depend on distance to centers/stations
+            if (lmrOption.fsrRange && lmrOption.hobRange) {
+              // Use the maximum values from the ranges
+              fsr = lmrOption.fsrRange.max;
+              hob = lmrOption.hobRange.max;
+            } else {
+              // Fallback to potential values
+              fsr = lmrOption.potentialFSR;
+              hob = lmrOption.potentialHOB;
+            }
+          }
+        } else {
+          // For other LMR housing types (Dual Occupancy, Multi Dwelling Housing, etc.)
+          fsr = lmrOption.fsrRange ? lmrOption.fsrRange.max : lmrOption.potentialFSR;
+          hob = lmrOption.hobRange ? lmrOption.hobRange.max : lmrOption.potentialHOB;
+        }
+      } else {
+        // Use current controls
+        fsr = propertyData?.properties?.copiedFrom?.site_suitability__floorspace_ratio || 0;
+        hob = propertyData?.properties?.copiedFrom?.site_suitability__height_of_building || 0;
+      }
+
+      // Calculate GFA under FSR and HOB
+      const gfaUnderFsr = siteArea * fsr;
+      
+      // Calculate GFA under HOB
+      const maxStoreys = Math.floor(hob / settings.floorToFloorHeight);
+      const siteCoverage = developableArea * settings.siteEfficiencyRatio;
+      const gfaUnderHob = siteCoverage * maxStoreys * settings.gbaToGfaRatio;
+
+      // Use FSR value if no HoB exists, otherwise use the lower of the two
+      let gfa = !hob ? gfaUnderFsr : Math.min(gfaUnderFsr, gfaUnderHob);
+
+      // For Low-Mid Density, limit to 3 storeys unless using LMR controls
+      if (density === 'lowMidDensity' && !useLMR) {
+        const maxGfaFor3Storeys = siteCoverage * 3 * settings.gbaToGfaRatio;
+        gfa = Math.min(gfa, maxGfaFor3Storeys);
+      }
+
+      // Calculate NSA and development yield
+      const nsa = gfa * settings.gfaToNsaRatio;
+      const dwellingSize = constructionData?.dwellingSizes?.[density] || 80; // Default fallback
+      const developmentYield = Math.floor(nsa / dwellingSize);
+
+      // Calculate total gross realisation
+      const totalGrossRealisation = developmentYield * settings.dwellingPrice;
+
+      // Calculate GST and selling costs
+      const gst = totalGrossRealisation * 0.1;
+      const agentsCommission = totalGrossRealisation * settings.agentsSalesCommission;
+      const legalFees = totalGrossRealisation * settings.legalFeesOnSales;
+      const marketingCosts = totalGrossRealisation * settings.marketingCosts;
+      const netRealisation = totalGrossRealisation - gst - agentsCommission - legalFees - marketingCosts;
+
+      // Calculate profit and risk
+      const profitAndRisk = netRealisation * settings.profitAndRisk;
+      const netRealisationAfterProfitAndRisk = netRealisation - profitAndRisk;
+
+      // Get construction cost
+      const constructionCostPerGfa = constructionData?.[density] || 3500; // Default fallback
+      
+      // Calculate development costs
+      const constructionCosts = constructionCostPerGfa * gfa;
+      const daApplicationFees = settings.daApplicationFees;
+      const professionalFees = constructionCosts * settings.professionalFees;
+      const developmentContribution = constructionCosts * settings.developmentContribution;
+      
+      // Calculate Land Tax
+      const propertyValue = propertyData?.properties?.copiedFrom?.site_suitability__property_value || 0;
+      const generalThreshold = 1000000; // $1,000,000 threshold
+      const premiumThreshold = 4000000; // $4,000,000 threshold
+      
+      let landTaxPerYear = 0;
+      if (propertyValue > premiumThreshold) {
+        // Premium threshold: $88,036 plus 2% of land value above the threshold
+        landTaxPerYear = 88036 + (propertyValue - premiumThreshold) * 0.02;
+      } else if (propertyValue > generalThreshold) {
+        // General threshold: $100 plus 1.6% of land value above the threshold up to the premium threshold
+        landTaxPerYear = 100 + (propertyValue - generalThreshold) * 0.016;
+      }
+      
+      // Calculate total Land Tax for the project period
+      const projectYears = settings.projectPeriod / 12;
+      const landTax = landTaxPerYear * projectYears;
+
+      const totalDevelopmentCosts = constructionCosts + daApplicationFees + professionalFees + developmentContribution;
+
+      // Calculate finance costs
+      const monthlyInterestRate = settings.interestRate / 12;
+      const financeCosts = monthlyInterestRate * (settings.projectPeriod / 2) * totalDevelopmentCosts;
+
+      // Calculate residual land value
+      const residualLandValue = netRealisationAfterProfitAndRisk - totalDevelopmentCosts - financeCosts - landTax;
+      
+      // Calculate residual land value per m²
+      const residualLandValuePerM2 = residualLandValue / developableArea;
+
+      return {
+        developableArea,
+        siteArea,
+        siteCoverage,
+        fsr,
+        hob,
+        gfaUnderFsr,
+        gfaUnderHob,
+        gfa,
+        nsa,
+        dwellingSize,
+        developmentYield,
+        totalGrossRealisation,
+        gst,
+        agentsCommission,
+        legalFees,
+        marketingCosts,
+        netRealisation,
+        profitAndRisk,
+        netRealisationAfterProfitAndRisk,
+        constructionCostPerGfa,
+        constructionCosts,
+        daApplicationFees,
+        professionalFees,
+        developmentContribution,
+        propertyValue,
+        landTaxPerYear,
+        landTax,
+        totalDevelopmentCosts,
+        financeCosts,
+        residualLandValue,
+        residualLandValuePerM2,
+        projectPeriod: settings.projectPeriod,
+        // Add LMR-specific information
+        isLMR: useLMR,
+        lmrType: lmrOption?.type || null,
+        lmrFSRRange: lmrOption?.fsrRange || null,
+        lmrHOBRange: lmrOption?.hobRange || null
+      };
+    } catch (error) {
+      console.error('Error in calculateFeasibility:', error);
+      return null;
+    }
+  };
+
+  // Add this useEffect to update calculations when settings or LMR options change
+  useEffect(() => {
+    const updateCalculations = async () => {
+      if (!selectedFeature || !settings) return;
+
+      try {
+        // Calculate results for current controls
+        const currentLowMidResults = await calculateFeasibility(settings.lowMidDensity, selectedFeature, 'lowMidDensity', false);
+        const currentHighResults = await calculateFeasibility(settings.highDensity, selectedFeature, 'highDensity', false);
+
+        // Calculate results for LMR controls if available
+        const lmrLowMidResults = lmrOptions.isInLMRArea && settings.lowMidDensity.useLMR
+          ? await calculateFeasibility(settings.lowMidDensity, selectedFeature, 'lowMidDensity', true, lmrOptions.selectedOptions.lowMidDensity)
+          : null;
+        const lmrHighResults = lmrOptions.isInLMRArea && settings.highDensity.useLMR
+          ? await calculateFeasibility(settings.highDensity, selectedFeature, 'highDensity', true, lmrOptions.selectedOptions.highDensity)
+          : null;
+
+        setCalculationResults({
+          current: {
+            lowMidDensity: currentLowMidResults,
+            highDensity: currentHighResults
+          },
+          lmr: {
+            lowMidDensity: lmrLowMidResults,
+            highDensity: lmrHighResults
+          }
+        });
+      } catch (error) {
+        console.error('Error updating calculations:', error);
+      }
+    };
+
+    updateCalculations();
+  }, [settings, selectedFeature, lmrOptions, constructionData]);
 
   if (!open) return null;
 
@@ -373,10 +699,10 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
                     </button>
                   </div>
                   
-                  {constructionData.loading ? (
+                  {constructionData.loading || lmrOptions.loading ? (
                     <div className="flex flex-col items-center justify-center py-12">
                       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-                      <p className="mt-4 text-gray-600">Loading construction data...</p>
+                      <p className="mt-4 text-gray-600">Loading data...</p>
                     </div>
                   ) : (
                     <FeasibilitySettings 
@@ -386,6 +712,9 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
                       constructionData={constructionData}
                       selectedFeature={selectedFeature}
                       onShowMedianPrices={handleShowMedianPrices}
+                      lmrOptions={lmrOptions}
+                      onLMROptionChange={handleLMROptionChange}
+                      calculationResults={calculationResults}
                     />
                   )}
                 </div>
