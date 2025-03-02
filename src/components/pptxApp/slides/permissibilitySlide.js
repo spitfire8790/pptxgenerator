@@ -370,402 +370,21 @@ export async function addPermissibilitySlide(pptx, properties) {
 
       // Check Low Medium Rise (LMR) housing area status
       let lmrStatus = 'Checking...';
-      let isInLMRArea = false; // Track if property is in LMR area
+      let isInLMRArea = properties.isInLMRArea || false; // Get LMR status from properties
 
-      try {
-        // Define a function to check LMR status for a given point using the query endpoint
-        const checkLMRStatus = async (longitude, latitude) => {
-          console.log('Checking LMR status with coordinates:', { latitude, longitude });
-          
-          // Use the MapServer export image endpoint instead of query
-          const lmrEndpoint = 'https://spatialportalarcgis.dpie.nsw.gov.au/sarcgis/rest/services/LMR/LMR/MapServer/export';
-          
-          // Set a small bounding box around the point
-          const delta = 0.0001; // Very small area around the point
-          const bbox = `${longitude-delta},${latitude-delta},${longitude+delta},${latitude+delta}`;
-          
-          // Format the params for exporting a map image
-          const params = new URLSearchParams({
-            bbox: bbox,
-            bboxSR: 4326,
-            layers: 'show:4', // Only show the LMR layer
-            layerDefs: '',
-            size: '50,50', // Increased size for better detection
-            imageSR: 4326,
-            format: 'png',
-            transparent: true,
-            f: 'json'
-          });
-          
-          // Use the proxy endpoint for the request
-          const API_BASE_URL = process.env.NODE_ENV === 'development' 
-            ? 'http://localhost:5173'
-            : 'https://proxy-server.jameswilliamstrutt.workers.dev';
-            
-          const lmrResponse = await fetch(`${API_BASE_URL}${process.env.NODE_ENV === 'development' ? '/api/proxy' : ''}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
-            },
-            body: JSON.stringify({
-              url: `${lmrEndpoint}?${params.toString()}`,
-              method: 'GET',
-              headers: {
-                'Accept': 'application/json'
-              }
-            })
-          });
-          
-          const lmrResponseText = await lmrResponse.text();
-          console.log('LMR API Raw Response:', lmrResponseText);
-          
-          try {
-            // Parse response
-            const lmrData = JSON.parse(lmrResponseText);
-            
-            // If we have an imageData URL or href (image URL), the service worked
-            if (lmrData && (lmrData.imageData || lmrData.href)) {
-              // Now we need to check if the image contains non-transparent pixels
-              // We'll make a second request to get the actual image data
-              const imageUrl = lmrData.imageData || lmrData.href;
-              console.log('Using image URL for LMR check:', imageUrl);
-              
-              const imgResponse = await fetch(`${API_BASE_URL}${process.env.NODE_ENV === 'development' ? '/api/proxy' : ''}`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                  url: imageUrl,
-                  method: 'GET',
-                  responseType: 'arraybuffer'
-                })
-              });
-              
-              // Get the response as array buffer
-              const imgBuffer = await imgResponse.arrayBuffer();
-              console.log('Image data size:', imgBuffer.byteLength);
-              
-              // Check if the image has actual content
-              // The ArcGIS server returns a very small transparent image when no features are found
-              // We need to check if the image contains any non-transparent pixels
-              
-              // First, check if we have a valid image response
-              const contentType = imgResponse.headers?.get('content-type');
-              const hasValidContentType = contentType && contentType.includes('image/');
-              
-              if (!hasValidContentType) {
-                console.log('Invalid content type for image:', contentType);
-                return false;
-              }
-              
-              // For PNG images, we can check for the presence of IDAT chunks
-              // IDAT chunks contain the actual image data
-              // If there are multiple IDAT chunks or large IDAT chunks, the image likely has content
-              
-              // Convert ArrayBuffer to Uint8Array for easier manipulation
-              const imgData = new Uint8Array(imgBuffer);
-              
-              // Check for PNG signature
-              const isPNG = imgData.length >= 8 && 
-                imgData[0] === 0x89 && imgData[1] === 0x50 && imgData[2] === 0x4E && 
-                imgData[3] === 0x47 && imgData[4] === 0x0D && imgData[5] === 0x0A && 
-                imgData[6] === 0x1A && imgData[7] === 0x0A;
-              
-              if (!isPNG) {
-                console.log('Not a PNG image');
-                // If not PNG, fall back to size-based detection
-                return imgBuffer.byteLength > 100;
-              }
-              
-              // Count IDAT chunks and their total size
-              let idatCount = 0;
-              let idatTotalSize = 0;
-              let pos = 8; // Skip PNG signature
-              
-              while (pos < imgData.length - 12) { // Need at least 12 bytes for chunk header and CRC
-                // Read chunk length (4 bytes)
-                const chunkLength = (imgData[pos] << 24) | (imgData[pos+1] << 16) | 
-                                   (imgData[pos+2] << 8) | imgData[pos+3];
-                pos += 4;
-                
-                // Read chunk type (4 bytes)
-                const chunkType = String.fromCharCode(imgData[pos], imgData[pos+1], 
-                                                     imgData[pos+2], imgData[pos+3]);
-                pos += 4;
-                
-                if (chunkType === 'IDAT') {
-                  idatCount++;
-                  idatTotalSize += chunkLength;
-                }
-                
-                // Skip chunk data and CRC
-                pos += chunkLength + 4;
-              }
-              
-              console.log('PNG analysis:', {
-                idatCount,
-                idatTotalSize
-              });
-              
-              // If we have IDAT chunks with significant size, the image has content
-              // Empty/transparent images typically have very small IDAT chunks
-              const hasContent = idatCount > 0 && idatTotalSize > 50;
-              
-              return hasContent;
-            }
-            
-            return false;
-          } catch (parseError) {
-            console.error('Error parsing LMR response:', parseError);
-            return false;
-          }
-        };
-
-        // Function to check LMR status for a site polygon
-        const checkLMRStatusForSite = async (coordinates) => {
-          // If we don't have valid coordinates, return false
-          if (!coordinates || !Array.isArray(coordinates) || coordinates.length === 0) {
-            console.log('No valid coordinates provided for LMR check');
-            return false;
-          }
-
-          // Get the bounding box of the site
-          let minLon = Infinity;
-          let minLat = Infinity;
-          let maxLon = -Infinity;
-          let maxLat = -Infinity;
-
-          // Flatten the coordinates if they're in a nested structure
-          let points = coordinates;
-          if (Array.isArray(coordinates[0]) && Array.isArray(coordinates[0][0])) {
-            // Handle polygon format: [[[lon, lat], [lon, lat], ...]]
-            points = coordinates[0];
-          }
-
-          // Calculate the bounding box
-          for (const point of points) {
-            if (Array.isArray(point) && point.length >= 2) {
-              const lon = point[0];
-              const lat = point[1];
-              
-              minLon = Math.min(minLon, lon);
-              minLat = Math.min(minLat, lat);
-              maxLon = Math.max(maxLon, lon);
-              maxLat = Math.max(maxLat, lat);
-            }
-          }
-
-          // Use exact site boundaries without adding a buffer
-          console.log('Site exact bounding box for LMR check:', { minLon, minLat, maxLon, maxLat });
-
-          // Use the MapServer export image endpoint
-          const lmrEndpoint = 'https://spatialportalarcgis.dpie.nsw.gov.au/sarcgis/rest/services/LMR/LMR/MapServer/export';
-          
-          // Format the params for exporting a map image of the entire site using exact boundaries
-          const bbox = `${minLon},${minLat},${maxLon},${maxLat}`;
-          const params = new URLSearchParams({
-            bbox: bbox,
-            bboxSR: 4326,
-            layers: 'show:4', // Only show the LMR layer
-            layerDefs: '',
-            size: '200,200', // Larger image for better detection
-            imageSR: 4326,
-            format: 'png',
-            transparent: true,
-            f: 'json'
-          });
-          
-          // Use the proxy endpoint for the request
-          const API_BASE_URL = process.env.NODE_ENV === 'development' 
-            ? 'http://localhost:5173'
-            : 'https://proxy-server.jameswilliamstrutt.workers.dev';
-            
-          const lmrResponse = await fetch(`${API_BASE_URL}${process.env.NODE_ENV === 'development' ? '/api/proxy' : ''}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
-            },
-            body: JSON.stringify({
-              url: `${lmrEndpoint}?${params.toString()}`,
-              method: 'GET',
-              headers: {
-                'Accept': 'application/json'
-              }
-            })
-          });
-          
-          const lmrResponseText = await lmrResponse.text();
-          console.log('LMR API Raw Response for site:', lmrResponseText);
-          
-          try {
-            // Parse response
-            const lmrData = JSON.parse(lmrResponseText);
-            
-            // If we have an imageData URL or href (image URL), the service worked
-            if (lmrData && (lmrData.imageData || lmrData.href)) {
-              // Now we need to check if the image contains non-transparent pixels
-              // We'll make a second request to get the actual image data
-              const imageUrl = lmrData.imageData || lmrData.href;
-              console.log('Using image URL for site LMR check:', imageUrl);
-              
-              const imgResponse = await fetch(`${API_BASE_URL}${process.env.NODE_ENV === 'development' ? '/api/proxy' : ''}`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                  url: imageUrl,
-                  method: 'GET',
-                  responseType: 'arraybuffer'
-                })
-              });
-              
-              // Get the response as array buffer
-              const imgBuffer = await imgResponse.arrayBuffer();
-              console.log('Site image data size:', imgBuffer.byteLength);
-              
-              // Check if the image has actual content
-              // The ArcGIS server returns a very small transparent image when no features are found
-              // We need to check if the image contains any non-transparent pixels
-              
-              // First, check if we have a valid image response
-              const contentType = imgResponse.headers?.get('content-type');
-              const hasValidContentType = contentType && contentType.includes('image/');
-              
-              if (!hasValidContentType) {
-                console.log('Invalid content type for site image:', contentType);
-                return false;
-              }
-              
-              // For PNG images, we can check for the presence of IDAT chunks
-              // IDAT chunks contain the actual image data
-              // If there are multiple IDAT chunks or large IDAT chunks, the image likely has content
-              
-              // Convert ArrayBuffer to Uint8Array for easier manipulation
-              const imgData = new Uint8Array(imgBuffer);
-              
-              // Check for PNG signature
-              const isPNG = imgData.length >= 8 && 
-                imgData[0] === 0x89 && imgData[1] === 0x50 && imgData[2] === 0x4E && 
-                imgData[3] === 0x47 && imgData[4] === 0x0D && imgData[5] === 0x0A && 
-                imgData[6] === 0x1A && imgData[7] === 0x0A;
-              
-              if (!isPNG) {
-                console.log('Site image is not a PNG');
-                // If not PNG, fall back to size-based detection
-                return imgBuffer.byteLength > 100;
-              }
-              
-              // Count IDAT chunks and their total size
-              let idatCount = 0;
-              let idatTotalSize = 0;
-              let pos = 8; // Skip PNG signature
-              
-              while (pos < imgData.length - 12) { // Need at least 12 bytes for chunk header and CRC
-                // Read chunk length (4 bytes)
-                const chunkLength = (imgData[pos] << 24) | (imgData[pos+1] << 16) | 
-                                   (imgData[pos+2] << 8) | imgData[pos+3];
-                pos += 4;
-                
-                // Read chunk type (4 bytes)
-                const chunkType = String.fromCharCode(imgData[pos], imgData[pos+1], 
-                                                     imgData[pos+2], imgData[pos+3]);
-                pos += 4;
-                
-                if (chunkType === 'IDAT') {
-                  idatCount++;
-                  idatTotalSize += chunkLength;
-                }
-                
-                // Skip chunk data and CRC
-                pos += chunkLength + 4;
-              }
-              
-              console.log('Site PNG analysis:', {
-                idatCount,
-                idatTotalSize
-              });
-              
-              // If we have IDAT chunks with significant size, the image has content
-              // Empty/transparent images typically have very small IDAT chunks
-              const hasContent = idatCount > 0 && idatTotalSize > 50;
-              
-              return hasContent;
-            }
-            
-            return false;
-          } catch (parseError) {
-            console.error('Error parsing LMR response for site:', parseError);
-            return false;
-          }
-        };
-
-        // First, try using the developable area if available
-        if (properties.developableArea && properties.developableArea[0] && 
-            properties.developableArea[0].geometry && 
-            properties.developableArea[0].geometry.coordinates) {
-          
-          console.log('Using developable area for LMR check');
-          
-          // Check LMR status for the entire developable area
-          const isInLMRResult = await checkLMRStatusForSite(properties.developableArea[0].geometry.coordinates);
-          isInLMRArea = isInLMRResult;
-          
-          if (isInLMRArea) {
-            lmrStatus = '✓ Property is located within a Low Medium Rise (LMR) housing area. Additional development controls apply.';
-          } else {
-            lmrStatus = '✗ Property is not located within a Low Medium Rise (LMR) housing area.';
-          }
-        } 
-        // If no developable area, try using site geometry
-        else if (properties.site__geometry) {
-          
-          console.log('Using site geometry for LMR check');
-          
-          // Check LMR status for the entire site geometry
-          const isInLMRResult = await checkLMRStatusForSite(properties.site__geometry);
-          isInLMRArea = isInLMRResult;
-          
-          if (isInLMRArea) {
-            lmrStatus = '✓ Property is located within a Low Medium Rise (LMR) housing area. Additional development controls apply.';
-          } else {
-            lmrStatus = '✗ Property is not located within a Low Medium Rise (LMR) housing area.';
-          }
-        }
-        // Finally, fall back to lat/long if available
-        else if (properties.site__latitude && properties.site__longitude) {
-          console.log('Using site lat/long for LMR check');
-          
-          // Check LMR status using site coordinates
-          const isInLMRResult = await checkLMRStatus(properties.site__longitude, properties.site__latitude);
-          isInLMRArea = isInLMRResult;
-          
-          if (isInLMRArea) {
-            lmrStatus = '✓ Property is located within a Low Medium Rise (LMR) housing area. Additional development controls apply.';
-          } else {
-            lmrStatus = '✗ Property is not located within a Low Medium Rise (LMR) housing area.';
-          }
-        } else {
-          console.log('Missing geometry data for LMR check');
-          lmrStatus = 'Cannot determine LMR status: Missing property geometry data';
-        }
-
-        // Add isInLMRArea property to be used by the permissibility check
-        properties.isInLMRArea = isInLMRArea;
-        
-        // If property is in LMR area, check what's permissible
-        let lmrDevelopmentOptions = [];
-        if (isInLMRArea) {
-          console.log('Checking LMR development options');
-          lmrDevelopmentOptions = await getAllPermissibleHousingTypes(properties);
-          console.log('LMR development options:', lmrDevelopmentOptions);
-        }
-      } catch (lmrError) {
-        console.error('Error checking LMR status:', lmrError);
-        lmrStatus = `Unable to check LMR status: ${lmrError.message}`;
+      // Set the LMR status based on the stored value
+      if (isInLMRArea) {
+        lmrStatus = '✓ Property is located within a Low Medium Rise (LMR) housing area. Additional development controls apply.';
+      } else {
+        lmrStatus = '✗ Property is not located within a Low Medium Rise (LMR) housing area.';
+      }
+      
+      // If property is in LMR area, check what's permissible
+      let lmrDevelopmentOptions = [];
+      if (isInLMRArea) {
+        console.log('Checking LMR development options');
+        lmrDevelopmentOptions = await getAllPermissibleHousingTypes(properties);
+        console.log('LMR development options:', lmrDevelopmentOptions);
       }
 
       // Helper function to format items with commas and proper styling
@@ -945,8 +564,13 @@ export async function addPermissibilitySlide(pptx, properties) {
               wrap: true
             }
           }
-        ],
-        [
+        ]
+      ];
+
+      // Only add LMR-related rows if the LMR status has been determined in the access slide
+      if (typeof properties.isInLMRArea !== 'undefined') {
+        // Add LMR status row
+        combinedTableRows.push([
           { 
             text: 'Low Medium Rise (LMR)', 
             options: { 
@@ -958,39 +582,45 @@ export async function addPermissibilitySlide(pptx, properties) {
             }
           },
           {
-            text: ensureString(lmrStatus),
+            text: properties.isInLMRArea ? 
+              '✓ Property is located within a Low Medium Rise (LMR) housing area. Additional development controls apply.' :
+              '✗ Property is not located within a Low Medium Rise (LMR) housing area.',
             options: {
-              color: lmrStatus.startsWith('✓') ? '4CAF50' : (lmrStatus.startsWith('✗') ? 'FF3B3B' : '363636'),
+              color: properties.isInLMRArea ? '4CAF50' : 'FF3B3B',
               fontSize: 8,
               valign: 'middle',
               align: 'left',
               wrap: true
             }
           }
-        ],
-        [
+        ]);
+
+        // Add LMR Housing Options row
+        combinedTableRows.push([
           { 
             text: 'LMR Housing Options', 
             options: { 
               bold: true,
-              color: isInLMRArea ? '0066CC' : '363636',
+              color: properties.isInLMRArea ? '0066CC' : '363636',
               fontSize: 8,
               valign: 'middle',
               align: 'left'
             }
           },
           {
-            text: isInLMRArea ? 'See LMR Development Options table below for details' : 'Not applicable - Property is not within an LMR area',
+            text: properties.isInLMRArea ? 
+              'See LMR Development Options table below for details' :
+              'Not applicable - Property is not within an LMR area',
             options: {
-              color: isInLMRArea ? '0066CC' : '363636',
+              color: properties.isInLMRArea ? '0066CC' : '363636',
               fontSize: 8,
               valign: 'middle',
               align: 'left',
               wrap: true
             }
           }
-        ]
-      ];
+        ]);
+      }
 
       // Add the combined table
       slide.addTable(combinedTableRows, {
@@ -1533,7 +1163,7 @@ export async function addPermissibilitySlide(pptx, properties) {
 
       // Add footer text
       slide.addText('Property and Development NSW', convertCmValues(styles.footer));
-      slide.addText('15', convertCmValues(styles.pageNumber));
+      slide.addText(properties.isInLMRArea ? '16' : '15', convertCmValues(styles.pageNumber));
 
       return slide;
     } catch (error) {

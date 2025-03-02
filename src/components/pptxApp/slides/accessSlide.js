@@ -110,6 +110,10 @@ export async function addAccessSlide(pptx, propertyData) {
     
     console.log('LMR overlap data for scoring:', lmrOverlap);
     
+    // Store LMR status in propertyData for use by other slides
+    propertyData.isInLMRArea = lmrOverlap.hasOverlap;
+    propertyData.lmrOverlap = lmrOverlap;  // Store full overlap data for reference
+    
     // Calculate UDP score using the enhanced scoring logic that includes LMR overlap
     const udpScoreResult = scoringCriteria.udpPrecincts.calculateScore(
       { ...propertyData.udpPrecincts, lmrOverlap }, 

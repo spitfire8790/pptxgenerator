@@ -301,6 +301,8 @@ const ReportGenerator = ({ selectedFeature }) => {
 
   useEffect(() => {
     if (selectedFeature) {
+      console.log('Selected Feature:', selectedFeature);
+      console.log('Address path:', selectedFeature?.properties?.copiedFrom?.site__address);
       handleScreenshotCapture();
     }
   }, [selectedFeature]);
