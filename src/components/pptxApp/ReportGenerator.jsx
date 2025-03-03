@@ -521,7 +521,8 @@ const ReportGenerator = ({ selectedFeature }) => {
       if (selectedSlides.cover) {
         addLog('Capturing cover screenshot...', 'image');
         try {
-          screenshots.coverScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.COVER, true, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
+          // Always use feature geometry (false) for cover screenshot regardless of user settings
+          screenshots.coverScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.COVER, true, developableArea, showDevelopableArea, false);
           addLog('Cover screenshot captured successfully', 'success');
         } catch (error) {
           console.error('Failed to capture cover screenshot:', error);
