@@ -89,6 +89,13 @@ export async function captureGPRMap(feature, developableArea = null) {
     console.log('No feature provided to captureGPRMap');
     return null;
   }
+  
+  // Check for geometry
+  if (!feature.geometry && !Array.isArray(feature)) {
+    console.log('Feature has no geometry in captureGPRMap');
+    return null;
+  }
+  
   console.log('Starting GPR capture with feature:', feature);
 
   try {

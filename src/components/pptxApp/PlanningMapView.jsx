@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect } from 'react';
 import { SCREENSHOT_TYPES } from './utils/map/config/screenshotTypes';
-import { captureMapScreenshot } from './utils/map/services/screenshot';
+import { captureMapScreenshot } from './utils/map/services/screenshots/shared';
 
 const PlanningMapView = ({ feature, onScreenshotCapture, developableArea, showDevelopableArea }, ref) => {
   const captureScreenshots = useCallback(async () => {

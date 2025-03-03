@@ -2,20 +2,22 @@ import React, { useEffect } from 'react';
 import { giraffeState, rpc } from '@gi-nx/iframe-sdk';
 import { logAvailableLayers } from './utils/map/utils/layerDetails';
 
-const MapView = ({ onFeatureSelect, planningLayer }) => {
+const MapView = ({ onFeatureSelect, planningLayer, loadLayers = false }) => {
   useEffect(() => {
-    // Log all available layers when component mounts
-    logAvailableLayers().then(layers => {
-      console.log('All available layers:', layers);
-    }).catch(error => {
-      console.error('Error logging layers:', error);
-    });
+    // Only log available layers when loadLayers is true
+    if (loadLayers) {
+      logAvailableLayers().then(layers => {
+        console.log('All available layers:', layers);
+      }).catch(error => {
+        console.error('Error logging layers:', error);
+      });
+    }
 
     // Set the iframe width through Giraffe SDK
     giraffeState.set('iframeWidth', 1024);
 
-    // If planning layer is specified, add base imagery and planning layer
-    if (planningLayer) {
+    // If planning layer is specified and loadLayers is true, add base imagery and planning layer
+    if (planningLayer && loadLayers) {
       // Add base imagery with 50% opacity
       rpc.addLayer({
         type: 'wms',
@@ -72,7 +74,7 @@ const MapView = ({ onFeatureSelect, planningLayer }) => {
         unsubscribe();
       }
     };
-  }, [onFeatureSelect, planningLayer]);
+  }, [onFeatureSelect, planningLayer, loadLayers]);
 
   // Helper function to format zoning string
   const formatZoning = (zoning) => {

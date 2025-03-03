@@ -11,6 +11,8 @@ function App() {
   // State to store the currently selected map feature (property)
   // null when no feature is selected
   const [selectedFeature, setSelectedFeature] = React.useState(null);
+  // State to track if a report is being generated
+  const [isGeneratingReport, setIsGeneratingReport] = React.useState(false);
 
   // Callback function triggered when a feature is selected on the map
   // Transforms the raw feature data into the format we need
@@ -34,6 +36,11 @@ function App() {
     });
   };
 
+  // Handler for when report generation starts or ends
+  const handleReportGenerationStateChange = (isGenerating) => {
+    setIsGeneratingReport(isGenerating);
+  };
+
   return (
     // Main container that takes up the full viewport height
     <div className="h-screen">
@@ -46,7 +53,10 @@ function App() {
         - bg-white, rounded-lg, and shadow-lg give it a card-like appearance
       */}
       <div className="absolute top-2 left-2 z-10 w-[980px] bg-white rounded-8g shadow-2g">
-        <ReportGenerator selectedFeature={selectedFeature} />
+        <ReportGenerator 
+          selectedFeature={selectedFeature} 
+          onGenerationStateChange={handleReportGenerationStateChange}
+        />
       </div>
 
       {/* 
@@ -54,8 +64,12 @@ function App() {
         - Takes up full container space
         - Handles all Giraffe SDK map interactions
         - Triggers handleFeatureSelect when user selects a property
+        - Only loads layers when a report is being generated
       */}
-      <MapView onFeatureSelect={handleFeatureSelect} />
+      <MapView 
+        onFeatureSelect={handleFeatureSelect} 
+        loadLayers={isGeneratingReport}
+      />
       <Analytics 
         debug={import.meta.env.MODE === 'development'}
         beforeSend={(event) => {

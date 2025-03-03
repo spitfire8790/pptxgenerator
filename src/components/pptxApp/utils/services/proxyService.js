@@ -1,23 +1,25 @@
+// Add DEBUG flag at the top
+const DEBUG = false; // Set to true for detailed proxy request logging
 import { PROXY_CONFIG } from '../config/proxyConfig';
 
 export async function proxyRequest(url, options = {}) {
   const proxyUrl = PROXY_CONFIG.baseUrl;
   
   // Debug logs
-  console.log('Debug - PROXY_CONFIG:', PROXY_CONFIG);
-  console.log('Debug - proxyUrl being used:', proxyUrl);
+  if (DEBUG) console.log('Debug - PROXY_CONFIG:', PROXY_CONFIG);
+  if (DEBUG) console.log('Debug - proxyUrl being used:', proxyUrl);
   
   try {
-    console.log('Sending proxy request for:', url);
+    if (DEBUG) console.log('Sending proxy request for:', url);
     
     // For ArcGIS services, ensure we're using a POST request when appropriate
     if (url.includes('arcgis') && url.includes('GeometryServer')) {
-      console.log('ArcGIS Geometry Service detected, ensuring proper request format');
+      if (DEBUG) console.log('ArcGIS Geometry Service detected, ensuring proper request format');
       
       // Force POST for ArcGIS Geometry Service operations
       if (!options.method || options.method === 'GET') {
         options.method = 'POST';
-        console.log('Converted to POST request for ArcGIS service');
+        if (DEBUG) console.log('Converted to POST request for ArcGIS service');
       }
       
       // Ensure proper Content-Type for form data
@@ -31,20 +33,20 @@ export async function proxyRequest(url, options = {}) {
       
       // Check URL length and move query params to body if needed
       if (url.includes('?') && url.length > 2000) {
-        console.log('URL too long (' + url.length + ' chars), moving query parameters to request body');
+        if (DEBUG) console.log('URL too long (' + url.length + ' chars), moving query parameters to request body');
         const [baseUrl, queryString] = url.split('?');
         url = baseUrl;
         
         // If body isn't set, use the query string as the body
         if (!options.body) {
           options.body = queryString;
-          console.log('Moved query parameters to request body');
+          if (DEBUG) console.log('Moved query parameters to request body');
         }
       }
     }
     
     // Log the request details for debugging
-    console.log('Proxy request details:', {
+    if (DEBUG) console.log('Proxy request details:', {
       url: url,
       method: options.method || 'GET',
       bodySize: options.body ? (typeof options.body === 'string' ? options.body.length : 'non-string body') : 'no body',
@@ -70,7 +72,7 @@ export async function proxyRequest(url, options = {}) {
       }),
     };
     
-    console.log('Sending request to proxy:', {
+    if (DEBUG) console.log('Sending request to proxy:', {
       proxyUrl,
       method: requestOptions.method,
       targetUrl: url,
@@ -80,7 +82,7 @@ export async function proxyRequest(url, options = {}) {
     
     // Set a timeout for the request - use provided timeout or default to 30 seconds
     const timeoutMs = options.timeout || 30000;
-    console.log(`Setting request timeout to ${timeoutMs}ms`);
+    if (DEBUG) console.log(`Setting request timeout to ${timeoutMs}ms`);
     
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -105,7 +107,7 @@ export async function proxyRequest(url, options = {}) {
       }
   
       const contentType = response.headers.get('content-type');
-      console.log('Response content type:', contentType);
+      if (DEBUG) console.log('Response content type:', contentType);
       
       // Handle binary responses (images, etc.)
       if (contentType?.includes('image') || url.includes('/export') || url.includes('GetMap')) {
@@ -122,7 +124,7 @@ export async function proxyRequest(url, options = {}) {
       // Try to parse as JSON, fallback to text if that fails
       try {
         const jsonResponse = await response.json();
-        console.log('Successfully parsed JSON response');
+        if (DEBUG) console.log('Successfully parsed JSON response');
         return jsonResponse;
       } catch (e) {
         console.warn('Failed to parse response as JSON, falling back to text:', e.message);
@@ -133,7 +135,7 @@ export async function proxyRequest(url, options = {}) {
         
         // If the text looks like JSON but couldn't be parsed, log it for debugging
         if (text.startsWith('{') || text.startsWith('[')) {
-          console.log('Response looks like JSON but could not be parsed:', text.substring(0, 200) + '...');
+          if (DEBUG) console.log('Response looks like JSON but could not be parsed:', text.substring(0, 200) + '...');
         }
         
         return text;

@@ -634,14 +634,17 @@ async function fetchAllCCs(councilName) {
 }
 
 export async function captureDevelopmentApplicationsMap(feature, developableArea = null) {
-  // Reset used label spaces at the start of each capture
-  usedLabelSpaces = [];
-  
+  // Early return if no feature provided
   if (!feature) {
     console.log('No feature provided to captureDevelopmentApplicationsMap');
-    return null;
+    return { image: null, features: [] };
   }
-  console.log('Starting development applications map capture with feature:', feature);
+  
+  // Check for geometry
+  if (!feature.geometry && !Array.isArray(feature)) {
+    console.log('Feature has no geometry in captureDevelopmentApplicationsMap');
+    return { image: null, features: [] };
+  }
 
   try {
     // Convert array of coordinates to GeoJSON feature if necessary

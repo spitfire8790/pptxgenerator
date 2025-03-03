@@ -1,54 +1,50 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { generateReport } from '../../lib/powerpoint';
+
 import { addCoverSlide } from './slides/coverSlide';
 import { addPropertySnapshotSlide } from './slides/propertySnapshotSlide';
+import { addPrimarySiteAttributesSlide } from './slides/primarySiteAttributesSlide';
+import { addSecondaryAttributesSlide } from './slides/secondaryAttributesSlide';
 import { addPlanningSlide } from './slides/planningSlide';
 import { addPlanningSlide2 } from './slides/planningSlide2';
 import { addServicingSlide } from './slides/servicingSlide';
+import { addUtilisationSlide } from './slides/utilisationSlide';
+import { addAccessSlide } from './slides/accessSlide';
+import { addHazardsSlide } from './slides/hazardsSlide';
+import { addEnviroSlide } from './slides/enviroSlide';
+import { addContaminationSlide } from './slides/contaminationSlide';
 import { createScoringSlide } from './slides/scoringSlide';
-import { checkUserClaims } from './utils/auth/tokenUtils';
-import scoringCriteria from './slides/scoringLogic';
-import { area } from '@turf/area';
 import { addContextSlide } from './slides/contextSlide';
 import { addPermissibilitySlide } from './slides/permissibilitySlide';
 import { addDevelopmentSlide } from './slides/developmentSlide';
 import { addFeasibilitySlide } from './slides/feasibilitySlide';
-import { 
-  captureMapScreenshot, 
-  capturePrimarySiteAttributesMap, 
-  captureContourMap, 
-  captureRegularityMap, 
-  captureHeritageMap, 
-  captureAcidSulfateMap, 
-  captureWaterMainsMap, 
-  captureSewerMap, 
-  capturePowerMap,
-  captureGeoscapeMap,
-  captureRoadsMap,
-  captureUDPPrecinctMap,
-  captureFloodMap,
-  captureBushfireMap,
-  capturePTALMap,
-  captureContaminationMap,
-  captureTECMap,
-  captureBiodiversityMap,
-  captureHistoricalImagery
-} from './utils/map/services/screenshot';
+
+import { captureAcidSulfateMap } from './utils/map/services/screenshots/acidSulfate';
+import { captureBiodiversityMap } from './utils/map/services/screenshots/biodiversity';
+import { captureBushfireMap } from './utils/map/services/screenshots/bushfire';
+import { captureContaminationMap } from './utils/map/services/screenshots/contamination';
+import { captureContourMap } from './utils/map/services/screenshots/contour';
+import { captureFloodMap } from './utils/map/services/screenshots/flood';
+import { captureGeoscapeMap } from './utils/map/services/screenshots/geoscape';
 import { captureGPRMap } from './utils/map/services/screenshots/contextScreenshot';
+import { captureHeritageMap } from './utils/map/services/screenshots/heritage';
+import { captureHistoricalImagery } from './utils/map/services/screenshots/historicalImagery';
+import { capturePowerMap } from './utils/map/services/screenshots/power';
+import { capturePrimarySiteAttributesMap } from './utils/map/services/screenshots/primarySiteAttributes';
+import { capturePTALMap } from './utils/map/services/screenshots/ptal';
+import { captureRegularityMap } from './utils/map/services/screenshots/regularity';
+import { captureRoadsMap } from './utils/map/services/screenshots/roads';
+import { captureSewerMap } from './utils/map/services/screenshots/sewer';
+import { captureMapScreenshot } from './utils/map/services/screenshots/shared';
+import { captureTECMap } from './utils/map/services/screenshots/tec';
+import { captureUDPPrecinctMap } from './utils/map/services/screenshots/udpPrecinct';
+import { captureWaterMainsMap } from './utils/map/services/screenshots/waterMains';
 import { clearServiceCache } from './utils/map/services/wmsService';
 import { SCREENSHOT_TYPES } from './utils/map/config/screenshotTypes';
 import SlidePreview from './SlidePreview';
 import PlanningMapView from './PlanningMapView';
-import PptxGenJS from 'pptxgenjs';
 import DevelopableAreaSelector from './DevelopableAreaSelector';
-import GenerationProgress from './GenerationProgress';
-import { addPrimarySiteAttributesSlide } from './slides/primarySiteAttributesSlide';
-import { addSecondaryAttributesSlide } from './slides/secondaryAttributesSlide';
-import { addUtilisationSlide } from './slides/utilisationSlide';
-import { addAccessSlide } from './slides/accessSlide';
-import { addHazardsSlide } from './slides/hazardsSlide';
-import { addContaminationSlide } from './slides/contaminationSlide';
-import { addEnviroSlide } from './slides/enviroSlide';
+
 import { 
   Home,
   Image as ImageIcon,
@@ -83,6 +79,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import IssuesList from './IssuesList';
 import FeasibilityManager from './components/FeasibilityManager';
 import Papa from 'papaparse';
+
 
 const slideOptions = [
   { id: 'cover', label: 'Cover Page', addSlide: addCoverSlide, icon: Home },
@@ -141,49 +138,6 @@ const getStepDescription = (stepId) => {
   }
 };
 
-const calculateDevelopableArea = (geometry) => {
-  if (!geometry) return 0;
-  const areaInSqMeters = area(geometry);
-  return Math.round(areaInSqMeters);
-};
-
-const ScreenshotProgress = ({ screenshots, failedScreenshots }) => {
-  return (
-    <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-      <h3 className="text-sm font-medium text-gray-700 mb-3">Screenshot Progress</h3>
-      <div className="space-y-2">
-        {Object.entries(screenshots).map(([key, value]) => {
-          const isFailed = failedScreenshots?.includes(key);
-          return (
-            <div key={key} className="flex items-center justify-between text-sm">
-              <span className="text-gray-600">{key.replace(/Screenshot$/, '')}</span>
-              <div className="flex items-center">
-                {value ? (
-                  <span className="text-green-600 flex items-center">
-                    <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                    Captured
-                  </span>
-                ) : isFailed ? (
-                  <span className="text-red-600 flex items-center">
-                    <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                    </svg>
-                    Failed
-                  </span>
-                ) : (
-                  <span className="text-gray-400">Pending</span>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-};
-
 const formatTime = (ms) => {
   const seconds = Math.floor((ms / 1000) % 60);
   const minutes = Math.floor((ms / 1000 / 60) % 60);
@@ -224,11 +178,11 @@ const Timer = ({ isRunning, onComplete }) => {
   );
 };
 
-const ReportGenerator = ({ selectedFeature }) => {
-  const [screenshots, setScreenshots] = useState({});
+const ReportGenerator = ({ selectedFeature, onGenerationStateChange }) => {
   const [previewScreenshot, setPreviewScreenshot] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [status, setStatus] = useState(null);
+  const [screenshots, setScreenshots] = useState({});
+  const [status, setStatus] = useState('idle');
   const [selectedSlides, setSelectedSlides] = useState({
     cover: true,
     propertySnapshot: true,
@@ -428,6 +382,11 @@ const ReportGenerator = ({ selectedFeature }) => {
     setGenerationLogs([]);
     logCounterRef.current = 0;
     
+    // Notify parent component that generation has started
+    if (onGenerationStateChange) {
+      onGenerationStateChange(true);
+    }
+    
     clearServiceCache();
     
     try {
@@ -512,108 +471,297 @@ const ReportGenerator = ({ selectedFeature }) => {
         feasibilitySettings
       });
 
+      // Initialize containers for screenshots and tracking failed ones
       const screenshots = {};
       const failed = [];
+      const screenshotPromises = [];
+      const totalScreenshots = Object.entries(selectedSlides)
+        .filter(([_, isSelected]) => isSelected)
+        .length * 2; // Approximate count per slide
+      let completedScreenshots = 0;
       
-      addLog('Starting report generation...', 'default');
+      addLog('Starting parallel screenshot capture...', 'default');
       
+      // Create a wrapper function to track progress
+      const trackScreenshotCapture = async (capturePromise, name) => {
+        try {
+          const result = await capturePromise;
+          completedScreenshots++;
+          addLog(`Captured ${name} (${completedScreenshots}/${totalScreenshots})`, 'success');
+          return result;
+        } catch (error) {
+          failed.push(name);
+          addLog(`Failed to capture ${name}`, 'error');
+          console.error(`Failed to capture ${name}:`, error);
+          return null;
+        }
+      };
+      
+      // ==== COVER SLIDE ====
       if (selectedSlides.cover) {
-        addLog('Capturing cover screenshot...', 'image');
-        try {
-          screenshots.coverScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.COVER);
-          addLog('Cover screenshot captured successfully', 'success');
-        } catch (error) {
-          console.error('Failed to capture cover screenshot:', error);
-          failed.push('coverScreenshot');
-          addLog('Failed to capture cover screenshot', 'error');
-        }
+        addLog('Requesting cover screenshot...', 'image');
+        screenshotPromises.push(
+          trackScreenshotCapture(
+            captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.COVER),
+            'coverScreenshot'
+          ).then(result => { screenshots.coverScreenshot = result; })
+        );
       }
       
+      // ==== PROPERTY SNAPSHOT SLIDE ====
       if (selectedSlides.propertySnapshot) {
-        addLog('Capturing aerial and snapshot images...', 'image');
-        try {
-          screenshots.aerialScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.AERIAL);
-          screenshots.snapshotScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.SNAPSHOT);
-          addLog('Aerial and snapshot images captured successfully', 'success');
-        } catch (error) {
-          console.error('Failed to capture snapshot screenshots:', error);
-          failed.push('aerialScreenshot', 'snapshotScreenshot');
-          addLog('Failed to capture aerial/snapshot images', 'error');
-        }
+        addLog('Requesting aerial and snapshot images...', 'image');
+        screenshotPromises.push(
+          trackScreenshotCapture(
+            captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.AERIAL),
+            'aerialScreenshot'
+          ).then(result => { screenshots.aerialScreenshot = result; })
+        );
+        
+        screenshotPromises.push(
+          trackScreenshotCapture(
+            captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.SNAPSHOT),
+            'snapshotScreenshot'
+          ).then(result => { screenshots.snapshotScreenshot = result; })
+        );
       }
       
+      // ==== PLANNING SLIDE ====
       if (selectedSlides.planning) {
-        await planningMapRef.current?.captureScreenshots();
-        screenshots.zoningScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.ZONING, true, developableArea, showDevelopableArea);
-        screenshots.fsrScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.FSR, true, developableArea, showDevelopableArea);
-        screenshots.hobScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.HOB, true, developableArea, showDevelopableArea);
+        addLog('Requesting planning screenshots...', 'image');
+        
+        // Planning map ref needs special handling - capture it first if available
+        if (planningMapRef.current) {
+          screenshotPromises.push(
+            trackScreenshotCapture(
+              planningMapRef.current.captureScreenshots(),
+              'planningMapScreenshots'
+            )
+          );
+        }
+        
+        // Zoning, FSR, and HOB can be captured in parallel
+        screenshotPromises.push(
+          trackScreenshotCapture(
+            captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.ZONING, true, developableArea, showDevelopableArea),
+            'zoningScreenshot'
+          ).then(result => { screenshots.zoningScreenshot = result; })
+        );
+        
+        screenshotPromises.push(
+          trackScreenshotCapture(
+            captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.FSR, true, developableArea, showDevelopableArea),
+            'fsrScreenshot'
+          ).then(result => { screenshots.fsrScreenshot = result; })
+        );
+        
+        screenshotPromises.push(
+          trackScreenshotCapture(
+            captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.HOB, true, developableArea, showDevelopableArea),
+            'hobScreenshot'
+          ).then(result => { screenshots.hobScreenshot = result; })
+        );
       }
       
+      // ==== PRIMARY SITE ATTRIBUTES SLIDE ====
       if (selectedSlides.primarySiteAttributes) {
-        screenshots.compositeMapScreenshot = await capturePrimarySiteAttributesMap(selectedFeature, developableArea, showDevelopableArea);
+        addLog('Requesting primary site attributes map...', 'image');
+        screenshotPromises.push(
+          trackScreenshotCapture(
+            capturePrimarySiteAttributesMap(selectedFeature, developableArea, showDevelopableArea),
+            'compositeMapScreenshot'
+          ).then(result => { screenshots.compositeMapScreenshot = result; })
+        );
       }
       
+      // ==== SECONDARY ATTRIBUTES SLIDE ====
       if (selectedSlides.secondaryAttributes) {
-        screenshots.contourScreenshot = await captureContourMap(selectedFeature, developableArea, showDevelopableArea);
-        screenshots.regularityScreenshot = await captureRegularityMap(selectedFeature, developableArea, showDevelopableArea);
+        addLog('Requesting contour and regularity maps...', 'image');
+        screenshotPromises.push(
+          trackScreenshotCapture(
+            captureContourMap(selectedFeature, developableArea, showDevelopableArea),
+            'contourScreenshot'
+          ).then(result => { screenshots.contourScreenshot = result; })
+        );
+        
+        screenshotPromises.push(
+          trackScreenshotCapture(
+            captureRegularityMap(selectedFeature, developableArea, showDevelopableArea),
+            'regularityScreenshot'
+          ).then(result => { screenshots.regularityScreenshot = result; })
+        );
       }
       
+      // ==== PLANNING TWO SLIDE ====
       if (selectedSlides.planningTwo) {
-        screenshots.heritageScreenshot = await captureHeritageMap(selectedFeature, developableArea, showDevelopableArea);
-        screenshots.acidSulfateSoilsScreenshot = await captureAcidSulfateMap(selectedFeature, developableArea, showDevelopableArea);
+        addLog('Requesting heritage and acid sulfate soil maps...', 'image');
+        screenshotPromises.push(
+          trackScreenshotCapture(
+            captureHeritageMap(selectedFeature, developableArea, showDevelopableArea),
+            'heritageScreenshot'
+          ).then(result => { screenshots.heritageScreenshot = result; })
+        );
+        
+        screenshotPromises.push(
+          trackScreenshotCapture(
+            captureAcidSulfateMap(selectedFeature, developableArea, showDevelopableArea),
+            'acidSulfateSoilsScreenshot'
+          ).then(result => { screenshots.acidSulfateSoilsScreenshot = result; })
+        );
       }
       
+      // ==== SERVICING SLIDE ====
       if (selectedSlides.servicing) {
-        const waterMains = await captureWaterMainsMap(selectedFeature, developableArea, showDevelopableArea);
-        screenshots.waterMainsScreenshot = waterMains?.image;
-        screenshots.waterFeatures = waterMains?.features;
+        addLog('Requesting infrastructure maps (water, sewer, power)...', 'image');
         
-        const sewer = await captureSewerMap(selectedFeature, developableArea, showDevelopableArea);
-        screenshots.sewerScreenshot = sewer?.image;
-        screenshots.sewerFeatures = sewer?.features;
+        screenshotPromises.push(
+          trackScreenshotCapture(
+            captureWaterMainsMap(selectedFeature, developableArea, showDevelopableArea),
+            'waterMainsMap'
+          ).then(result => { 
+            screenshots.waterMainsScreenshot = result?.image;
+            screenshots.waterFeatures = result?.features;
+          })
+        );
         
-        const power = await capturePowerMap(selectedFeature, developableArea, showDevelopableArea);
-        screenshots.powerScreenshot = power?.image;
-        screenshots.powerFeatures = power?.features;
+        screenshotPromises.push(
+          trackScreenshotCapture(
+            captureSewerMap(selectedFeature, developableArea, showDevelopableArea),
+            'sewerMap'
+          ).then(result => { 
+            screenshots.sewerScreenshot = result?.image;
+            screenshots.sewerFeatures = result?.features;
+          })
+        );
+        
+        screenshotPromises.push(
+          trackScreenshotCapture(
+            capturePowerMap(selectedFeature, developableArea, showDevelopableArea),
+            'powerMap'
+          ).then(result => { 
+            screenshots.powerScreenshot = result?.image;
+            screenshots.powerFeatures = result?.features;
+          })
+        );
       }
       
+      // ==== UTILISATION SLIDE ====
       if (selectedSlides.utilisation) {
-        const geoscape = await captureGeoscapeMap(selectedFeature, developableArea, showDevelopableArea);
-        screenshots.geoscapeScreenshot = geoscape?.image;
-        screenshots.geoscapeFeatures = geoscape?.features;
+        addLog('Requesting geoscape map...', 'image');
+        screenshotPromises.push(
+          trackScreenshotCapture(
+            captureGeoscapeMap(selectedFeature, developableArea, showDevelopableArea),
+            'geoscapeMap'
+          ).then(result => { 
+            screenshots.geoscapeScreenshot = result?.image;
+            screenshots.geoscapeFeatures = result?.features;
+          })
+        );
       }
       
+      // ==== ACCESS SLIDE ====
       if (selectedSlides.access) {
-        screenshots.roadsScreenshot = await captureRoadsMap(selectedFeature, developableArea, showDevelopableArea);
-        screenshots.udpPrecinctsScreenshot = await captureUDPPrecinctMap(selectedFeature, developableArea, showDevelopableArea);
-        screenshots.ptalScreenshot = await capturePTALMap(selectedFeature, developableArea, showDevelopableArea);
-      }
-      
-      if (selectedSlides.hazards) {
-        screenshots.floodMapScreenshot = await captureFloodMap(selectedFeature, developableArea, showDevelopableArea);
-        screenshots.bushfireMapScreenshot = await captureBushfireMap(selectedFeature, developableArea, showDevelopableArea);
-      }
-      
-      if (selectedSlides.environmental) {
-        screenshots.tecMapScreenshot = await captureTECMap(selectedFeature, developableArea, showDevelopableArea);
-        screenshots.tecFeatures = screenshots.tecMapScreenshot?.features;
-        screenshots.biodiversityMapScreenshot = await captureBiodiversityMap(selectedFeature, developableArea, showDevelopableArea);
-        screenshots.biodiversityFeatures = screenshots.biodiversityMapScreenshot?.features;
-      }
-      
-      if (selectedSlides.contamination) {
-        const contaminationResult = await captureContaminationMap(selectedFeature, developableArea, showDevelopableArea);
-        screenshots.contaminationMapScreenshot = contaminationResult?.image;
-        screenshots.contaminationFeatures = contaminationResult?.features;
+        addLog('Requesting access maps (roads, UDP precincts, PTAL)...', 'image');
         
-        screenshots.historicalImagery = await captureHistoricalImagery(selectedFeature, developableArea, showDevelopableArea);
+        screenshotPromises.push(
+          trackScreenshotCapture(
+            captureRoadsMap(selectedFeature, developableArea, showDevelopableArea),
+            'roadsScreenshot'
+          ).then(result => { screenshots.roadsScreenshot = result; })
+        );
+        
+        screenshotPromises.push(
+          trackScreenshotCapture(
+            captureUDPPrecinctMap(selectedFeature, developableArea, showDevelopableArea),
+            'udpPrecinctsScreenshot'
+          ).then(result => { screenshots.udpPrecinctsScreenshot = result; })
+        );
+        
+        screenshotPromises.push(
+          trackScreenshotCapture(
+            capturePTALMap(selectedFeature, developableArea, showDevelopableArea),
+            'ptalScreenshot'
+          ).then(result => { screenshots.ptalScreenshot = result; })
+        );
       }
-
+      
+      // ==== HAZARDS SLIDE ====
+      if (selectedSlides.hazards) {
+        addLog('Requesting hazard maps (flood, bushfire)...', 'image');
+        
+        screenshotPromises.push(
+          trackScreenshotCapture(
+            captureFloodMap(selectedFeature, developableArea, showDevelopableArea),
+            'floodMapScreenshot'
+          ).then(result => { screenshots.floodMapScreenshot = result; })
+        );
+        
+        screenshotPromises.push(
+          trackScreenshotCapture(
+            captureBushfireMap(selectedFeature, developableArea, showDevelopableArea),
+            'bushfireMapScreenshot'
+          ).then(result => { screenshots.bushfireMapScreenshot = result; })
+        );
+      }
+      
+      // ==== ENVIRONMENTAL SLIDE ====
+      if (selectedSlides.environmental) {
+        addLog('Requesting environmental maps (TEC, biodiversity)...', 'image');
+        
+        screenshotPromises.push(
+          trackScreenshotCapture(
+            captureTECMap(selectedFeature, developableArea, showDevelopableArea),
+            'tecMapScreenshot'
+          ).then(result => { 
+            screenshots.tecMapScreenshot = result?.image;
+            screenshots.tecFeatures = result?.features;
+          })
+        );
+        
+        screenshotPromises.push(
+          trackScreenshotCapture(
+            captureBiodiversityMap(selectedFeature, developableArea, showDevelopableArea),
+            'biodiversityMapScreenshot'
+          ).then(result => { 
+            screenshots.biodiversityMapScreenshot = result?.image;
+            screenshots.biodiversityFeatures = result?.features;
+          })
+        );
+      }
+      
+      // ==== CONTAMINATION SLIDE ====
+      if (selectedSlides.contamination) {
+        addLog('Requesting contamination maps...', 'image');
+        
+        screenshotPromises.push(
+          trackScreenshotCapture(
+            captureContaminationMap(selectedFeature, developableArea, showDevelopableArea),
+            'contaminationMapScreenshot'
+          ).then(result => { 
+            screenshots.contaminationMapScreenshot = result?.image;
+            screenshots.contaminationFeatures = result?.features;
+          })
+        );
+        
+        screenshotPromises.push(
+          trackScreenshotCapture(
+            captureHistoricalImagery(selectedFeature, developableArea, showDevelopableArea),
+            'historicalImagery'
+          ).then(result => { screenshots.historicalImagery = result; })
+        );
+      }
+      
+      // Wait for all screenshot captures to complete in parallel
+      addLog(`Waiting for ${screenshotPromises.length} parallel screenshot operations to complete...`, 'default');
+      await Promise.all(screenshotPromises);
+      addLog('All screenshots captured', 'success');
+      
+      // Record failed screenshots
       setFailedScreenshots(failed);
       if (failed.length > 0) {
-        throw new Error('Some screenshots failed to capture');
+        addLog(`Warning: ${failed.length} screenshots failed to capture`, 'warning');
       }
-
+      
       setCompletedSteps(prev => [...prev, 'screenshots']);
       setCurrentStep('cover');
 
@@ -719,6 +867,9 @@ const ReportGenerator = ({ selectedFeature }) => {
       setIsGenerating(false);
       setCurrentStep(null);
       setGenerationStartTime(null);
+      if (status !== 'error' && status !== 'cancelled') {
+        setStatus('completed');
+      }
     }
   };
 
@@ -746,10 +897,16 @@ const ReportGenerator = ({ selectedFeature }) => {
   };
 
   const handlePlanningScreenshotsCapture = (planningScreenshots) => {
-    setScreenshots(prev => ({
-      ...prev,
-      ...planningScreenshots
-    }));
+    // Store planning screenshots in the main screenshots object during generation
+    if (isGenerating) {
+      screenshots.planningScreenshots = planningScreenshots;
+    } else {
+      // Update the screenshots state for preview/non-generation cases
+      setScreenshots(prev => ({
+        ...prev,
+        ...planningScreenshots
+      }));
+    }
   };
 
   const handleDevelopableAreaSelect = (layerData) => {

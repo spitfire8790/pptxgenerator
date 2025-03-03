@@ -19,6 +19,6 @@ export async function getArcGISImage(config, centerX, centerY, size) {
 
   const url = `${config.url}/export?${params.toString()}`;
 
-  return loadImage(url);
-
+  const imageUrl = await proxyRequest(url);
+  return loadImage(imageUrl);
 } 

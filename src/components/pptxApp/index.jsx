@@ -21,6 +21,7 @@ const MapScreenshotApp = () => {
   const [activeTab, setActiveTab] = React.useState('overview');
   const [sidebarWidth, setSidebarWidth] = React.useState(1000);  // Default width 1000px
   const [isIssueModalOpen, setIsIssueModalOpen] = React.useState(false);
+  const [isGeneratingReport, setIsGeneratingReport] = React.useState(false);
 
   React.useEffect(() => {
     setNewWidthInPixels(sidebarWidth);
@@ -53,6 +54,15 @@ const MapScreenshotApp = () => {
     };
     setSelectedFeature(transformedFeature);
   };
+  
+  // Handler for when report generation starts or ends
+  const handleReportGenerationStateChange = (isGenerating) => {
+    setIsGeneratingReport(isGenerating);
+  };
+
+  // Determine if map layers should be loaded
+  // Only load them when on the report tab or when actively generating a report
+  const shouldLoadLayers = activeTab === 'report' || isGeneratingReport;
 
   const tabs = [
     { id: 'overview', label: 'Overview' },
@@ -163,7 +173,7 @@ const MapScreenshotApp = () => {
               <PropertyOverview selectedFeature={selectedFeature} />
             </div>
             <div className="flex-1">
-              <MapView onFeatureSelect={handleFeatureSelect} />
+              <MapView onFeatureSelect={handleFeatureSelect} loadLayers={shouldLoadLayers} />
             </div>
           </div>
         )}
@@ -176,7 +186,7 @@ const MapScreenshotApp = () => {
               <Planning selectedFeature={selectedFeature} />
             </div>
             <div className="flex-1">
-              <MapView onFeatureSelect={handleFeatureSelect} />
+              <MapView onFeatureSelect={handleFeatureSelect} loadLayers={shouldLoadLayers} />
             </div>
           </div>
         )}
@@ -189,7 +199,7 @@ const MapScreenshotApp = () => {
               <Development selectedFeature={selectedFeature} />
             </div>
             <div className="flex-1">
-              <MapView onFeatureSelect={handleFeatureSelect} />
+              <MapView onFeatureSelect={handleFeatureSelect} loadLayers={shouldLoadLayers} />
             </div>
           </div>
         )}
@@ -217,7 +227,7 @@ const MapScreenshotApp = () => {
               <Sales selectedFeature={selectedFeature} />
             </div>
             <div className="flex-1">
-              <MapView onFeatureSelect={handleFeatureSelect} />
+              <MapView onFeatureSelect={handleFeatureSelect} loadLayers={shouldLoadLayers} />
             </div>
           </div>
         )}
@@ -230,7 +240,7 @@ const MapScreenshotApp = () => {
               <Topography selectedFeature={selectedFeature} />
             </div>
             <div className="flex-1">
-              <MapView onFeatureSelect={handleFeatureSelect} />
+              <MapView onFeatureSelect={handleFeatureSelect} loadLayers={shouldLoadLayers} />
             </div>
           </div>
         )}
@@ -243,7 +253,7 @@ const MapScreenshotApp = () => {
               <Climate selectedFeature={selectedFeature} />
             </div>
             <div className="flex-1">
-              <MapView onFeatureSelect={handleFeatureSelect} />
+              <MapView onFeatureSelect={handleFeatureSelect} loadLayers={shouldLoadLayers} />
             </div>
           </div>
         )}
@@ -256,7 +266,7 @@ const MapScreenshotApp = () => {
               <AreaOverview selectedFeature={selectedFeature} />
             </div>
             <div className="flex-1">
-              <MapView onFeatureSelect={handleFeatureSelect} />
+              <MapView onFeatureSelect={handleFeatureSelect} loadLayers={shouldLoadLayers} />
             </div>
           </div>
         )}
@@ -269,7 +279,7 @@ const MapScreenshotApp = () => {
               <LayerDrawing selectedFeature={selectedFeature} />
             </div>
             <div className="flex-1">
-              <MapView onFeatureSelect={handleFeatureSelect} />
+              <MapView onFeatureSelect={handleFeatureSelect} loadLayers={shouldLoadLayers} />
             </div>
           </div>
         )}
@@ -279,10 +289,13 @@ const MapScreenshotApp = () => {
               style={{ width: `${sidebarWidth}px` }}
               className="flex-shrink-0 overflow-auto bg-white"
             >
-              <ReportGenerator selectedFeature={selectedFeature} />
+              <ReportGenerator 
+                selectedFeature={selectedFeature} 
+                onGenerationStateChange={handleReportGenerationStateChange}
+              />
             </div>
             <div className="flex-1">
-              <MapView onFeatureSelect={handleFeatureSelect} />
+              <MapView onFeatureSelect={handleFeatureSelect} loadLayers={shouldLoadLayers} />
             </div>
           </div>
         )}

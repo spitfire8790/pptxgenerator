@@ -1,18 +1,38 @@
-import { SCREENSHOT_TYPES } from '../../config/screenshotTypes';
 import { LAYER_CONFIGS } from '../../config/layerConfigs';
-import { calculateBounds } from './baseScreenshot';
-import { createCanvas, drawImage, drawBoundary } from '../../utils/canvas';
+import { SCREENSHOT_TYPES } from '../../config/screenshotTypes';
 import { getWMSImage } from '../wmsService';
 import { getArcGISImage } from '../arcgisService';
+import { createCanvas, drawImage, drawBoundary } from '../../utils/canvas';
 import { proxyRequest } from '../../../services/proxyService';
 import { loadImage } from '../../utils/image';
+import { calculateBounds } from './shared';
+import { giraffeState } from '@gi-nx/iframe-sdk';
+import * as turf from '@turf/turf';
 
-export async function capturePrimarySiteAttributesMap(feature, developableArea = null, showDevelopableArea = true, boundsSource = 'feature') {
+/**
+ * Primary site attributes map configuration
+ */
+export const PRIMARY_SITE_CONFIG = {
+  size: 2048,
+  width: 2048,
+  height: 2048,
+  padding: 0.3,
+  dpi: 300
+};
+
+/**
+ * Capture a primary site attributes map screenshot for the given feature
+ * @param {Object} feature - GeoJSON feature
+ * @param {Object} developableArea - Optional developable area GeoJSON
+ * @param {Boolean} showDevelopableArea - Whether to show the developable area
+ * @returns {Promise<String>} Screenshot as a data URL
+ */
+export async function capturePrimarySiteAttributesMap(feature, developableArea = null, showDevelopableArea = true) {
   if (!feature) return null;
   
   try {
-    const config = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];
-    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, boundsSource);
+    const config = PRIMARY_SITE_CONFIG;
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
     
     // Create base canvas
     const canvas = createCanvas(config.width || config.size, config.height || config.size);
@@ -113,17 +133,76 @@ export async function capturePrimarySiteAttributesMap(feature, developableArea =
       console.warn('Failed to load power lines layer:', error);
     }
 
-    // Add site boundary
+    try {
+      // 6. 1AEP Flood Extents from Giraffe layer
+      const floodConfig = {
+        baseUrl: 'https://portal.data.nsw.gov.au/arcgis/rest/services/Hosted/nsw_1aep_flood_extents/FeatureServer/0',
+        layerId: 5180
+      };
+
+      // Get the flood layer data from Giraffe
+      const projectLayers = giraffeState.get("projectLayers") ?? [];
+      const floodLayer = projectLayers.find(layer => 
+        layer.layerOptions?.source?.url?.includes('nsw_1aep_flood_extents')
+      );
+      
+      if (floodLayer) {
+        const featureBbox = turf.bbox(feature);
+        const buffer = 0.01; // ~1km buffer
+        const bboxWithBuffer = [
+          featureBbox[0] - buffer,
+          featureBbox[1] - buffer,
+          featureBbox[2] + buffer,
+          featureBbox[3] + buffer
+        ];
+        
+        // Query flood layer within the buffered bbox
+        const query = {
+          geometry: {
+            spatialReference: { wkid: 4326 },
+            xmin: bboxWithBuffer[0],
+            ymin: bboxWithBuffer[1],
+            xmax: bboxWithBuffer[2],
+            ymax: bboxWithBuffer[3]
+          },
+          outFields: ['*'],
+          returnGeometry: true,
+          outSpatialReference: { wkid: 4326 },
+          f: 'geojson'
+        };
+        
+        const queryUrl = `${floodConfig.baseUrl}/query?${new URLSearchParams(query)}`;
+        const response = await fetch(queryUrl);
+        const floodData = await response.json();
+        
+        if (floodData.features.length > 0) {
+          // Draw flood data with semi-transparent blue
+          floodData.features.forEach(floodFeature => {
+            if (floodFeature.geometry.type === 'Polygon') {
+              drawBoundary(ctx, floodFeature.geometry.coordinates[0], centerX, centerY, size, canvas.width, {
+                strokeStyle: 'rgba(30, 144, 255, 0.8)',
+                lineWidth: 2,
+                fillStyle: 'rgba(30, 144, 255, 0.4)'
+              });
+            }
+          });
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load flood layer:', error);
+    }
+
+    // Draw property boundary
     if (feature.geometry?.coordinates?.[0]) {
-      drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, canvas.width, {
+      drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width || config.size, {
         strokeStyle: '#FF0000',
         lineWidth: 6
       });
     }
 
-    // Add developable area boundary if available
+    // Draw developable area if available
     if (developableArea?.features?.[0] && showDevelopableArea) {
-      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, canvas.width, {
+      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width || config.size, {
         strokeStyle: '#02d1b8',
         lineWidth: 12,
         dashArray: [20, 10]
