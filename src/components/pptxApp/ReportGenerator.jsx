@@ -637,6 +637,7 @@ const ReportGenerator = ({ selectedFeature }) => {
         site_suitability__floorspace_ratio: selectedFeature.properties.copiedFrom?.site_suitability__floorspace_ratio,  
         site_suitability__height_of_building: selectedFeature.properties.copiedFrom?.site_suitability__height_of_building,
         site_suitability__NSW_government_agency: selectedFeature.properties.copiedFrom?.site_suitability__NSW_government_agency,
+        site_suitability__landzone: selectedFeature.properties.copiedFrom?.site_suitability__landzone,
         site__geometry: selectedFeature.geometry.coordinates[0],
         site__address: selectedFeature.properties.copiedFrom?.site__address || 'Unnamed Location',
         site__property_id: selectedFeature.properties.copiedFrom?.site__property_id,
