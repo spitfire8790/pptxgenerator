@@ -11,7 +11,7 @@ const PlanningMapView = ({ feature, onScreenshotCapture, developableArea, showDe
       const planningTypes = [SCREENSHOT_TYPES.ZONING, SCREENSHOT_TYPES.FSR, SCREENSHOT_TYPES.HOB];
 
       for (const type of planningTypes) {
-        const screenshot = await captureMapScreenshot(feature, type, true, developableArea, showDevelopableArea);
+        const screenshot = await captureMapScreenshot(feature, type, true, developableArea, showDevelopableArea, true);
         if (screenshot) {
           screenshots[`${type}Screenshot`] = screenshot;
         }
@@ -35,4 +35,3 @@ const PlanningMapView = ({ feature, onScreenshotCapture, developableArea, showDe
 };
 
 export default React.forwardRef(PlanningMapView);
-

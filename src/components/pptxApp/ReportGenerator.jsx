@@ -250,6 +250,7 @@ const ReportGenerator = ({ selectedFeature }) => {
   });
   const [developableArea, setDevelopableArea] = useState(null);
   const [showDevelopableArea, setShowDevelopableArea] = useState(true);
+  const [useDevelopableAreaForBounds, setUseDevelopableAreaForBounds] = useState(false);
   const planningMapRef = useRef();
   const [currentStep, setCurrentStep] = useState(null);
   const [completedSteps, setCompletedSteps] = useState([]);
@@ -520,7 +521,7 @@ const ReportGenerator = ({ selectedFeature }) => {
       if (selectedSlides.cover) {
         addLog('Capturing cover screenshot...', 'image');
         try {
-          screenshots.coverScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.COVER);
+          screenshots.coverScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.COVER, true, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
           addLog('Cover screenshot captured successfully', 'success');
         } catch (error) {
           console.error('Failed to capture cover screenshot:', error);
@@ -532,8 +533,8 @@ const ReportGenerator = ({ selectedFeature }) => {
       if (selectedSlides.propertySnapshot) {
         addLog('Capturing aerial and snapshot images...', 'image');
         try {
-          screenshots.aerialScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.AERIAL);
-          screenshots.snapshotScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.SNAPSHOT);
+          screenshots.aerialScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.AERIAL, true, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
+          screenshots.snapshotScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.SNAPSHOT, true, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
           addLog('Aerial and snapshot images captured successfully', 'success');
         } catch (error) {
           console.error('Failed to capture snapshot screenshots:', error);
@@ -544,69 +545,69 @@ const ReportGenerator = ({ selectedFeature }) => {
       
       if (selectedSlides.planning) {
         await planningMapRef.current?.captureScreenshots();
-        screenshots.zoningScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.ZONING, true, developableArea, showDevelopableArea);
-        screenshots.fsrScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.FSR, true, developableArea, showDevelopableArea);
-        screenshots.hobScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.HOB, true, developableArea, showDevelopableArea);
+        screenshots.zoningScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.ZONING, true, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
+        screenshots.fsrScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.FSR, true, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
+        screenshots.hobScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.HOB, true, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
       }
       
       if (selectedSlides.primarySiteAttributes) {
-        screenshots.compositeMapScreenshot = await capturePrimarySiteAttributesMap(selectedFeature, developableArea, showDevelopableArea);
+        screenshots.compositeMapScreenshot = await capturePrimarySiteAttributesMap(selectedFeature, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
       }
       
       if (selectedSlides.secondaryAttributes) {
-        screenshots.contourScreenshot = await captureContourMap(selectedFeature, developableArea, showDevelopableArea);
-        screenshots.regularityScreenshot = await captureRegularityMap(selectedFeature, developableArea, showDevelopableArea);
+        screenshots.contourScreenshot = await captureContourMap(selectedFeature, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
+        screenshots.regularityScreenshot = await captureRegularityMap(selectedFeature, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
       }
       
       if (selectedSlides.planningTwo) {
-        screenshots.heritageScreenshot = await captureHeritageMap(selectedFeature, developableArea, showDevelopableArea);
-        screenshots.acidSulfateSoilsScreenshot = await captureAcidSulfateMap(selectedFeature, developableArea, showDevelopableArea);
+        screenshots.heritageScreenshot = await captureHeritageMap(selectedFeature, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
+        screenshots.acidSulfateSoilsScreenshot = await captureAcidSulfateMap(selectedFeature, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
       }
       
       if (selectedSlides.servicing) {
-        const waterMains = await captureWaterMainsMap(selectedFeature, developableArea, showDevelopableArea);
+        const waterMains = await captureWaterMainsMap(selectedFeature, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
         screenshots.waterMainsScreenshot = waterMains?.image;
         screenshots.waterFeatures = waterMains?.features;
         
-        const sewer = await captureSewerMap(selectedFeature, developableArea, showDevelopableArea);
+        const sewer = await captureSewerMap(selectedFeature, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
         screenshots.sewerScreenshot = sewer?.image;
         screenshots.sewerFeatures = sewer?.features;
         
-        const power = await capturePowerMap(selectedFeature, developableArea, showDevelopableArea);
+        const power = await capturePowerMap(selectedFeature, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
         screenshots.powerScreenshot = power?.image;
         screenshots.powerFeatures = power?.features;
       }
       
       if (selectedSlides.utilisation) {
-        const geoscape = await captureGeoscapeMap(selectedFeature, developableArea, showDevelopableArea);
+        const geoscape = await captureGeoscapeMap(selectedFeature, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
         screenshots.geoscapeScreenshot = geoscape?.image;
         screenshots.geoscapeFeatures = geoscape?.features;
       }
       
       if (selectedSlides.access) {
-        screenshots.roadsScreenshot = await captureRoadsMap(selectedFeature, developableArea, showDevelopableArea);
-        screenshots.udpPrecinctsScreenshot = await captureUDPPrecinctMap(selectedFeature, developableArea, showDevelopableArea);
-        screenshots.ptalScreenshot = await capturePTALMap(selectedFeature, developableArea, showDevelopableArea);
+        screenshots.roadsScreenshot = await captureRoadsMap(selectedFeature, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
+        screenshots.udpPrecinctsScreenshot = await captureUDPPrecinctMap(selectedFeature, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
+        screenshots.ptalScreenshot = await capturePTALMap(selectedFeature, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
       }
       
       if (selectedSlides.hazards) {
-        screenshots.floodMapScreenshot = await captureFloodMap(selectedFeature, developableArea, showDevelopableArea);
-        screenshots.bushfireMapScreenshot = await captureBushfireMap(selectedFeature, developableArea, showDevelopableArea);
+        screenshots.floodMapScreenshot = await captureFloodMap(selectedFeature, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
+        screenshots.bushfireMapScreenshot = await captureBushfireMap(selectedFeature, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
       }
       
       if (selectedSlides.environmental) {
-        screenshots.tecMapScreenshot = await captureTECMap(selectedFeature, developableArea, showDevelopableArea);
+        screenshots.tecMapScreenshot = await captureTECMap(selectedFeature, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
         screenshots.tecFeatures = screenshots.tecMapScreenshot?.features;
-        screenshots.biodiversityMapScreenshot = await captureBiodiversityMap(selectedFeature, developableArea, showDevelopableArea);
+        screenshots.biodiversityMapScreenshot = await captureBiodiversityMap(selectedFeature, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
         screenshots.biodiversityFeatures = screenshots.biodiversityMapScreenshot?.features;
       }
       
       if (selectedSlides.contamination) {
-        const contaminationResult = await captureContaminationMap(selectedFeature, developableArea, showDevelopableArea);
+        const contaminationResult = await captureContaminationMap(selectedFeature, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
         screenshots.contaminationMapScreenshot = contaminationResult?.image;
         screenshots.contaminationFeatures = contaminationResult?.features;
         
-        screenshots.historicalImagery = await captureHistoricalImagery(selectedFeature, developableArea, showDevelopableArea);
+        screenshots.historicalImagery = await captureHistoricalImagery(selectedFeature, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
       }
 
       setFailedScreenshots(failed);
@@ -728,12 +729,12 @@ const ReportGenerator = ({ selectedFeature }) => {
       clearServiceCache();
       
       // For cover slide, use COVER type without boundary
-      const coverScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.COVER, false);
+      const coverScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.COVER, false, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
       // For other slides, keep boundary and use AERIAL type
-      const snapshotScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.AERIAL, true);
+      const snapshotScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.AERIAL, true, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
       
       // Capture GPR map for context slide
-      const gprResult = await captureGPRMap(selectedFeature, developableArea);
+      const gprResult = await captureGPRMap(selectedFeature, developableArea, showDevelopableArea, useDevelopableAreaForBounds);
       
       setPreviewScreenshot(coverScreenshot);
       setScreenshots({
@@ -916,8 +917,9 @@ const ReportGenerator = ({ selectedFeature }) => {
 
         <div className="mb-4">
           <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Desktop Due Diligence PowerPoint Report Generator (WIP)</h2>
+            <h2 className="text-xl font-semibold">Desktop Due Diligence PowerPoint Report Generator</h2>
           </div>
+          <div className="h-1 bg-[#da2244] mt-2 rounded-full"></div>
         </div>
         
         <PlanningMapView 
@@ -928,24 +930,14 @@ const ReportGenerator = ({ selectedFeature }) => {
           showDevelopableArea={showDevelopableArea}
         />
 
-        <DevelopableAreaSelector onLayerSelect={handleDevelopableAreaSelect} selectedFeature={selectedFeature} />
-        
-        {developableArea && (
-          <div className="p-4 bg-white rounded-lg shadow mb-4">
-            <div className="flex items-center justify-between">
-              <label className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  checked={showDevelopableArea}
-                  onChange={(e) => setShowDevelopableArea(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 rounded"
-                  disabled={isGenerating}
-                />
-                <span className="text-0.5g font-small">Show Blue Dash Developable Area Boundary in Screenshots?</span>
-              </label>
-            </div>
-          </div>
-        )}
+        <DevelopableAreaSelector 
+          onLayerSelect={handleDevelopableAreaSelect} 
+          selectedFeature={selectedFeature}
+          showDevelopableArea={showDevelopableArea}
+          setShowDevelopableArea={setShowDevelopableArea}
+          useDevelopableAreaForBounds={useDevelopableAreaForBounds}
+          setUseDevelopableAreaForBounds={setUseDevelopableAreaForBounds}
+        />
 
         <div className="bg-white p-6 rounded-lg shadow mb-4">
           <SlidePreview 

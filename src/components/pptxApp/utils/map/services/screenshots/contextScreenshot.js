@@ -84,7 +84,7 @@ function drawMapPin(ctx, x, y, color = '#FF0000', size = 40) {
   ctx.restore();
 }
 
-export async function captureGPRMap(feature, developableArea = null) {
+export async function captureGPRMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
   if (!feature) {
     console.log('No feature provided to captureGPRMap');
     return null;
@@ -108,7 +108,7 @@ export async function captureGPRMap(feature, developableArea = null) {
     };
     
     console.log('Calculating bounds...');
-    const { centerX, centerY, size } = calculateBounds(geoJSONFeature, config.padding, developableArea);
+    const { centerX, centerY, size } = calculateBounds(geoJSONFeature, config.padding, developableArea, useDevelopableAreaForBounds);
     console.log('Calculated bounds:', { centerX, centerY, size });
     
     let gprFeatures = [];
@@ -384,7 +384,7 @@ export async function captureGPRMap(feature, developableArea = null) {
   }
 }
 
-export async function captureServicesAndAmenitiesMap(feature, developableArea = null) {
+export async function captureServicesAndAmenitiesMap(feature, developableArea = null, useDevelopableAreaForBounds = false) {
   if (!feature) {
     console.log('No feature provided to captureServicesAndAmenitiesMap');
     return null;
@@ -408,7 +408,7 @@ export async function captureServicesAndAmenitiesMap(feature, developableArea = 
     };
     
     console.log('Calculating bounds...');
-    const { centerX, centerY, size } = calculateBounds(geoJSONFeature, config.padding, developableArea);
+    const { centerX, centerY, size } = calculateBounds(geoJSONFeature, config.padding, developableArea, useDevelopableAreaForBounds);
     console.log('Calculated bounds:', { centerX, centerY, size });
     
     let poiFeatures = [];

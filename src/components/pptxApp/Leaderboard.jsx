@@ -33,8 +33,13 @@ const Leaderboard = ({ isOpen, onClose }) => {
 
             if (supabaseError) throw supabaseError;
 
-            // Process user statistics
+            // Process user statistics (excluding admin user James Strutt)
             const userStatsMap = data.reduce((acc, record) => {
+                // Skip records for the admin user
+                if (record.user_name === "James Strutt" || record.email === "james.strutt@dpie.nsw.gov.au") {
+                    return acc;
+                }
+                
                 if (!acc[record.user_name]) {
                     acc[record.user_name] = {
                         name: record.user_name,
@@ -220,4 +225,4 @@ const Leaderboard = ({ isOpen, onClose }) => {
     );
 };
 
-export default Leaderboard; 
+export default Leaderboard;

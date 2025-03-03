@@ -633,7 +633,7 @@ async function fetchAllCCs(councilName) {
   }
 }
 
-export async function captureDevelopmentApplicationsMap(feature, developableArea = null) {
+export async function captureDevelopmentApplicationsMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
   // Reset used label spaces at the start of each capture
   usedLabelSpaces = [];
   
@@ -663,7 +663,7 @@ export async function captureDevelopmentApplicationsMap(feature, developableArea
     };
     
     console.log('Calculating bounds...');
-    const { centerX, centerY, size } = calculateBounds(geoJSONFeature, config.padding, developableArea);
+    const { centerX, centerY, size } = calculateBounds(geoJSONFeature, config.padding, developableArea, useDevelopableAreaForBounds);
     console.log('Calculated bounds:', { centerX, centerY, size });
     
     // Create base canvas

@@ -15,12 +15,12 @@ import { HISTORICAL_LAYERS, METROMAP_CONFIG } from '../config/historicalLayers';
 
 console.log('Aerial config:', LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL]);
 
-export async function captureMapScreenshot(feature, type = SCREENSHOT_TYPES.SNAPSHOT, drawBoundaryLine = true, developableArea = null, showDevelopableArea = true) {
+export async function captureMapScreenshot(feature, type = SCREENSHOT_TYPES.SNAPSHOT, drawBoundaryLine = true, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
   if (!feature || !LAYER_CONFIGS[type]) return null;
   
   try {
     const config = LAYER_CONFIGS[type];
-    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
     
     // Get Mercator parameters for proper coordinate transformation
     const { bbox, mercatorCoords } = calculateMercatorParams(centerX, centerY, size);
@@ -99,16 +99,22 @@ export async function captureMapScreenshot(feature, type = SCREENSHOT_TYPES.SNAP
   }
 }
 
-export function calculateBounds(feature, padding, developableArea = null) {
-  // Start with property bounds
-  let coordinates = feature.geometry.coordinates[0];
+export function calculateBounds(feature, padding, developableArea = null, useDevelopableAreaForBounds = false) {
+  let coordinates;
   
-  // If we have a developable area, include its coordinates too
-  if (developableArea?.features?.[0]) {
+  // Determine which coordinates to use based on the useDevelopableAreaForBounds flag
+  if (useDevelopableAreaForBounds && developableArea?.features?.[0]) {
+    // Use only developable area for bounds calculation
+    coordinates = developableArea.features[0].geometry.coordinates[0];
+  } else if (!useDevelopableAreaForBounds && developableArea?.features?.[0]) {
+    // Use both property and developable area (original behavior)
     coordinates = [
-      ...coordinates,
+      ...feature.geometry.coordinates[0],
       ...developableArea.features[0].geometry.coordinates[0]
     ];
+  } else {
+    // No developable area, use property bounds only
+    coordinates = feature.geometry.coordinates[0];
   }
 
   const bounds = coordinates.reduce((acc, coord) => ({
@@ -132,12 +138,12 @@ export function calculateBounds(feature, padding, developableArea = null) {
   return { centerX, centerY, size };
 }
 
-export async function capturePrimarySiteAttributesMap(feature, developableArea = null, showDevelopableArea = true) {
+export async function capturePrimarySiteAttributesMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
   if (!feature) return null;
   
   try {
     const config = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];
-    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
     
     // Create base canvas
     const canvas = createCanvas(config.width || config.size, config.height || config.size);
@@ -356,12 +362,12 @@ export async function capturePrimarySiteAttributesMap(feature, developableArea =
   }
 }
 
-export async function captureContourMap(feature, developableArea = null, showDevelopableArea = true) {
+export async function captureContourMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
   if (!feature) return null;
   
   try {
     const config = LAYER_CONFIGS[SCREENSHOT_TYPES.CONTOUR];
-    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
     
     console.log('Raw coordinates:', { centerX, centerY, size });
     
@@ -447,7 +453,7 @@ export async function captureContourMap(feature, developableArea = null, showDev
   }
 }
 
-export async function captureRegularityMap(feature, developableArea = null, showDevelopableArea = true) {
+export async function captureRegularityMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
   if (!feature) return null;
   
   try {
@@ -457,7 +463,7 @@ export async function captureRegularityMap(feature, developableArea = null, show
       padding: 0.3
     };
     
-    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
     
     // Create base canvas
     const canvas = createCanvas(config.width, config.height);
@@ -516,7 +522,7 @@ export async function captureRegularityMap(feature, developableArea = null, show
   }
 }
 
-export async function captureHeritageMap(feature, developableArea = null, showDevelopableArea = true) {
+export async function captureHeritageMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
   if (!feature) return null;
   
   try {
@@ -526,7 +532,7 @@ export async function captureHeritageMap(feature, developableArea = null, showDe
       padding: 0.3
     };
     
-    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
     
     // Create base canvas
     const canvas = createCanvas(config.width, config.height);
@@ -632,7 +638,7 @@ export async function captureHeritageMap(feature, developableArea = null, showDe
   }
 }
 
-export async function captureAcidSulfateMap(feature, developableArea = null, showDevelopableArea = true) {
+export async function captureAcidSulfateMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
   if (!feature) return null;
   
   try {
@@ -642,7 +648,7 @@ export async function captureAcidSulfateMap(feature, developableArea = null, sho
       padding: 0.3
     };
     
-    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
     
     // Create base canvas
     const canvas = createCanvas(config.width, config.height);
@@ -803,7 +809,7 @@ export async function captureAcidSulfateMap(feature, developableArea = null, sho
   }
 }
 
-export async function captureWaterMainsMap(feature, developableArea = null, showDevelopableArea = true) {
+export async function captureWaterMainsMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
   if (!feature) return null;
   console.log('Starting water mains capture...');
 
@@ -814,7 +820,7 @@ export async function captureWaterMainsMap(feature, developableArea = null, show
       padding: 0.2
     };
     
-    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
     let waterMainsFeatures = [];
     
     // Create base canvas
@@ -946,7 +952,7 @@ export async function captureWaterMainsMap(feature, developableArea = null, show
   }
 }
 
-export async function capturePowerMap(feature, developableArea = null, showDevelopableArea = true) {
+export async function capturePowerMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
   if (!feature) return null;
   console.log('Starting power infrastructure capture...');
 
@@ -957,7 +963,7 @@ export async function capturePowerMap(feature, developableArea = null, showDevel
       padding: 0.2
     };
 
-    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
     let powerFeatures = [];
 
     // Create base canvas
@@ -1194,7 +1200,7 @@ export async function capturePowerMap(feature, developableArea = null, showDevel
   }
 }
 
-export async function captureSewerMap(feature, developableArea = null, showDevelopableArea = true) {
+export async function captureSewerMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
   if (!feature) return null;
   console.log('Starting sewer infrastructure capture...');
 
@@ -1205,7 +1211,7 @@ export async function captureSewerMap(feature, developableArea = null, showDevel
       padding: 0.2
     };
     
-    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
     let sewerFeatures = [];
     
     // Create base canvas
@@ -1337,7 +1343,7 @@ export async function captureSewerMap(feature, developableArea = null, showDevel
   }
 }
 
-export async function captureGeoscapeMap(feature, developableArea = null, showDevelopableArea = true) {
+export async function captureGeoscapeMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
   if (!feature) return null;
   console.log('Starting geoscape capture...');
 
@@ -1348,7 +1354,7 @@ export async function captureGeoscapeMap(feature, developableArea = null, showDe
       padding: 0.2
     };
     
-    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
     let geoscapeFeatures = [];
     
     // Create base canvas
@@ -1700,7 +1706,7 @@ async function getRoadFeatures(centerX, centerY, size) {
   }
 }
 
-export async function captureRoadsMap(feature, developableArea = null, showDevelopableArea = true) {
+export async function captureRoadsMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
   if (!feature) return null;
   console.log('Starting roads capture...');
 
@@ -1711,7 +1717,7 @@ export async function captureRoadsMap(feature, developableArea = null, showDevel
       padding: 0.2
     };
     
-    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
     
     // Get road features first
     console.log('Fetching road features...');
@@ -1936,7 +1942,7 @@ export async function captureRoadsMap(feature, developableArea = null, showDevel
   }
 }
 
-export async function captureFloodMap(feature, developableArea = null, showDevelopableArea = true) {
+export async function captureFloodMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
   if (!feature) return null;
   
   try {
@@ -1946,7 +1952,7 @@ export async function captureFloodMap(feature, developableArea = null, showDevel
       padding: 0.3
     };
     
-    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
     
     // Create base canvas
     const canvas = createCanvas(config.width, config.height);
@@ -2100,7 +2106,7 @@ export async function captureFloodMap(feature, developableArea = null, showDevel
   }
 }
 
-export async function captureBushfireMap(feature, developableArea = null, showDevelopableArea = true) {
+export async function captureBushfireMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
   if (!feature) return null;
   console.log('Starting bushfire map capture...');
 
@@ -2111,7 +2117,7 @@ export async function captureBushfireMap(feature, developableArea = null, showDe
       padding: 0.3
     };
     
-    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
     
     // Create base canvas
     const canvas = createCanvas(config.width, config.height);
@@ -2483,7 +2489,7 @@ export async function checkLMROverlap(feature, centerX, centerY, size) {
   }
 }
 
-export async function captureUDPPrecinctMap(feature, developableArea = null, showDevelopableArea = true) {
+export async function captureUDPPrecinctMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
   if (!feature) return null;
   console.log('Starting UDP precinct map capture...');
 
@@ -2494,7 +2500,8 @@ export async function captureUDPPrecinctMap(feature, developableArea = null, sho
       padding: 6
     };
     
-    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    // Always use feature geometry for UDP precinct map, ignoring useDevelopableAreaForBounds parameter
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, false);
     
     // Create base canvas
     const canvas = createCanvas(config.width, config.height);
@@ -2754,7 +2761,7 @@ export async function captureUDPPrecinctMap(feature, developableArea = null, sho
   }
 }
 
-export async function capturePTALMap(feature, developableArea = null, showDevelopableArea = true) {
+export async function capturePTALMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
   if (!feature) {
     console.log('No feature provided, returning null');
     return null;
@@ -2774,7 +2781,8 @@ export async function capturePTALMap(feature, developableArea = null, showDevelo
     };
     console.log('Using config:', config);
     
-    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    // Always use feature geometry for PTAL map, ignoring useDevelopableAreaForBounds parameter
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, false);
     console.log('Calculated bounds:', { centerX, centerY, size });
     
     let ptalFeatures = [];
@@ -2995,7 +3003,7 @@ export async function capturePTALMap(feature, developableArea = null, showDevelo
   }
 }
 
-export async function captureContaminationMap(feature, developableArea = null, showDevelopableArea = true) {
+export async function captureContaminationMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
   if (!feature) return null;
   console.log('Starting contamination map capture...');
 
@@ -3006,7 +3014,7 @@ export async function captureContaminationMap(feature, developableArea = null, s
       padding: 0.3
     };
     
-    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
     let contaminationFeatures = [];
     
     // Create base canvas
@@ -3508,7 +3516,7 @@ export async function captureOpenStreetMap(feature, developableArea = null) {
   }
 }
 
-export async function captureTECMap(feature, developableArea = null, showDevelopableArea = true) {
+export async function captureTECMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
   if (!feature) {
     console.log('No feature provided for TEC map capture');
     return null;
@@ -3518,7 +3526,7 @@ export async function captureTECMap(feature, developableArea = null, showDevelop
   try {
     const config = LAYER_CONFIGS[SCREENSHOT_TYPES.TEC];
     
-    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
     console.log('Calculated bounds:', { centerX, centerY, size });
     
     // Calculate bbox early for both Mercator and GDA94
@@ -3664,7 +3672,7 @@ export async function captureTECMap(feature, developableArea = null, showDevelop
   }
 }
 
-export async function captureBiodiversityMap(feature, developableArea = null, showDevelopableArea = true) {
+export async function captureBiodiversityMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
   if (!feature) return null;
   console.log('Starting biodiversity map capture...', { feature, developableArea });
 
@@ -3675,7 +3683,7 @@ export async function captureBiodiversityMap(feature, developableArea = null, sh
       padding: 0.3
     };
     
-    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
     console.log('Calculated bounds:', { centerX, centerY, size });
     
     // Create base canvas
@@ -3825,7 +3833,7 @@ function mercatorToWGS84(x, y) {
 
 
 
-export async function captureHistoricalImagery(feature, developableArea = null, showDevelopableArea = true) {
+export async function captureHistoricalImagery(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
   if (!feature) return null;
   console.log('Starting historical imagery capture...');
 
@@ -3836,7 +3844,7 @@ export async function captureHistoricalImagery(feature, developableArea = null, 
       padding: 0.4
     };
 
-    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
     const { bbox } = calculateMercatorParams(centerX, centerY, size);
 
     // Try each layer in order from oldest to newest
