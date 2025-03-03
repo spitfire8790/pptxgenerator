@@ -1117,7 +1117,7 @@ const scoringCriteria = {
           }
           return `Developable area is within ${formattedDistance} of a UDP growth precinct (${nearestPrecinct}).`;
         case 1:
-          return `Developable area is greater than 1.6 kilometres from a UDP precinct. Additionally, the site is not in close proximity to a TOD area or LMR area.`;
+          return `Developable area is greater than 1.6 kilometres from a UDP precinct. Additionally, the site is not in a TOD area or LMR area.`;
         default:
           return "UDP precinct proximity not assessed";
       }
