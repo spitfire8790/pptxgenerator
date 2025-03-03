@@ -93,7 +93,7 @@ const slideOptions = [
   { id: 'planningTwo', label: 'Heritage & Acid Sulfate Soils', addSlide: addPlanningSlide2, icon: Landmark },
   { id: 'servicing', label: 'Servicing', addSlide: addServicingSlide, icon: Wrench },
   { id: 'utilisation', label: 'Utilisation and Improvements', addSlide: addUtilisationSlide, icon: BarChart3 },
-  { id: 'access', label: 'Access', addSlide: addAccessSlide, icon: Navigation },
+  { id: 'access', label: 'Access and Strategic Centres', addSlide: addAccessSlide, icon: Navigation },
   { id: 'hazards', label: 'Natural Hazards', addSlide: addHazardsSlide, icon: AlertTriangle },
   { id: 'environmental', label: 'Environmental', addSlide: addEnviroSlide, icon: Leaf },
   { id: 'contamination', label: 'Site Contamination', addSlide: addContaminationSlide, icon: Skull },
