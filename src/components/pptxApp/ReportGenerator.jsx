@@ -143,6 +143,15 @@ const getStepDescription = (stepId) => {
 
 const calculateDevelopableArea = (geometry) => {
   if (!geometry) return 0;
+  
+  // If this is a feature collection with multiple features, calculate the total area
+  if (geometry.features && Array.isArray(geometry.features)) {
+    return Math.round(geometry.features.reduce((total, feature) => {
+      return total + area(feature.geometry);
+    }, 0));
+  }
+  
+  // Single geometry case
   const areaInSqMeters = area(geometry);
   return Math.round(areaInSqMeters);
 };

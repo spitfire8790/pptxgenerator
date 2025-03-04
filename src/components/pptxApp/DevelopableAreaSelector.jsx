@@ -6,7 +6,7 @@ import { MapPin, AreaChart, Check, Eye, Ruler } from 'lucide-react';
 
 const DevelopableAreaSelector = ({ onLayerSelect, selectedFeature, showDevelopableArea, setShowDevelopableArea, useDevelopableAreaForBounds, setUseDevelopableAreaForBounds }) => {
   const [drawingLayers, setDrawingLayers] = useState([]);
-  const [selectedLayer, setSelectedLayer] = useState(null);
+  const [selectedLayers, setSelectedLayers] = useState([]);
 
   const fetchLayers = async () => {
     try {
@@ -65,27 +65,40 @@ const DevelopableAreaSelector = ({ onLayerSelect, selectedFeature, showDevelopab
     };
   }, []); // Empty dependency array - only run once on mount
 
-  // Reset selected layer when feature changes
+  // Reset selected layers when feature changes
   useEffect(() => {
-    setSelectedLayer(null);
+    setSelectedLayers([]);
   }, [selectedFeature]);
+  
+  // Note: This component supports selection of multiple developable areas
+  // When multiple areas are selected, they are combined into a single FeatureCollection
+  // with multiple features, which is then used throughout the application
 
   const handleLayerSelect = async (layerId) => {
     try {
-      setSelectedLayer(layerId);
+      // Toggle selection: if already selected, remove it; otherwise, add it
+      const isSelected = selectedLayers.includes(layerId);
+      const newSelectedLayers = isSelected
+        ? selectedLayers.filter(id => id !== layerId)
+        : [...selectedLayers, layerId];
+      
+      setSelectedLayers(newSelectedLayers);
       
       if (onLayerSelect) {
-        const selectedFeature = drawingLayers.find(layer => layer.id === layerId);
-        if (selectedFeature) {
-          onLayerSelect({
-            type: 'FeatureCollection',
-            features: [{
-              type: 'Feature',
-              geometry: selectedFeature.geometry,
-              properties: selectedFeature.properties
-            }]
-          });
-        }
+        // Create a FeatureCollection with all selected features
+        const selectedFeatures = newSelectedLayers.map(id => {
+          const layer = drawingLayers.find(layer => layer.id === id);
+          return {
+            type: 'Feature',
+            geometry: layer.geometry,
+            properties: layer.properties
+          };
+        });
+        
+        onLayerSelect({
+          type: 'FeatureCollection',
+          features: selectedFeatures
+        });
       }
     } catch (error) {
       console.error('Error selecting layer:', error);
@@ -112,17 +125,17 @@ const DevelopableAreaSelector = ({ onLayerSelect, selectedFeature, showDevelopab
                     className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded-md transition-colors"
                   >
                     <input
-                      type="radio"
+                      type="checkbox"
                       name="developableArea"
-                      checked={selectedLayer === layer.id}
+                      checked={selectedLayers.includes(layer.id)}
                       onChange={() => handleLayerSelect(layer.id)}
-                      className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                      className="w-4 h-4 text-blue-600 focus:ring-blue-500 rounded"
                     />
                     <span className="flex items-center">
                       <AreaChart className="w-4 h-4 mr-2 text-blue-500" />
                       {layer.layerId}
                     </span>
-                    {selectedLayer === layer.id && (
+                    {selectedLayers.includes(layer.id) && (
                       <Check className="w-4 h-4 text-green-500 ml-auto" />
                     )}
                   </label>
@@ -131,9 +144,9 @@ const DevelopableAreaSelector = ({ onLayerSelect, selectedFeature, showDevelopab
             )}
           </div>
 
-          {/* Right section: Options that appear when area is selected */}
+          {/* Right section: Options that appear when at least one area is selected */}
           <AnimatePresence>
-            {selectedLayer && (
+            {selectedLayers.length > 0 && (
               <motion.div 
                 className="md:flex-1 mt-4 md:mt-0 border-t md:border-t-0 md:border-l pt-4 md:pt-0 md:pl-6"
                 initial={{ opacity: 0, x: -20 }}

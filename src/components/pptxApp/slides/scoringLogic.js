@@ -65,8 +65,15 @@ const scoringCriteria = {
   },
   developableArea: {
     calculateScore: (areaInSqMeters) => {
-      if (areaInSqMeters >= 4000) return 3;
-      if (areaInSqMeters >= 2000) return 2;
+      // Handle both single values and arrays of areas (for multiple developable areas)
+      const totalArea = Array.isArray(areaInSqMeters) 
+        ? areaInSqMeters.reduce((sum, area) => sum + area, 0)
+        : areaInSqMeters;
+        
+      console.log('Total developable area for scoring:', totalArea);
+      
+      if (totalArea >= 4000) return 3;
+      if (totalArea >= 2000) return 2;
       return 1;
     },
     getScoreDescription: (score) => {
@@ -340,7 +347,8 @@ const scoringCriteria = {
       console.log('geoscapeFeatures:', geoscapeFeatures);
       console.log('developableArea:', developableArea);
 
-      if (!developableArea?.[0] || !developableArea[0].geometry) {
+      // Handle null/undefined developableArea
+      if (!developableArea || !developableArea.features || developableArea.features.length === 0) {
         console.log('No developable area provided - returning score 0');
         return { score: 0, coverage: 0, features: [] };
       }
@@ -352,40 +360,63 @@ const scoringCriteria = {
       }
 
       try {
-        const developableCoords = developableArea[0].geometry.coordinates;
-        console.log('Raw developable coordinates:', developableCoords);
-        
-        // Validate developable area coordinates
-        if (!developableCoords || !Array.isArray(developableCoords) || developableCoords.length === 0) {
-          console.error('Invalid developable area coordinates:', developableCoords);
-          return { score: 0, coverage: 0, features: [] };
-        }
-        
-        // For polygon coordinates, we need at least one ring with at least 3 points
-        if (!Array.isArray(developableCoords[0]) || !Array.isArray(developableCoords[0][0]) || developableCoords[0].length < 3) {
-          console.error('Invalid developable area polygon structure:', developableCoords);
-          return { score: 0, coverage: 0, features: [] };
-        }
-        
-        // Create a valid GeoJSON polygon - ensure coordinates are properly wrapped
-        const developablePolygon = {
-          type: 'Feature',
-          properties: {},
-          geometry: {
-            type: 'Polygon',
-            coordinates: developableCoords
+        // Process all developable area features and combine them for total area calculation
+        let totalArea = 0;
+        const developablePolygons = [];
+
+        // Process each feature in the developable area
+        developableArea.features.forEach((feature, index) => {
+          try {
+            if (!feature.geometry || !feature.geometry.coordinates) {
+              console.log(`Skipping developable area feature ${index} - invalid geometry`);
+              return;
+            }
+
+            const developableCoords = feature.geometry.coordinates;
+            console.log(`Raw developable coordinates for feature ${index}:`, developableCoords);
+            
+            // For polygon coordinates, we need at least one ring with at least 3 points
+            if (!Array.isArray(developableCoords[0]) || !Array.isArray(developableCoords[0][0]) || developableCoords[0].length < 3) {
+              console.error(`Invalid developable area polygon structure for feature ${index}:`, developableCoords);
+              return;
+            }
+            
+            // Create a valid GeoJSON polygon
+            const developablePolygon = {
+              type: 'Feature',
+              properties: {},
+              geometry: {
+                type: 'Polygon',
+                coordinates: developableCoords
+              }
+            };
+
+            // Validate the created polygon
+            if (!turf.booleanValid(developablePolygon)) {
+              console.error(`Invalid developable polygon geometry for feature ${index}`);
+              return;
+            }
+
+            // Calculate area for this polygon
+            const area = turf.area(developablePolygon);
+            console.log(`Area for developable feature ${index}:`, area, 'square meters');
+            
+            // Add to total area
+            totalArea += area;
+            
+            // Add polygon to array for intersection checking
+            developablePolygons.push(developablePolygon);
+          } catch (error) {
+            console.error(`Error processing developable area feature ${index}:`, error);
           }
-        };
+        });
 
-        // Validate the created polygon
-        if (!turf.booleanValid(developablePolygon)) {
-          console.error('Invalid developable polygon geometry');
+        if (developablePolygons.length === 0) {
+          console.error('No valid developable polygons found');
           return { score: 0, coverage: 0, features: [] };
         }
 
-        console.log('Created valid developable polygon:', JSON.stringify(developablePolygon));
-        const totalArea = turf.area(developablePolygon);
-        console.log('Total developable area:', totalArea, 'square meters');
+        console.log('Total combined developable area:', totalArea, 'square meters');
 
         // Calculate total area of geoscape features
         let geoscapeArea = 0;
@@ -534,28 +565,65 @@ const scoringCriteria = {
       console.log('developableArea type:', typeof developableArea);
       console.log('developableArea:', JSON.stringify(developableArea, null, 2));
 
+      // Handle null/undefined developableArea
+      if (!developableArea || !developableArea.features || developableArea.features.length === 0) {
+        console.log('No valid developable area provided - returning score 0');
+        return { score: 0, minDistance: Infinity };
+      }
+
       // Handle both direct features array and FeatureCollection format
       const features = Array.isArray(waterFeatures) ? waterFeatures : waterFeatures?.features || [];
       console.log('Processed features:', features);
 
-      if (!features?.length || !developableArea?.[0]) {
-        console.log('Missing required inputs - returning 0 score');
+      if (!features?.length) {
+        console.log('No water features found - returning score 0');
         return { score: 0, minDistance: Infinity };
       }
 
       try {
-        const developableCoords = developableArea[0].geometry.coordinates[0];
-        console.log('Developable area coordinates:', developableCoords);
+        // Process all developable area features
+        const developablePolygons = [];
         
-        const developablePolygon = turf.polygon([developableCoords]);
-        console.log('Created developable polygon:', developablePolygon);
-        
-        // Transform coordinates to EPSG:3857 if they are in EPSG:4326
-        const transformedPolygon = turf.transformScale(developablePolygon, 1, { units: 'meters' });
-        console.log('Transformed polygon:', transformedPolygon);
-        
-        const bufferedPolygon = turf.buffer(transformedPolygon, 20, { units: 'meters' });
-        console.log('Buffered polygon:', bufferedPolygon);
+        // Process each feature in the developable area
+        developableArea.features.forEach((feature, index) => {
+          try {
+            if (!feature.geometry || !feature.geometry.coordinates) {
+              console.log(`Skipping developable area feature ${index} - invalid geometry`);
+              return;
+            }
+
+            // For polygon coordinates, we need at least one ring with at least 3 points
+            const developableCoords = feature.geometry.coordinates;
+            
+            if (!Array.isArray(developableCoords[0]) || !Array.isArray(developableCoords[0][0]) || developableCoords[0].length < 3) {
+              console.error(`Invalid developable area polygon structure for feature ${index}:`, developableCoords);
+              return;
+            }
+            
+            // Create a valid GeoJSON polygon
+            const developablePolygon = turf.polygon(developableCoords);
+            
+            // Validate the created polygon
+            if (!turf.booleanValid(developablePolygon)) {
+              console.error(`Invalid developable polygon geometry for feature ${index}`);
+              return;
+            }
+            
+            // Transform coordinates and create buffered polygon for this feature
+            const transformedPolygon = turf.transformScale(developablePolygon, 1, { units: 'meters' });
+            const bufferedPolygon = turf.buffer(transformedPolygon, 20, { units: 'meters' });
+            
+            developablePolygons.push(bufferedPolygon);
+            console.log(`Processed developable area ${index+1}: Created buffered polygon`);
+          } catch (error) {
+            console.error(`Error processing developable area feature ${index}:`, error);
+          }
+        });
+
+        if (developablePolygons.length === 0) {
+          console.error('No valid developable polygons found');
+          return { score: 0, minDistance: Infinity };
+        }
         
         // Check intersections
         let intersectionFound = false;

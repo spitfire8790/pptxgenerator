@@ -692,12 +692,15 @@ export async function captureDevelopmentApplicationsMap(feature, developableArea
       });
     }
 
-    if (developableArea?.features?.[0]?.geometry?.coordinates?.[0]) {
-      console.log('Drawing developable area boundary...');
-      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
-        strokeStyle: '#02d1b8',
-        lineWidth: 12,
-        dashArray: [20, 10]
+    // Draw all developable area features if they exist and should be shown
+    if (developableArea?.features?.length > 0 && showDevelopableArea) {
+      console.log(`Drawing ${developableArea.features.length} developable area boundaries...`);
+      developableArea.features.forEach(feature => {
+        drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+          strokeStyle: '#02d1b8',
+          lineWidth: 12,
+          dashArray: [20, 10]
+        });
       });
     }
 

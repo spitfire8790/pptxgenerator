@@ -77,13 +77,16 @@ export async function captureMapScreenshot(feature, type = SCREENSHOT_TYPES.SNAP
       }
     }
 
-    if (developableArea?.features?.[0] && showDevelopableArea) {
-      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width || config.size, {
-        strokeStyle: '#02d1b8',
-        lineWidth: 12,
-        dashArray: [20, 10]
-      });
-    }
+if (developableArea?.features?.length > 0 && showDevelopableArea) {
+  // Draw all developable area features
+  developableArea.features.forEach(feature => {
+    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width || config.size, {
+      strokeStyle: '#02d1b8',
+      lineWidth: 12,
+      dashArray: [20, 10]
+    });
+  });
+}
 
     if (drawBoundaryLine && feature.geometry?.coordinates?.[0]) {
       drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width || config.size, {
@@ -103,14 +106,14 @@ export function calculateBounds(feature, padding, developableArea = null, useDev
   let coordinates;
   
   // Determine which coordinates to use based on the useDevelopableAreaForBounds flag
-  if (useDevelopableAreaForBounds && developableArea?.features?.[0]) {
-    // Use only developable area for bounds calculation
-    coordinates = developableArea.features[0].geometry.coordinates[0];
-  } else if (!useDevelopableAreaForBounds && developableArea?.features?.[0]) {
-    // Use both property and developable area (original behavior)
+  if (useDevelopableAreaForBounds && developableArea?.features?.length > 0) {
+    // Use all developable areas for bounds calculation
+    coordinates = developableArea.features.flatMap(feature => feature.geometry.coordinates[0]);
+  } else if (!useDevelopableAreaForBounds && developableArea?.features?.length > 0) {
+    // Use both property and all developable areas for bounds calculation
     coordinates = [
       ...feature.geometry.coordinates[0],
-      ...developableArea.features[0].geometry.coordinates[0]
+      ...developableArea.features.flatMap(feature => feature.geometry.coordinates[0])
     ];
   } else {
     // No developable area, use property bounds only
@@ -347,11 +350,14 @@ export async function capturePrimarySiteAttributesMap(feature, developableArea =
       lineWidth: 6
     });
 
-    if (developableArea?.features?.[0] && showDevelopableArea) {
-      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
-        strokeStyle: '#02d1b8',
-        lineWidth: 12,
-        dashArray: [20, 10]
+    if (developableArea?.features?.length > 0 && showDevelopableArea) {
+      // Draw all developable area features
+      developableArea.features.forEach(feature => {
+        drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+          strokeStyle: '#02d1b8',
+          lineWidth: 12,
+          dashArray: [20, 10]
+        });
       });
     }
 
@@ -438,11 +444,14 @@ export async function captureContourMap(feature, developableArea = null, showDev
       lineWidth: 6
     });
 
-    if (developableArea?.features?.[0] && showDevelopableArea) {
-      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.size || config.width, {
-        strokeStyle: '#02d1b8',
-        lineWidth: 6,
-        dashArray: [20, 10]
+    if (developableArea?.features?.length > 0 && showDevelopableArea) {
+      // Draw all developable area features
+      developableArea.features.forEach(feature => {
+        drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.size || config.width, {
+          strokeStyle: '#02d1b8',
+          lineWidth: 6,
+          dashArray: [20, 10]
+        });
       });
     }
 
@@ -506,12 +515,15 @@ export async function captureRegularityMap(feature, developableArea = null, show
       lineWidth: 6
     });
 
-    // Draw developable area if it exists
-    if (developableArea?.features?.[0] && showDevelopableArea) {
-      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
-        strokeStyle: '#02d1b8',
-        lineWidth: 12,
-        dashArray: [20, 10]
+    // Draw developable areas if they exist
+    if (developableArea?.features?.length > 0 && showDevelopableArea) {
+      // Draw all developable area features
+      developableArea.features.forEach(feature => {
+        drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+          strokeStyle: '#02d1b8',
+          lineWidth: 12,
+          dashArray: [20, 10]
+        });
       });
     }
 
@@ -599,11 +611,14 @@ export async function captureHeritageMap(feature, developableArea = null, showDe
       lineWidth: 6
     });
 
-    if (developableArea?.features?.[0] && showDevelopableArea) {
-      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
-        strokeStyle: '#02d1b8',
-        lineWidth: 12,
-        dashArray: [20, 10]
+    if (developableArea?.features?.length > 0 && showDevelopableArea) {
+      // Draw all developable area features
+      developableArea.features.forEach(feature => {
+        drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+          strokeStyle: '#02d1b8',
+          lineWidth: 12,
+          dashArray: [20, 10]
+        });
       });
     }
 
@@ -715,13 +730,16 @@ export async function captureAcidSulfateMap(feature, developableArea = null, sho
       lineWidth: 6
     });
 
-    if (developableArea?.features?.[0] && showDevelopableArea) {
-      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
-        strokeStyle: '#02d1b8',
-        lineWidth: 12,
-        dashArray: [20, 10]
-      });
-    }
+      if (developableArea?.features?.length > 0 && showDevelopableArea) {
+        // Draw all developable area features
+        developableArea.features.forEach(feature => {
+          drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+            strokeStyle: '#02d1b8',
+            lineWidth: 12,
+            dashArray: [20, 10]
+          });
+        });
+      }
 
     // Add legend
     const legendHeight = 380; // Reduced height to remove extra space
@@ -933,11 +951,14 @@ export async function captureWaterMainsMap(feature, developableArea = null, show
       lineWidth: 10
     });
 
-    if (developableArea?.features?.[0] && showDevelopableArea) {
-      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
-        strokeStyle: '#02d1b8',
-        lineWidth: 12,
-        dashArray: [20, 10]
+    if (developableArea?.features?.length > 0 && showDevelopableArea) {
+      // Draw all developable area features
+      developableArea.features.forEach(feature => {
+        drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+          strokeStyle: '#02d1b8',
+          lineWidth: 12,
+          dashArray: [20, 10]
+        });
       });
     }
 
@@ -1178,11 +1199,14 @@ export async function capturePowerMap(feature, developableArea = null, showDevel
       lineWidth: 10
     });
 
-    if (developableArea?.features?.[0] && showDevelopableArea) {
-      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
-        strokeStyle: '#02d1b8',
-        lineWidth: 12,
-        dashArray: [20, 10]
+    if (developableArea?.features?.length > 0 && showDevelopableArea) {
+      // Draw all developable area features
+      developableArea.features.forEach(feature => {
+        drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+          strokeStyle: '#02d1b8',
+          lineWidth: 12,
+          dashArray: [20, 10]
+        });
       });
     }
 
@@ -1324,11 +1348,14 @@ export async function captureSewerMap(feature, developableArea = null, showDevel
       lineWidth: 10
     });
 
-    if (developableArea?.features?.[0] && showDevelopableArea) {
-      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
-        strokeStyle: '#02d1b8',
-        lineWidth: 12,
-        dashArray: [20, 10]
+    if (developableArea?.features?.length > 0 && showDevelopableArea) {
+      // Draw all developable area features
+      developableArea.features.forEach(feature => {
+        drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+          strokeStyle: '#02d1b8',
+          lineWidth: 12,
+          dashArray: [20, 10]
+        });
       });
     }
 
@@ -1453,11 +1480,14 @@ export async function captureGeoscapeMap(feature, developableArea = null, showDe
       lineWidth: 6
     });
 
-    if (developableArea?.features?.[0] && showDevelopableArea) {
-      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
-        strokeStyle: '#02d1b8',
-        lineWidth: 12,
-        dashArray: [20, 10]
+    if (developableArea?.features?.length > 0 && showDevelopableArea) {
+      // Draw all developable area features
+      developableArea.features.forEach(feature => {
+        drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+          strokeStyle: '#02d1b8',
+          lineWidth: 12,
+          dashArray: [20, 10]
+        });
       });
     }
 
@@ -1853,12 +1883,15 @@ export async function captureRoadsMap(feature, developableArea = null, showDevel
     }
 
     // Draw boundaries AFTER all layers
-    if (developableArea?.features?.[0] && showDevelopableArea) {
-      console.log('Drawing developable area boundary...');
-      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
-        strokeStyle: '#02d1b8',
-        lineWidth: 12,
-        dashArray: [20, 10]
+    if (developableArea?.features?.length > 0 && showDevelopableArea) {
+      console.log('Drawing developable area boundaries...');
+      // Draw all developable area features
+      developableArea.features.forEach(feature => {
+        drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+          strokeStyle: '#02d1b8',
+          lineWidth: 12,
+          dashArray: [20, 10]
+        });
       });
     }
 
@@ -2087,11 +2120,14 @@ export async function captureFloodMap(feature, developableArea = null, showDevel
       lineWidth: 6
     });
 
-    if (developableArea?.features?.[0] && showDevelopableArea) {
-      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
-        strokeStyle: '#02d1b8',
-        lineWidth: 12,
-        dashArray: [20, 10]
+    if (developableArea?.features?.length > 0 && showDevelopableArea) {
+      // Draw all developable area features
+      developableArea.features.forEach(feature => {
+        drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+          strokeStyle: '#02d1b8',
+          lineWidth: 12,
+          dashArray: [20, 10]
+        });
       });
     }
 
@@ -2219,11 +2255,14 @@ export async function captureBushfireMap(feature, developableArea = null, showDe
       lineWidth: 6
     });
 
-    if (developableArea?.features?.[0] && showDevelopableArea) {
-      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
-        strokeStyle: '#02d1b8',
-        lineWidth: 12,
-        dashArray: [20, 10]
+    if (developableArea?.features?.length > 0 && showDevelopableArea) {
+      // Draw all developable area features
+      developableArea.features.forEach(feature => {
+        drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+          strokeStyle: '#02d1b8',
+          lineWidth: 12,
+          dashArray: [20, 10]
+        });
       });
     }
 

@@ -252,24 +252,25 @@ export async function addPermissibilitySlide(pptx, properties) {
         ? 'http://localhost:5173'
         : 'https://proxy-server.jameswilliamstrutt.workers.dev';
 
-      // Try to get EPI Name from property ID first
-      let epiName = null;
-      if (properties.site__property_id) {
-        epiName = await fetchEPINameFromPropertyID(properties.site__property_id);
-      }
-
       // Prepare headers for the permissibility API request
       const headers = {
         'Accept': 'application/json'
       };
 
-      // If we have an EPI Name from the property ID, use it
-      if (epiName) {
-        headers['EpiName'] = epiName;
-      } else {
-        // Otherwise fall back to normalized LGA name
-        headers['EpiName'] = normalizeLGAName(lgaName);
+      // Preference using the normalized LGA name first
+      headers['EpiName'] = normalizeLGAName(lgaName);
+      
+      // Only try to get EPI Name from property ID as fallback if needed
+      // We'll keep this code commented out as we're now preferencing the LGA approach
+      /*
+      let epiName = null;
+      if (properties.site__property_id) {
+        epiName = await fetchEPINameFromPropertyID(properties.site__property_id);
+        if (epiName) {
+          headers['EpiName'] = epiName;
+        }
       }
+      */
 
       // Add zone code to headers
       headers['ZoneCode'] = zoneCode;
@@ -1285,4 +1286,4 @@ const styles = {
     fontFace: 'Public Sans',
     align: 'left'
   }
-}; 
+};

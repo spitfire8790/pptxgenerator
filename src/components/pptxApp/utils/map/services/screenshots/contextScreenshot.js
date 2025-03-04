@@ -260,12 +260,15 @@ export async function captureGPRMap(feature, developableArea = null, showDevelop
       console.warn('No valid coordinates found for boundary drawing');
     }
 
-    if (developableArea?.features?.[0]?.geometry?.coordinates?.[0]) {
-      console.log('Drawing developable area boundary...');
-      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
-        strokeStyle: '#02d1b8',
-        lineWidth: 12,
-        dashArray: [20, 10]
+    // Draw all developable area features if they exist and should be shown
+    if (developableArea?.features?.length > 0 && showDevelopableArea) {
+      console.log(`Drawing ${developableArea.features.length} developable area boundaries...`);
+      developableArea.features.forEach(feature => {
+        drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+          strokeStyle: '#02d1b8',
+          lineWidth: 12,
+          dashArray: [20, 10]
+        });
       });
     }
 
@@ -304,24 +307,42 @@ export async function captureGPRMap(feature, developableArea = null, showDevelop
       console.error('Failed to add GPR legend:', error);
     }
 
-    // Calculate centroid of developable area and draw pin - moved to end and fixed CRS
-    if (developableArea?.features?.[0]?.geometry?.coordinates?.[0]) {
+    // Calculate centroid of all developable areas combined and draw pin
+    if (developableArea?.features?.length > 0) {
       console.log('Calculating developable area centroid...');
-      // First transform the coordinates from Web Mercator to GDA94
-      const coordinates = developableArea.features[0].geometry.coordinates[0].map(coord => {
-        return proj4('EPSG:3857', GDA94, coord);
+      
+      // If there are multiple features, we'll create a combined feature collection
+      const allCoordinates = [];
+      
+      // Transform coordinates from Web Mercator to GDA94 for all features
+      developableArea.features.forEach(feature => {
+        const featureCoordinates = feature.geometry.coordinates[0].map(coord => {
+          return proj4('EPSG:3857', GDA94, coord);
+        });
+        allCoordinates.push(featureCoordinates);
       });
       
-      // Create polygon with GDA94 coordinates
-      const polygon = turf.polygon([coordinates]);
-      const centroid = turf.centroid(polygon);
+      // Use first feature as base if only one exists, otherwise create a featureCollection for multi-feature
+      let combinedGeometry;
+      if (allCoordinates.length === 1) {
+        combinedGeometry = turf.polygon([allCoordinates[0]]);
+      } else {
+        combinedGeometry = turf.featureCollection(
+          allCoordinates.map(coords => turf.polygon([coords]))
+        );
+      }
+      
+      // Calculate centroid
+      const centroid = allCoordinates.length === 1 
+        ? turf.centroid(combinedGeometry)
+        : turf.centroid(turf.combine(combinedGeometry));
       
       // Transform centroid back to Web Mercator
       const [mercX, mercY] = proj4(GDA94, 'EPSG:3857', centroid.geometry.coordinates);
       
       console.log('Coordinate debug:', {
         originalCoords: developableArea.features[0].geometry.coordinates[0][0],
-        gda94Coords: coordinates[0],
+        gda94Coords: allCoordinates[0][0],
         centroidGDA94: centroid.geometry.coordinates,
         centroidMercator: [mercX, mercY],
         mapCenter: [centerX, centerY],
@@ -640,33 +661,54 @@ export async function captureServicesAndAmenitiesMap(feature, developableArea = 
       });
     }
 
-    if (developableArea?.features?.[0]?.geometry?.coordinates?.[0]) {
-      console.log('Drawing developable area boundary...');
-      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
-        strokeStyle: '#02d1b8',
-        lineWidth: 12,
-        dashArray: [20, 10]
+    // Draw all developable area features if they exist and should be shown
+    if (developableArea?.features?.length > 0 && showDevelopableArea) {
+      console.log(`Drawing ${developableArea.features.length} developable area boundaries...`);
+      developableArea.features.forEach(feature => {
+        drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+          strokeStyle: '#02d1b8',
+          lineWidth: 12,
+          dashArray: [20, 10]
+        });
       });
     }
 
-    // Calculate centroid of developable area and draw pin - moved to end and fixed CRS
-    if (developableArea?.features?.[0]?.geometry?.coordinates?.[0]) {
+    // Calculate centroid of all developable areas combined and draw pin
+    if (developableArea?.features?.length > 0) {
       console.log('Calculating developable area centroid...');
-      // First transform the coordinates from Web Mercator to GDA94
-      const coordinates = developableArea.features[0].geometry.coordinates[0].map(coord => {
-        return proj4('EPSG:3857', GDA94, coord);
+      
+      // If there are multiple features, we'll create a combined feature collection
+      const allCoordinates = [];
+      
+      // Transform coordinates from Web Mercator to GDA94 for all features
+      developableArea.features.forEach(feature => {
+        const featureCoordinates = feature.geometry.coordinates[0].map(coord => {
+          return proj4('EPSG:3857', GDA94, coord);
+        });
+        allCoordinates.push(featureCoordinates);
       });
       
-      // Create polygon with GDA94 coordinates
-      const polygon = turf.polygon([coordinates]);
-      const centroid = turf.centroid(polygon);
+      // Use first feature as base if only one exists, otherwise create a featureCollection for multi-feature
+      let combinedGeometry;
+      if (allCoordinates.length === 1) {
+        combinedGeometry = turf.polygon([allCoordinates[0]]);
+      } else {
+        combinedGeometry = turf.featureCollection(
+          allCoordinates.map(coords => turf.polygon([coords]))
+        );
+      }
+      
+      // Calculate centroid
+      const centroid = allCoordinates.length === 1 
+        ? turf.centroid(combinedGeometry)
+        : turf.centroid(turf.combine(combinedGeometry));
       
       // Transform centroid back to Web Mercator
       const [mercX, mercY] = proj4(GDA94, 'EPSG:3857', centroid.geometry.coordinates);
       
       console.log('Coordinate debug:', {
         originalCoords: developableArea.features[0].geometry.coordinates[0][0],
-        gda94Coords: coordinates[0],
+        gda94Coords: allCoordinates[0][0],
         centroidGDA94: centroid.geometry.coordinates,
         centroidMercator: [mercX, mercY],
         mapCenter: [centerX, centerY],
