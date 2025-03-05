@@ -11,27 +11,53 @@ import proj4 from 'proj4';
 import { getPTALToken } from './tokenService';
 import * as turf from '@turf/turf';
 import { HISTORICAL_LAYERS, METROMAP_CONFIG } from '../config/historicalLayers';
+import { convertToWebMercator } from '../utils/coordinates';
 
 
 console.log('Aerial config:', LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL]);
 
-export async function captureMapScreenshot(feature, type = SCREENSHOT_TYPES.SNAPSHOT, drawBoundaryLine = true, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
-  if (!feature || !LAYER_CONFIGS[type]) return null;
+export async function captureMapScreenshot(
+  feature, 
+  type = SCREENSHOT_TYPES.SNAPSHOT, 
+  drawBoundaryLine = true, 
+  developableArea = null, 
+  showDevelopableArea = true, 
+  useDevelopableAreaForBounds = false, 
+  showLabels = true,
+  showDevelopableAreaLabels = true
+) {
+  if (!feature || !LAYER_CONFIGS[type]) {
+    console.error(`captureMapScreenshot: Invalid feature or missing layer config for type ${type}`);
+    return null;
+  }
   
   try {
+    console.log(`captureMapScreenshot: Starting to capture ${type} screenshot`);
     const config = LAYER_CONFIGS[type];
+    console.log(`captureMapScreenshot: Using config:`, config);
+    
     const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
+    console.log(`captureMapScreenshot: Calculated bounds - centerX: ${centerX}, centerY: ${centerY}, size: ${size}`);
     
     // Get Mercator parameters for proper coordinate transformation
     const { bbox, mercatorCoords } = calculateMercatorParams(centerX, centerY, size);
+    console.log(`captureMapScreenshot: Calculated mercator params - bbox: ${bbox}`);
         
     const baseMapImage = config.layerId ? 
       await getWMSImage(LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL], centerX, centerY, size) : 
       null;
+    console.log(`captureMapScreenshot: Base map image ${baseMapImage ? 'captured' : 'not captured or not needed'}`);
 
+    console.log(`captureMapScreenshot: Getting main image for ${type}`);
     const mainImage = config.layerId ?
       await getArcGISImage(config, centerX, centerY, size) :
       await getWMSImage(config, centerX, centerY, size);
+    console.log(`captureMapScreenshot: Main image ${mainImage ? 'captured' : 'failed to capture'}`);
+
+    if (!mainImage) {
+      console.error(`captureMapScreenshot: Failed to capture main image for ${type}`);
+      return null;
+    }
 
     const canvas = createCanvas(config.width || config.size, config.height || config.size);
     const ctx = canvas.getContext('2d', { alpha: true });
@@ -70,40 +96,49 @@ export async function captureMapScreenshot(feature, type = SCREENSHOT_TYPES.SNAP
         if (cadastreProxyUrl) {
           const cadastreLayer = await loadImage(cadastreProxyUrl);
           // Draw cadastre with reduced opacity to not overwhelm other layers
-          drawImage(ctx, cadastreLayer, canvas.width, canvas.height, 1);
+          drawImage(ctx, cadastreLayer, canvas.width, canvas.height, 0.6);
         }
       } catch (error) {
         console.warn('Failed to load cadastre layer:', error);
       }
     }
 
-if (developableArea?.features?.length > 0 && showDevelopableArea) {
-  // Draw all developable area features
-  developableArea.features.forEach(feature => {
-    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width || config.size, {
-      strokeStyle: '#02d1b8',
-      lineWidth: 12,
-      dashArray: [20, 10]
-    });
-  });
-}
+    if (developableArea?.features?.length > 0 && showDevelopableArea) {
+      // Use the new helper function to draw developable areas with labels
+      drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width || config.size, showDevelopableAreaLabels);
+    }
 
-    if (drawBoundaryLine && feature.geometry?.coordinates?.[0]) {
-      drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width || config.size, {
-        strokeStyle: '#FF0000',
-        lineWidth: 6
+    if (drawBoundaryLine) {
+      drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width || config.size, {
+        showLabels: showLabels
       });
     }
 
+    console.log(`captureMapScreenshot: Successfully captured ${type} screenshot`);
     return canvas.toDataURL('image/png', 1.0);
   } catch (error) {
-    console.warn('Failed to capture screenshot:', error);
+    console.error(`captureMapScreenshot: Failed to capture ${type} screenshot:`, error);
     return null;
   }
 }
 
 export function calculateBounds(feature, padding, developableArea = null, useDevelopableAreaForBounds = false) {
-  let coordinates;
+  let coordinates = [];
+  
+  // Handle feature coordinates based on type
+  if (feature.type === 'FeatureCollection' && feature.features) {
+    // For feature collections, collect coordinates from all features
+    feature.features.forEach(featureItem => {
+      if (featureItem.geometry?.coordinates?.[0]) {
+        coordinates.push(...featureItem.geometry.coordinates[0]);
+      }
+    });
+  } else if (feature.geometry?.coordinates?.[0]) {
+    // For single features
+    coordinates = feature.geometry.coordinates[0];
+  } else {
+    console.warn('Invalid feature geometry for bounds calculation', feature);
+  }
   
   // Determine which coordinates to use based on the useDevelopableAreaForBounds flag
   if (useDevelopableAreaForBounds && developableArea?.features?.length > 0) {
@@ -111,13 +146,20 @@ export function calculateBounds(feature, padding, developableArea = null, useDev
     coordinates = developableArea.features.flatMap(feature => feature.geometry.coordinates[0]);
   } else if (!useDevelopableAreaForBounds && developableArea?.features?.length > 0) {
     // Use both property and all developable areas for bounds calculation
-    coordinates = [
-      ...feature.geometry.coordinates[0],
-      ...developableArea.features.flatMap(feature => feature.geometry.coordinates[0])
-    ];
-  } else {
-    // No developable area, use property bounds only
-    coordinates = feature.geometry.coordinates[0];
+    if (feature.type === 'FeatureCollection') {
+      // We already have the feature collection coordinates
+    } else if (feature.geometry?.coordinates?.[0]) {
+      coordinates = [
+        ...coordinates,
+        ...developableArea.features.flatMap(feature => feature.geometry.coordinates[0])
+      ];
+    }
+  }
+
+  if (!coordinates || coordinates.length === 0) {
+    console.error('No valid coordinates found for bounds calculation');
+    // Provide default bounds
+    return { centerX: 0, centerY: 0, size: 1000 };
   }
 
   const bounds = coordinates.reduce((acc, coord) => ({
@@ -139,6 +181,79 @@ export function calculateBounds(feature, padding, developableArea = null, useDev
   const size = Math.max(width, height) * (1 + padding * 2);
 
   return { centerX, centerY, size };
+}
+
+// Helper function to draw feature boundaries (single or multiple)
+function drawFeatureBoundaries(ctx, feature, centerX, centerY, size, canvasWidth, options = {}) {
+  const defaultOptions = {
+    strokeStyle: '#FF0000',
+    lineWidth: 6,
+    showLabels: true
+  };
+  
+  const mergedOptions = { ...defaultOptions, ...options };
+  
+  // Check if we have multiple features (feature collection with more than 1 feature)
+  const hasMultipleFeatures = 
+    feature.type === 'FeatureCollection' && 
+    feature.features && 
+    feature.features.length > 1;
+  
+  if (feature.type === 'FeatureCollection' && feature.features) {
+    // Draw each feature in the collection separately
+    feature.features.forEach((featureItem, index) => {
+      if (featureItem.geometry?.coordinates?.[0]) {
+        // Draw boundary for all features
+        drawBoundary(ctx, featureItem.geometry.coordinates[0], centerX, centerY, size, canvasWidth, {
+          strokeStyle: mergedOptions.strokeStyle,
+          lineWidth: mergedOptions.lineWidth
+        });
+        
+        // Add label on centroid ONLY if there are multiple features AND showLabels is true
+        if (hasMultipleFeatures && mergedOptions.showLabels) {
+          const label = String.fromCharCode(65 + index); // A=65, B=66, etc.
+          try {
+            const polygon = turf.polygon([featureItem.geometry.coordinates[0]]);
+            const centroid = turf.centroid(polygon);
+            
+            if (centroid && centroid.geometry && centroid.geometry.coordinates) {
+              const [lon, lat] = centroid.geometry.coordinates;
+              const [mercX, mercY] = convertToWebMercator(lon, lat);
+              const { centerMercX, centerMercY, sizeInMeters } = calculateMercatorParams(centerX, centerY, size);
+              
+              // Transform to canvas coordinates
+              const x = ((mercX - (centerMercX - sizeInMeters/2)) / sizeInMeters) * canvasWidth;
+              const y = ((centerMercY + sizeInMeters/2 - mercY) / sizeInMeters) * canvasWidth;
+              
+              // Draw white circle with red stroke
+              ctx.beginPath();
+              ctx.arc(x, y, 40, 0, Math.PI * 2);
+              ctx.fillStyle = '#FFFFFF';
+              ctx.fill();
+              ctx.strokeStyle = mergedOptions.strokeStyle;
+              ctx.lineWidth = 3;
+              ctx.stroke();
+              
+              // Draw label text
+              ctx.fillStyle = mergedOptions.strokeStyle;
+              ctx.font = 'bold 48px "Public Sans"';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(label, x, y);
+            }
+          } catch (error) {
+            console.warn('Error adding centroid label:', error);
+          }
+        }
+      }
+    });
+  } else if (feature.geometry?.coordinates?.[0]) {
+    // Draw a single feature
+    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, canvasWidth, {
+      strokeStyle: mergedOptions.strokeStyle,
+      lineWidth: mergedOptions.lineWidth
+    });
+  }
 }
 
 export async function capturePrimarySiteAttributesMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
@@ -300,6 +415,11 @@ export async function capturePrimarySiteAttributesMap(feature, developableArea =
             console.log(`Drawing ${floodResponse.features.length} flood features...`);
             // Store the flood features and transformation parameters in the feature object
             floodResponse.transformParams = { centerX, centerY, size };
+            
+            // Ensure feature.properties exists before setting properties
+            if (!feature.properties) {
+              feature.properties = {};
+            }
             feature.properties.site_suitability__floodFeatures = floodResponse;
             
             floodResponse.features.forEach((feature, index) => {
@@ -345,20 +465,13 @@ export async function capturePrimarySiteAttributesMap(feature, developableArea =
     }
 
     // Always draw boundaries even if some layers fail
-    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.size || config.width, {
-      strokeStyle: '#FF0000',
-      lineWidth: 6
+    drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width || config.size, {
+      showLabels: false
     });
 
     if (developableArea?.features?.length > 0 && showDevelopableArea) {
-      // Draw all developable area features
-      developableArea.features.forEach(feature => {
-        drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-          strokeStyle: '#02d1b8',
-          lineWidth: 12,
-          dashArray: [20, 10]
-        });
-      });
+      // Use the new helper function to draw developable areas with labels
+      drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width || config.size, true);
     }
 
     return canvas.toDataURL('image/png', 1.0);
@@ -368,7 +481,7 @@ export async function capturePrimarySiteAttributesMap(feature, developableArea =
   }
 }
 
-export async function captureContourMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
+export async function captureContourMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false, showLabels = false, showDevelopableAreaLabels = false) {
   if (!feature) return null;
   
   try {
@@ -439,20 +552,13 @@ export async function captureContourMap(feature, developableArea = null, showDev
     }
 
     // Draw boundaries - These should use the raw coordinates since we're in GDA94
-    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.size || config.width, {
-      strokeStyle: '#FF0000',
-      lineWidth: 6
+    drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.size || config.width, {
+      showLabels: showLabels
     });
 
     if (developableArea?.features?.length > 0 && showDevelopableArea) {
-      // Draw all developable area features
-      developableArea.features.forEach(feature => {
-        drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.size || config.width, {
-          strokeStyle: '#02d1b8',
-          lineWidth: 6,
-          dashArray: [20, 10]
-        });
-      });
+      // Use the new helper function to draw developable areas with labels
+      drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.size || config.width, showDevelopableAreaLabels);
     }
 
     return canvas.toDataURL('image/png', 1.0);
@@ -462,7 +568,7 @@ export async function captureContourMap(feature, developableArea = null, showDev
   }
 }
 
-export async function captureRegularityMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
+export async function captureRegularityMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false, showLabels = false, showDevelopableAreaLabels = false) {
   if (!feature) return null;
   
   try {
@@ -510,21 +616,14 @@ export async function captureRegularityMap(feature, developableArea = null, show
     }
 
     // Draw property boundary
-    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-      strokeStyle: '#FF0000',
-      lineWidth: 6
+    drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, {
+      showLabels: showLabels
     });
 
     // Draw developable areas if they exist
     if (developableArea?.features?.length > 0 && showDevelopableArea) {
-      // Draw all developable area features
-      developableArea.features.forEach(feature => {
-        drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-          strokeStyle: '#02d1b8',
-          lineWidth: 12,
-          dashArray: [20, 10]
-        });
-      });
+      // Use the new helper function to draw developable areas with labels
+      drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width, showDevelopableAreaLabels);
     }
 
     return canvas.toDataURL('image/png', 1.0);
@@ -605,21 +704,14 @@ export async function captureHeritageMap(feature, developableArea = null, showDe
       console.warn('Failed to load heritage layer:', error);
     }
 
-    // Draw boundaries
-    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-      strokeStyle: '#FF0000',
-      lineWidth: 6
+    // Draw boundaries without labels
+    drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, {
+      showLabels: false
     });
 
     if (developableArea?.features?.length > 0 && showDevelopableArea) {
-      // Draw all developable area features
-      developableArea.features.forEach(feature => {
-        drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-          strokeStyle: '#02d1b8',
-          lineWidth: 12,
-          dashArray: [20, 10]
-        });
-      });
+      // Use the helper function to draw developable areas without labels
+      drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width, false);
     }
 
     try {
@@ -724,22 +816,15 @@ export async function captureAcidSulfateMap(feature, developableArea = null, sho
       console.warn('Failed to load acid sulfate soils layer:', error);
     }
 
-    // Draw boundaries
-    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-      strokeStyle: '#FF0000',
-      lineWidth: 6
+    // Draw boundaries without labels
+    drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, {
+      showLabels: false
     });
 
-      if (developableArea?.features?.length > 0 && showDevelopableArea) {
-        // Draw all developable area features
-        developableArea.features.forEach(feature => {
-          drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-            strokeStyle: '#02d1b8',
-            lineWidth: 12,
-            dashArray: [20, 10]
-          });
-        });
-      }
+    if (developableArea?.features?.length > 0 && showDevelopableArea) {
+      // Use the helper function to draw developable areas without labels
+      drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width, false);
+    }
 
     // Add legend
     const legendHeight = 380; // Reduced height to remove extra space
@@ -926,6 +1011,9 @@ export async function captureWaterMainsMap(feature, developableArea = null, show
             waterMainsFeatures = waterMainsResponse.features;
             
             // Store the features directly in the feature object
+            if (!feature.properties) {
+              feature.properties = {};
+            }
             feature.properties.waterFeatures = waterMainsFeatures;
             
             waterMainsFeatures.forEach((feature, index) => {
@@ -945,25 +1033,23 @@ export async function captureWaterMainsMap(feature, developableArea = null, show
       console.warn('Failed to load water mains layer:', error);
     }
 
-    // Draw boundaries
-    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-      strokeStyle: '#FF0000',
-      lineWidth: 10
+    // Draw boundaries without labels
+    drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, {
+      showLabels: false
     });
 
     if (developableArea?.features?.length > 0 && showDevelopableArea) {
-      // Draw all developable area features
-      developableArea.features.forEach(feature => {
-        drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-          strokeStyle: '#02d1b8',
-          lineWidth: 12,
-          dashArray: [20, 10]
-        });
-      });
+      // Use the helper function to draw developable areas without labels
+      drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width, false);
     }
 
     // Take screenshot
     const screenshot = await canvas.toDataURL();
+    
+    // Ensure feature.properties exists before setting waterMainsScreenshot
+    if (!feature.properties) {
+      feature.properties = {};
+    }
     feature.properties.waterMainsScreenshot = screenshot;
 
     return { image: screenshot, features: waterMainsFeatures };
@@ -1193,24 +1279,20 @@ export async function capturePowerMap(feature, developableArea = null, showDevel
       console.warn('Failed to load power infrastructure layer:', error);
     }
 
-    // Draw boundaries
-    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-      strokeStyle: '#FF0000',
-      lineWidth: 10
+    // Draw boundaries without labels
+    drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, {
+      showLabels: false
     });
 
     if (developableArea?.features?.length > 0 && showDevelopableArea) {
-      // Draw all developable area features
-      developableArea.features.forEach(feature => {
-        drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-          strokeStyle: '#02d1b8',
-          lineWidth: 12,
-          dashArray: [20, 10]
-        });
-      });
+      // Use the helper function to draw developable areas without labels
+      drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width, false);
     }
 
-    // Store the features directly in the feature object
+    // Ensure feature.properties exists before setting powerFeatures
+    if (!feature.properties) {
+      feature.properties = {};
+    }
     feature.properties.powerFeatures = powerFeatures;
 
     return {
@@ -1323,6 +1405,9 @@ export async function captureSewerMap(feature, developableArea = null, showDevel
             sewerFeatures = sewerResponse.features;
 
             // Store the features directly in the feature object
+            if (!feature.properties) {
+              feature.properties = {};
+            }
             feature.properties.sewerFeatures = sewerFeatures;
 
             sewerFeatures.forEach((feature, index) => {
@@ -1342,21 +1427,14 @@ export async function captureSewerMap(feature, developableArea = null, showDevel
       console.warn('Failed to load sewer infrastructure layer:', error);
     }
 
-    // Draw boundaries
-    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-      strokeStyle: '#FF0000',
-      lineWidth: 10
+    // Draw boundaries without labels
+    drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, {
+      showLabels: false
     });
 
     if (developableArea?.features?.length > 0 && showDevelopableArea) {
-      // Draw all developable area features
-      developableArea.features.forEach(feature => {
-        drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-          strokeStyle: '#02d1b8',
-          lineWidth: 12,
-          dashArray: [20, 10]
-        });
-      });
+      // Use the helper function to draw developable areas without labels
+      drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width, false);
     }
 
     return {
@@ -1474,21 +1552,14 @@ export async function captureGeoscapeMap(feature, developableArea = null, showDe
       });
     }
 
-    // Draw boundaries
-    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-      strokeStyle: '#FF0000',
-      lineWidth: 6
+    // Draw boundaries without labels
+    drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, {
+      showLabels: false
     });
 
     if (developableArea?.features?.length > 0 && showDevelopableArea) {
-      // Draw all developable area features
-      developableArea.features.forEach(feature => {
-        drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-          strokeStyle: '#02d1b8',
-          lineWidth: 12,
-          dashArray: [20, 10]
-        });
-      });
+      // Draw developable areas without labels
+      drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width, false);
     }
 
     return {
@@ -1501,9 +1572,14 @@ export async function captureGeoscapeMap(feature, developableArea = null, showDe
   }
 }
 
-export async function captureStreetViewScreenshot(feature) {
-  if (!feature) {
-    console.log('No feature provided for Street View screenshot');
+export async function captureStreetViewScreenshot(feature, developableArea = null) {
+  // Use developableArea if provided, otherwise use the feature
+  const featureToUse = developableArea && developableArea.features && developableArea.features.length > 0 
+    ? developableArea.features[0] 
+    : feature;
+    
+  if (!featureToUse) {
+    console.log('No feature or developable area provided for Street View screenshot');
     return null;
   }
 
@@ -1511,7 +1587,7 @@ export async function captureStreetViewScreenshot(feature) {
 
   try {
     // Get the coordinates from the feature
-    const coordinates = feature.geometry.coordinates[0];
+    const coordinates = featureToUse.geometry.coordinates[0];
     if (!coordinates || coordinates.length === 0) {
       console.error('Invalid coordinates in feature');
       return null;
@@ -1576,12 +1652,43 @@ export async function captureStreetViewScreenshot(feature) {
           console.log('Found valid Street View location, requesting image');
           const streetViewImage = await loadImage(streetViewUrl);
 
-          // Create the mini map image showing camera position
-          // Convert coordinates array to path string
+          // Create the mini map image showing camera position and all developable areas
+          // First, prepare the path for the feature we're using for Street View
           const pathCoords = coordinates.map(coord => `${coord[1]},${coord[0]}`).join('|');
           
-          // Calculate appropriate zoom level based on property size
-          const bounds = coordinates.reduce((acc, coord) => ({
+          // Prepare static map URL with the main feature
+          let staticMapUrl = `https://maps.googleapis.com/maps/api/staticmap?size=400x400&key=${API_KEY}`
+            + `&path=color:0x02d1b8|weight:4|fillcolor:0x02d1b833|geodesic=true|${pathCoords}`;
+          
+          // Add all developable areas to the map if they exist
+          if (developableArea && developableArea.features && developableArea.features.length > 0) {
+            // Add each developable area as a separate path with different color
+            developableArea.features.forEach((devArea, index) => {
+              if (devArea.geometry && devArea.geometry.coordinates && devArea.geometry.coordinates[0]) {
+                const devAreaCoords = devArea.geometry.coordinates[0].map(coord => 
+                  `${coord[1]},${coord[0]}`
+                ).join('|');
+                
+                // Use a different color for developable areas
+                staticMapUrl += `&path=color:0xFF9900|weight:3|fillcolor:0xFF990033|${devAreaCoords}`;
+              }
+            });
+          }
+          
+          // Calculate appropriate zoom level based on all features
+          let allCoordinates = [...coordinates];
+          
+          // Include coordinates from all developable areas
+          if (developableArea && developableArea.features) {
+            developableArea.features.forEach(devArea => {
+              if (devArea.geometry && devArea.geometry.coordinates && devArea.geometry.coordinates[0]) {
+                allCoordinates = [...allCoordinates, ...devArea.geometry.coordinates[0]];
+              }
+            });
+          }
+          
+          // Calculate bounds based on all coordinates
+          const bounds = allCoordinates.reduce((acc, coord) => ({
             minLat: Math.min(acc.minLat, coord[1]),
             maxLat: Math.max(acc.maxLat, coord[1]),
             minLng: Math.min(acc.minLng, coord[0]),
@@ -1593,23 +1700,21 @@ export async function captureStreetViewScreenshot(feature) {
             maxLng: -Infinity
           });
 
-          // Calculate center
+          // Calculate center of all features
           const mapCenter = {
             lat: (bounds.minLat + bounds.maxLat) / 2,
             lng: (bounds.minLng + bounds.maxLng) / 2
           };
 
-          // Calculate zoom level based on property size
+          // Calculate zoom level based on the size of all features
           const latSpan = bounds.maxLat - bounds.minLat;
           const lngSpan = bounds.maxLng - bounds.minLng;
           const maxSpan = Math.max(latSpan, lngSpan);
           // Reduce zoom level by 1 to add more padding
-          const zoom = Math.floor(Math.log2(360 / maxSpan));  // Removed the +1 to zoom out slightly
+          const zoom = Math.floor(Math.log2(360 / maxSpan)) - 1;  // Further reduced to show more context
           
-          const staticMapUrl = `https://maps.googleapis.com/maps/api/staticmap?size=400x400&key=${API_KEY}`
-            + `&path=color:0x02d1b8|weight:4|fillcolor:0x02d1b833|geodesic=true`
-            + `&path=color:0x02d1b8|weight:4|fillcolor:0x02d1b833|${pathCoords}`
-            + `&markers=anchor:center|icon:https://maps.google.com/mapfiles/dir_${Math.round(bearing/22.5) % 16}.png|${panoramaLat},${panoramaLng}`
+          // Add remaining parameters to the static map URL
+          staticMapUrl += `&markers=anchor:center|icon:https://maps.google.com/mapfiles/dir_${Math.round(bearing/22.5) % 16}.png|${panoramaLat},${panoramaLng}`
             + `&center=${mapCenter.lat},${mapCenter.lng}`
             + `&zoom=${zoom}`  // Using adjusted zoom level
             + '&style=feature:all|element:labels|visibility:off'
@@ -1738,7 +1843,11 @@ async function getRoadFeatures(centerX, centerY, size) {
 
 export async function captureRoadsMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
   if (!feature) return null;
-  console.log('Starting roads capture...');
+  console.log('Starting roads capture...', {
+    featureType: feature.type,
+    hasMultipleFeatures: feature.type === 'FeatureCollection' && feature.features?.length > 1,
+    developableAreaFeatures: developableArea?.features?.length
+  });
 
   try {
     const config = {
@@ -1747,6 +1856,7 @@ export async function captureRoadsMap(feature, developableArea = null, showDevel
       padding: 0.2
     };
     
+    // Calculate bounds considering all features and all developable areas
     const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
     
     // Get road features first
@@ -1754,11 +1864,20 @@ export async function captureRoadsMap(feature, developableArea = null, showDevel
     const roadFeatures = await getRoadFeatures(centerX, centerY, size);
     console.log('Retrieved road features:', roadFeatures);
     
-    // Store the features in the feature object
-    if (feature.properties) {
-      feature.properties.roadFeatures = roadFeatures;
+    // Store the features in all feature objects if it's a collection
+    if (feature.type === 'FeatureCollection') {
+      feature.features.forEach(f => {
+        if (!f.properties) {
+          f.properties = {};
+        }
+        f.properties.roadFeatures = roadFeatures;
+      });
     } else {
-      feature.properties = { roadFeatures };
+      // Single feature case
+      if (!feature.properties) {
+        feature.properties = {};
+      }
+      feature.properties.roadFeatures = roadFeatures;
     }
     
     // Create base canvas
@@ -1882,31 +2001,40 @@ export async function captureRoadsMap(feature, developableArea = null, showDevel
       console.warn('Failed to load road labels:', error);
     }
 
-    // Draw boundaries AFTER all layers
+    // Draw all developable areas AFTER all layers if they exist
     if (developableArea?.features?.length > 0 && showDevelopableArea) {
       console.log('Drawing developable area boundaries...');
-      // Draw all developable area features
-      developableArea.features.forEach(feature => {
-        drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-          strokeStyle: '#02d1b8',
-          lineWidth: 12,
-          dashArray: [20, 10]
+      // Draw all developable areas without labels
+      drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width, false);
+    }
+
+    // Draw all features
+    if (feature.type === 'FeatureCollection') {
+      console.log('Drawing multiple features:', feature.features.length);
+      feature.features.forEach((f, index) => {
+        drawFeatureBoundaries(ctx, f, centerX, centerY, size, config.width, {
+          showLabels: false, // Never show labels for features
+          strokeStyle: '#FF0000',
+          lineWidth: 6
         });
+      });
+    } else {
+      // Single feature case
+      console.log('Drawing single feature');
+      drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, {
+        showLabels: false
       });
     }
 
-    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-      strokeStyle: '#FF0000',
-      lineWidth: 6
-    });
-
-    // Add legend with adjusted spacing
-    const legendHeight = 600; // Increased from 500
-    const legendWidth = 400;
-    const padding = 30;
-    const lineHeight = 48; // Increased from 44
+    // Add legend with adjusted spacing and formatting
+    const legendHeight = 500; // Reduced height to be more compact
+    const legendWidth = 300; // Slightly reduced width
+    const padding = 20; // Reduced padding
+    const lineHeight = 36; // Reduced line height for more compact layout
     const legendX = canvas.width - legendWidth - padding;
     const legendY = canvas.height - legendHeight - padding;
+    const swatchLength = 40; // Shorter line sample
+    const swatchPadding = 15; // Reduced space between swatch and label
 
     // Draw legend background with border
     ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
@@ -1916,56 +2044,56 @@ export async function captureRoadsMap(feature, developableArea = null, showDevel
     ctx.strokeRect(legendX, legendY, legendWidth, legendHeight);
 
     // Legend title
-    ctx.font = 'bold 32px Public Sans';
+    ctx.font = 'bold 24px Public Sans'; // Reduced font size
     ctx.fillStyle = '#002664';
     ctx.textBaseline = 'top';
     ctx.fillText('Road Classification', legendX + padding, legendY + padding);
 
-    // Legend items - exact colors from MapServer with adjusted line widths
+    // Legend items with exact colors from the image
     const legendItems = [
-      { label: 'Access Way', color: '#FCECCC', width: 3, style: 'dotted' },  // Increased width
-      { label: 'Arterial Road', color: '#9C9C9C', width: 3 },
-      { label: 'Dedicated Bus Way', color: '#FF0000', width: 3 },
-      { label: 'Distributor Road', color: '#B2B2B2', width: 3 },
-      { label: 'Local Road', color: '#CCCCCC', width: 2 },  // Increased width
-      { label: 'Motorway', color: '#4E4E4E', width: 5 },
-      { label: 'Path', color: '#686868', width: 2, style: 'dashed' },  // Increased width
-      { label: 'Primary Road', color: '#4E4E4E', width: 5 },
-      { label: 'Sub-Arterial Road', color: '#9C9C9C', width: 3 },
-      { label: 'Track-Vehicular', color: '#FFA77F', width: 2, style: 'dashed' },  // Increased width
-      { label: 'Urban Service Lane', color: '#CCCCCC', width: 2 }  // Increased width
+      { label: 'Access Way', color: '#FCECCC', width: 3, style: 'dotted' },
+      { label: 'Arterial Road', color: '#9C9C9C', width: 4 },
+      { label: 'Dedicated Bus Way', color: '#FF0000', width: 4 },
+      { label: 'Distributor Road', color: '#B2B2B2', width: 4 },
+      { label: 'Local Road', color: '#CCCCCC', width: 3 },
+      { label: 'Motorway', color: '#4E4E4E', width: 6 },
+      { label: 'Path', color: '#686868', width: 2, style: 'dashed' },
+      { label: 'Primary Road', color: '#4E4E4E', width: 6 },
+      { label: 'Sub-Arterial Road', color: '#9C9C9C', width: 4 },
+      { label: 'Track-Vehicular', color: '#FFA77F', width: 2, style: 'dashed' },
+      { label: 'Urban Service Lane', color: '#CCCCCC', width: 3 }
     ];
 
     // Draw legend items
     ctx.textBaseline = 'middle';
-    ctx.font = '24px Public Sans';
+    ctx.font = '18px Public Sans'; // Reduced font size for items
 
     legendItems.forEach((item, index) => {
-      const y = legendY + padding + 60 + (index * lineHeight);
+      const y = legendY + padding + 50 + (index * lineHeight); // Adjusted starting position
       
-      // Draw line sample with increased contrast
+      // Draw line sample
       ctx.beginPath();
       ctx.strokeStyle = item.color;
-      ctx.lineWidth = item.width * 2;
+      ctx.lineWidth = item.width * 1.5; // Slightly reduced multiplier
       
       if (item.style === 'dotted') {
-        ctx.setLineDash([4, 4]);
+        ctx.setLineDash([3, 3]); // Smaller dots
       } else if (item.style === 'dashed') {
-        ctx.setLineDash([12, 8]);
+        ctx.setLineDash([8, 6]); // Smaller dashes
       } else {
         ctx.setLineDash([]);
       }
       
       ctx.moveTo(legendX + padding, y);
-      ctx.lineTo(legendX + padding + 60, y);
+      ctx.lineTo(legendX + padding + swatchLength, y);
       ctx.stroke();
 
       // Reset line dash for text
       ctx.setLineDash([]);
       
-      // Draw label
+      // Draw label with consistent padding
       ctx.fillStyle = '#363636';
-      ctx.fillText(item.label, legendX + padding + 80, y);
+      ctx.fillText(item.label, legendX + padding + swatchLength + swatchPadding, y);
     });
 
     return canvas.toDataURL('image/png', 1.0);
@@ -1975,7 +2103,7 @@ export async function captureRoadsMap(feature, developableArea = null, showDevel
   }
 }
 
-export async function captureFloodMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
+export async function captureFloodMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false, showLabels = false, showDevelopableArealabels = false) {
   if (!feature) return null;
   
   try {
@@ -2070,6 +2198,11 @@ export async function captureFloodMap(feature, developableArea = null, showDevel
             console.log(`Drawing ${floodResponse.features.length} flood features...`);
             // Store the flood features and transformation parameters
             floodResponse.transformParams = { centerX, centerY, size };
+            
+            // Ensure feature.properties exists before setting properties
+            if (!feature.properties) {
+              feature.properties = {};
+            }
             feature.properties.site_suitability__floodFeatures = floodResponse;
             
             floodResponse.features.forEach((feature, index) => {
@@ -2115,34 +2248,29 @@ export async function captureFloodMap(feature, developableArea = null, showDevel
     }
 
     // Draw boundaries
-    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-      strokeStyle: '#FF0000',
-      lineWidth: 6
-    });
+    drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, { showLabels });
 
     if (developableArea?.features?.length > 0 && showDevelopableArea) {
-      // Draw all developable area features
-      developableArea.features.forEach(feature => {
-        drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-          strokeStyle: '#02d1b8',
-          lineWidth: 12,
-          dashArray: [20, 10]
-        });
-      });
+      // Use the new helper function to draw developable areas with labels
+      drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width, showDevelopableArealabels);
     }
 
     // Store the screenshot
     const screenshot = canvas.toDataURL('image/png', 1.0);
     feature.properties.floodMapScreenshot = screenshot;
 
-    return screenshot;
+    // Return both the screenshot and properties with the features
+    return {
+      dataURL: screenshot,
+      properties: feature.properties
+    };
   } catch (error) {
     console.error('Failed to capture flood map:', error);
     return null;
   }
 }
 
-export async function captureBushfireMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
+export async function captureBushfireMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false, showLabels = false, showDevelopableArealabels = false) {
   if (!feature) return null;
   console.log('Starting bushfire map capture...');
 
@@ -2250,20 +2378,11 @@ export async function captureBushfireMap(feature, developableArea = null, showDe
     }
 
     // Draw boundaries
-    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-      strokeStyle: '#FF0000',
-      lineWidth: 6
-    });
+    drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, { showLabels });
 
     if (developableArea?.features?.length > 0 && showDevelopableArea) {
-      // Draw all developable area features
-      developableArea.features.forEach(feature => {
-        drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-          strokeStyle: '#02d1b8',
-          lineWidth: 12,
-          dashArray: [20, 10]
-        });
-      });
+      // Use the new helper function to draw developable areas with labels
+      drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width, showDevelopableArealabels);
     }
 
     // Add legend
@@ -2312,7 +2431,15 @@ export async function captureBushfireMap(feature, developableArea = null, showDe
       ctx.fillText(item.label, legendX + padding + 35, y);
     });
 
-    return canvas.toDataURL('image/png', 1.0);
+    // Draw legend
+    drawBushfireLegend(ctx, canvas.width, canvas.height);
+
+    // Return both the screenshot and properties with the features
+    const screenshot = canvas.toDataURL('image/png', 1.0);
+    return {
+      dataURL: screenshot,
+      properties: feature.properties
+    };
   } catch (error) {
     console.error('Failed to capture bushfire map:', error);
     return null;
@@ -2359,6 +2486,42 @@ function drawRoundedTextBox(ctx, text, x, y, padding = 10, cornerRadius = 5) {
   ctx.fillStyle = '#000000';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, x + padding, y + (boxHeight / 2));
+}
+
+// Add helper function for bushfire legend
+function drawBushfireLegend(ctx, canvasWidth, canvasHeight) {
+  // Draw legend in bottom right corner
+  const legendHeight = 90;
+  const legendWidth = 300;
+  const padding = 20;
+  const legendX = canvasWidth - legendWidth - padding;
+  const legendY = canvasHeight - legendHeight - padding;
+
+  // Draw legend background with border
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+  ctx.strokeStyle = '#002664';
+  ctx.lineWidth = 2;
+  ctx.fillRect(legendX, legendY, legendWidth, legendHeight);
+  ctx.strokeRect(legendX, legendY, legendWidth, legendHeight);
+
+  // Draw legend title
+  ctx.font = 'bold 14px "Public Sans"';
+  ctx.fillStyle = '#002664';
+  ctx.textAlign = 'left';
+  ctx.fillText('Bushfire Prone Land', legendX + 10, legendY + 20);
+
+  // Draw color box for bushfire
+  ctx.fillStyle = 'rgba(213, 35, 49, 0.7)';
+  ctx.fillRect(legendX + 10, legendY + 35, 30, 20);
+  ctx.strokeStyle = 'rgba(213, 35, 49, 1)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(legendX + 10, legendY + 35, 30, 20);
+
+  // Draw label for bushfire
+  ctx.font = '12px "Public Sans"';
+  ctx.fillStyle = '#333333';
+  ctx.textAlign = 'left';
+  ctx.fillText('Bushfire Prone Land', legendX + 50, legendY + 48);
 }
 
 // Helper function to check if a property overlaps with LMR areas by directly querying the LMR layers
@@ -2528,7 +2691,7 @@ export async function checkLMROverlap(feature, centerX, centerY, size) {
   }
 }
 
-export async function captureUDPPrecinctMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
+export async function captureUDPPrecinctMap(feature, developableArea = null, showDevelopableArea = false, useDevelopableAreaForBounds = false) {
   if (!feature) return null;
   console.log('Starting UDP precinct map capture...');
 
@@ -2618,6 +2781,24 @@ export async function captureUDPPrecinctMap(feature, developableArea = null, sho
           feature.properties = {};
         }
         feature.properties.lmrOverlap = lmrOverlap;
+
+        // Additionally check if any developable areas are within LMR/TOD areas
+        if (developableArea?.features?.length > 0) {
+          console.log('Checking if developable areas are within LMR/TOD areas...');
+          
+          // Store developable area overlap info for scoring (but don't display them on map)
+          const devAreaLmrResults = [];
+          
+          for (let i = 0; i < developableArea.features.length; i++) {
+            const devArea = developableArea.features[i];
+            const devAreaOverlap = await checkLMROverlap(devArea, centerX, centerY, size);
+            devAreaLmrResults.push(devAreaOverlap);
+            console.log(`Developable area ${i+1} LMR overlap:`, devAreaOverlap);
+          }
+          
+          // Store results in feature properties for scoring
+          feature.properties.developableAreaLmrOverlap = devAreaLmrResults;
+        }
       } else {
         console.warn('Failed to get proxy URL for LMR layers');
       }
@@ -2720,17 +2901,21 @@ export async function captureUDPPrecinctMap(feature, developableArea = null, sho
       console.error('Failed to load UDP precincts:', error);
     }
 
-    // Draw boundaries
-    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-      strokeStyle: '#FF0000',
-      lineWidth: 6
-    });
-
-    if (developableArea?.features?.[0] && showDevelopableArea) {
-      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
-        strokeStyle: '#02d1b8',
-        lineWidth: 12,
-        dashArray: [20, 10]
+    // Draw all features, but not developable areas
+    if (feature.type === 'FeatureCollection') {
+      console.log('Drawing multiple features:', feature.features.length);
+      feature.features.forEach((f, index) => {
+        drawFeatureBoundaries(ctx, f, centerX, centerY, size, config.width, {
+          showLabels: true, // Always show labels for multiple features
+          strokeStyle: '#FF0000',
+          lineWidth: 6
+        });
+      });
+    } else {
+      // Single feature case
+      console.log('Drawing single feature');
+      drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, {
+        showLabels: false
       });
     }
 
@@ -2800,7 +2985,7 @@ export async function captureUDPPrecinctMap(feature, developableArea = null, sho
   }
 }
 
-export async function capturePTALMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
+export async function capturePTALMap(feature, developableArea = null, showDevelopableArea = false, useDevelopableAreaForBounds = false) {
   if (!feature) {
     console.log('No feature provided, returning null');
     return null;
@@ -2961,42 +3146,60 @@ export async function capturePTALMap(feature, developableArea = null, showDevelo
       console.log(`Processing ${ptalResponse.features.length} PTAL features...`);
       ptalFeatures = ptalResponse.features;
 
-      // Create developable area polygon for intersection check if provided
-      let developablePolygon = null;
-      if (developableArea?.features?.[0]) {
-        developablePolygon = turf.polygon(developableArea.features[0].geometry.coordinates);
-        console.log('Created developable area polygon for intersection checks');
-      }
-
-      // Find intersecting features for scoring only
-      const intersectingPtalFeatures = developablePolygon 
-        ? ptalFeatures.filter(ptalFeature => {
+      // Find best PTAL value for each feature if it's a collection
+      if (feature.type === 'FeatureCollection' && feature.features) {
+        console.log('Finding best PTAL values for each feature in collection...');
+        const featureBestPTALs = [];
+        
+        // Process each feature
+        feature.features.forEach((f, featureIndex) => {
+          const featurePolygon = turf.polygon(f.geometry.coordinates);
+          const intersectingPtalFeatures = ptalFeatures.filter(ptalFeature => {
             try {
               const ptalPolygon = turf.polygon(ptalFeature.geometry.coordinates);
-              const intersects = turf.booleanIntersects(developablePolygon, ptalPolygon);
-              return intersects;
+              return turf.booleanIntersects(featurePolygon, ptalPolygon);
             } catch (error) {
               console.error('Error checking PTAL intersection:', error);
               return false;
             }
-          })
-        : ptalFeatures;
-      
-      console.log('Filtered PTAL features for scoring:', {
-        total: ptalFeatures.length,
-        intersecting: intersectingPtalFeatures.length
-      });
-
-      // Store only the intersecting features in the feature object for scoring
-      const ptalValues = intersectingPtalFeatures.map(f => f.properties.legend || f.properties.ptal_desc || f.properties.ptal);
-      if (feature.properties) {
-        feature.properties.ptalValues = ptalValues;
+          });
+          
+          const ptalValues = intersectingPtalFeatures.map(f => 
+            f.properties.legend || f.properties.ptal_desc || f.properties.ptal
+          );
+          
+          console.log(`Feature ${featureIndex+1} has PTAL values:`, ptalValues);
+          featureBestPTALs.push({
+            featureIndex,
+            ptalValues
+          });
+          
+          // Store PTAL values in the feature for scoring
+          if (!f.properties) f.properties = {};
+          f.properties.ptalValues = ptalValues;
+        });
+        
+        // Store overall collection of PTAL values in the feature's properties
+        if (!feature.properties) feature.properties = {};
+        feature.properties.featurePTALs = featureBestPTALs;
+        feature.properties.allPtalValues = ptalFeatures.map(f => 
+          f.properties.legend || f.properties.ptal_desc || f.properties.ptal
+        );
       } else {
-        feature.properties = { ptalValues };
+        // Original approach for single feature
+        // Store all PTAL values in the feature object for scoring (not just intersecting ones)
+        const ptalValues = ptalFeatures.map(f => 
+          f.properties.legend || f.properties.ptal_desc || f.properties.ptal
+        );
+        if (feature.properties) {
+          feature.properties.ptalValues = ptalValues;
+        } else {
+          feature.properties = { ptalValues };
+        }
+        console.log('Stored PTAL values:', ptalValues);
       }
-      console.log('Stored PTAL values:', ptalValues);
 
-      // Draw ALL PTAL features, not just intersecting ones
+      // Draw ALL PTAL features
       console.log('Drawing all PTAL features...');
       ptalFeatures.forEach((ptalFeature, index) => {
         const ptalValue = ptalFeature.properties.legend || ptalFeature.properties.ptal_desc || ptalFeature.properties.ptal;
@@ -3017,20 +3220,20 @@ export async function capturePTALMap(feature, developableArea = null, showDevelo
       console.log('No PTAL features found in response');
     }
 
-    // Draw boundaries
-    console.log('Drawing site boundary...');
-    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-      strokeStyle: '#FF0000',
-      lineWidth: 6
-    });
-
-    if (developableArea?.features?.[0] && showDevelopableArea) {
-      console.log('Drawing developable area boundary...');
-      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
-        strokeStyle: '#02d1b8',
-        lineWidth: 12,
-        dashArray: [20, 10]
+    // Draw all features
+    if (feature.type === 'FeatureCollection') {
+      console.log('Drawing multiple features:', feature.features.length);
+      feature.features.forEach((f, index) => {
+        drawFeatureBoundaries(ctx, f, centerX, centerY, size, config.width, {
+          showLabels: true, // Always show labels for multiple features
+          strokeStyle: '#FF0000',
+          lineWidth: 6
+        });
       });
+    } else {
+      // Single feature case
+      console.log('Drawing single feature');
+      drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width);
     }
 
     console.log('PTAL map capture completed successfully');
@@ -3042,7 +3245,7 @@ export async function capturePTALMap(feature, developableArea = null, showDevelo
   }
 }
 
-export async function captureContaminationMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
+export async function captureContaminationMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false, showLabels = false, showDevelopableArealabels = false) {
   if (!feature) return null;
   console.log('Starting contamination map capture...');
 
@@ -3378,17 +3581,10 @@ export async function captureContaminationMap(feature, developableArea = null, s
     }
 
     // Draw boundaries
-    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-      strokeStyle: '#FF0000',
-      lineWidth: 6
-    });
+    drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, { showLabels });
 
-    if (developableArea?.features?.[0] && showDevelopableArea) {
-      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
-        strokeStyle: '#02d1b8',
-        lineWidth: 12,
-        dashArray: [20, 10]
-      });
+    if (developableArea?.features?.length > 0 && showDevelopableArea) {
+      drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width, showDevelopableArealabels);
     }
 
     // Draw point features from both contamination sources
@@ -3407,7 +3603,7 @@ export async function captureContaminationMap(feature, developableArea = null, s
   }
 }
 
-export async function captureOpenStreetMap(feature, developableArea = null) {
+export async function captureOpenStreetMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false, showLabels = false, showDevelopableArealabels = false) {
   if (!feature) return null;
   console.log('Starting OpenStreetMap capture...');
 
@@ -3418,7 +3614,7 @@ export async function captureOpenStreetMap(feature, developableArea = null) {
       padding: 0.2
     };
     
-    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea);
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
     
     // Convert center and size to Web Mercator for consistent coordinate system
     const [mercatorCenterX, mercatorCenterY] = gda94ToWebMercator(centerX, centerY);
@@ -3555,7 +3751,7 @@ export async function captureOpenStreetMap(feature, developableArea = null) {
   }
 }
 
-export async function captureTECMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
+export async function captureTECMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false, showLabels = false, showDevelopableArealabels = false) {
   if (!feature) {
     console.log('No feature provided for TEC map capture');
     return null;
@@ -3688,10 +3884,7 @@ export async function captureTECMap(feature, developableArea = null, showDevelop
     console.log('Drawing boundaries...');
     if (feature.geometry?.coordinates?.[0]) {
       console.log('Drawing site boundary');
-      drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width || config.size, {
-        strokeStyle: '#FF0000',
-        lineWidth: 6
-      });
+      drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width || config.size);
     }
 
     // Draw developable area if provided
@@ -3711,7 +3904,7 @@ export async function captureTECMap(feature, developableArea = null, showDevelop
   }
 }
 
-export async function captureBiodiversityMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
+export async function captureBiodiversityMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false, showLabels = false, showDevelopableArealabels = false) {
   if (!feature) return null;
   console.log('Starting biodiversity map capture...', { feature, developableArea });
 
@@ -3827,10 +4020,7 @@ export async function captureBiodiversityMap(feature, developableArea = null, sh
 
     // Draw boundaries
     if (feature.geometry) {
-      drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-        strokeStyle: '#FF0000',
-        lineWidth: 6
-      });
+      drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, { showLabels });
       console.log('Added site boundary');
     }
 
@@ -3872,7 +4062,7 @@ function mercatorToWGS84(x, y) {
 
 
 
-export async function captureHistoricalImagery(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
+export async function captureHistoricalImagery(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false, showLabels = false, showDevelopableArealabels = false) {
   if (!feature) return null;
   console.log('Starting historical imagery capture...');
 
@@ -3940,17 +4130,10 @@ export async function captureHistoricalImagery(feature, developableArea = null, 
         drawImage(ctx, image, canvas.width, canvas.height, 1.0);
 
         // Draw boundaries
-        drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-          strokeStyle: '#FF0000',
-          lineWidth: 6
-        });
+        drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, { showLabels });
 
-        if (developableArea?.features?.[0] && showDevelopableArea) {
-          drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
-            strokeStyle: '#02d1b8',
-            lineWidth: 12,
-            dashArray: [20, 10]
-          });
+        if (developableArea?.features?.length > 0 && showDevelopableArea) {
+          drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width, showDevelopableArealabels);
         }
 
         // Add source attribution
@@ -3994,4 +4177,60 @@ export async function captureHistoricalImagery(feature, developableArea = null, 
     console.error('Failed to capture historical imagery:', error);
     return null;
   }
+}
+
+// Helper function to draw developable area boundaries with labels
+function drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, canvasWidth, showLabels = true) {
+  if (!developableArea?.features?.length) return;
+  
+  const hasMultipleAreas = developableArea.features.length > 1;
+  
+  // Draw all developable area features
+  developableArea.features.forEach((feature, index) => {
+    if (feature.geometry?.coordinates?.[0]) {
+      // Draw boundary for all features
+      drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, canvasWidth, {
+        strokeStyle: '#00FFFF',
+        lineWidth: 12,
+        dashArray: [20, 10]
+      });
+      
+      // Add label on centroid ONLY if there are multiple areas AND showLabels is true
+      if (hasMultipleAreas && showLabels) {
+        const label = String.fromCharCode(65 + index); // A=65, B=66, etc.
+        try {
+          const polygon = turf.polygon([feature.geometry.coordinates[0]]);
+          const centroid = turf.centroid(polygon);
+          
+          if (centroid && centroid.geometry && centroid.geometry.coordinates) {
+            const [lon, lat] = centroid.geometry.coordinates;
+            const [mercX, mercY] = convertToWebMercator(lon, lat);
+            const { centerMercX, centerMercY, sizeInMeters } = calculateMercatorParams(centerX, centerY, size);
+            
+            // Transform to canvas coordinates
+            const x = ((mercX - (centerMercX - sizeInMeters/2)) / sizeInMeters) * canvasWidth;
+            const y = ((centerMercY + sizeInMeters/2 - mercY) / sizeInMeters) * canvasWidth;
+            
+            // Draw white circle with teal stroke
+            ctx.beginPath();
+            ctx.arc(x, y, 40, 0, Math.PI * 2);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fill();
+            ctx.strokeStyle = '#00FFFF';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            // Draw label text
+            ctx.fillStyle = '#00FFFF';
+            ctx.font = 'bold 48px "Public Sans"';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label, x, y);
+          }
+        } catch (error) {
+          console.warn('Error adding developable area centroid label:', error);
+        }
+      }
+    }
+  });
 }

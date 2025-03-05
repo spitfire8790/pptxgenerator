@@ -197,33 +197,90 @@ export async function addUtilisationSlide(pptx, properties) {
         let streetViewText = 'Street View data unavailable.';
         let streetViewScore = 0;
 
+        console.log('=== Utilisation Slide Debug ===');
+        console.log('Developable Area:', properties.developableArea);
+        
+        // Process and normalize developable area format
+        let developableArea = null;
+        
+        // Ensure we have a properly formatted developable area
+        if (properties.developableArea) {
+            if (Array.isArray(properties.developableArea)) {
+                // If it's an array, convert it to a FeatureCollection
+                developableArea = {
+                    type: 'FeatureCollection',
+                    features: properties.developableArea.map(area => {
+                        if (area.type === 'Feature') return area;
+                        return { type: 'Feature', geometry: area };
+                    })
+                };
+                console.log('Converted array of developable areas to FeatureCollection:', developableArea);
+            } else if (properties.developableArea.type === 'FeatureCollection' && properties.developableArea.features) {
+                // If it's already a FeatureCollection, use it directly
+                developableArea = properties.developableArea;
+                console.log('Using existing FeatureCollection:', developableArea);
+            } else if (properties.developableArea.type === 'Feature') {
+                // If it's a single Feature, wrap it in a FeatureCollection
+                developableArea = {
+                    type: 'FeatureCollection',
+                    features: [properties.developableArea]
+                };
+                console.log('Wrapped single Feature in FeatureCollection:', developableArea);
+            } else if (properties.developableArea.geometry) {
+                // If it's a geometry object, wrap it in a Feature and FeatureCollection
+                developableArea = {
+                    type: 'FeatureCollection',
+                    features: [{ type: 'Feature', geometry: properties.developableArea }]
+                };
+                console.log('Wrapped geometry in Feature and FeatureCollection:', developableArea);
+            } else {
+                console.error('Invalid developable area format:', properties.developableArea);
+            }
+        } else {
+            console.warn('No developable area found in properties');
+        }
+        
+        // Validate the FeatureCollection format
+        if (developableArea && (!developableArea.features || !Array.isArray(developableArea.features) || developableArea.features.length === 0)) {
+            console.error('Invalid FeatureCollection structure:', developableArea);
+            developableArea = null;
+        }
+        
+        // Log final developable area structure that will be used for scoring
+        console.log('Final developable area structure used for scoring:', JSON.stringify(developableArea, null, 2));
+
+        // Get street view geometry (for backward compatibility)
+        let streetViewGeometry = null;
         if (properties.developableArea && properties.developableArea[0]) {
-            const geometry = {
+            streetViewGeometry = {
                 rings: [properties.developableArea[0].geometry.coordinates[0]]
             };
+        }
 
-            try {
-                // Process Geoscape features directly from properties
-                if (properties.geoscapeFeatures) {
-                    // Convert array of features to FeatureCollection format
-                    const geoscapeFeatureCollection = {
-                        type: 'FeatureCollection',
-                        features: properties.geoscapeFeatures
-                    };
-                    geoscapeResult = scoringCriteria.geoscape.calculateScore(geoscapeFeatureCollection, properties.developableArea);
-                    geoscapeScore = geoscapeResult.score;
-                    geoscapeText = scoringCriteria.geoscape.getScoreDescription(geoscapeResult);
-                }
+        try {
+            // Process Geoscape features directly from properties
+            if (properties.geoscapeFeatures) {
+                // Convert array of features to FeatureCollection format
+                const geoscapeFeatureCollection = {
+                    type: 'FeatureCollection',
+                    features: properties.geoscapeFeatures
+                };
+                // Use the normalized developableArea
+                geoscapeResult = scoringCriteria.geoscape.calculateScore(geoscapeFeatureCollection, developableArea);
+                geoscapeScore = geoscapeResult.score;
+                geoscapeText = scoringCriteria.geoscape.getScoreDescription(geoscapeResult);
+            }
 
-                // Process Street View data
-                const streetViewData = await getStreetViewData(geometry);
+            // Process Street View data
+            if (streetViewGeometry) {
+                const streetViewData = await getStreetViewData(streetViewGeometry);
                 if (streetViewData) {
                     streetViewScore = scoringCriteria.streetView.calculateScore(streetViewData);
                     streetViewText = scoringCriteria.streetView.getScoreDescription(streetViewScore, streetViewData);
                 }
-            } catch (error) {
-                console.error('Error getting utilisation data:', error);
             }
+        } catch (error) {
+            console.error('Error getting utilisation data:', error);
         }
 
         // Add Geoscape 3D Built Form map and score
@@ -325,11 +382,15 @@ export async function addUtilisationSlide(pptx, properties) {
         }));
 
         // Get Street View screenshot
-        if (!properties.streetViewScreenshot && properties.developableArea?.[0]) {
+        if (!properties.streetViewScreenshot && developableArea && developableArea.features && developableArea.features.length > 0) {
             try {
-                properties.streetViewScreenshot = await captureStreetViewScreenshot(properties.developableArea[0]);
+                // Create a proper feature for the street view screenshot function
+                const streetViewFeature = developableArea.features[0];
+                console.log('Using feature for Street View screenshot:', streetViewFeature);
+                properties.streetViewScreenshot = await captureStreetViewScreenshot(streetViewFeature, developableArea);
             } catch (error) {
                 console.error('Error capturing Street View screenshot:', error);
+                console.error('Error details:', error.stack);
             }
         }
 

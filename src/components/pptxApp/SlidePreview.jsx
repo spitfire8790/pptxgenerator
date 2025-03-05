@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
-const SlidePreview = ({ selectedFeature, screenshot }) => {
+const SlidePreview = ({ selectedFeature, selectedFeatures = [], screenshot }) => {
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
+  const [uniqueFeatures, setUniqueFeatures] = useState([]);
 
   const handleImageLoad = () => {
     setImageLoading(false);
@@ -12,6 +13,52 @@ const SlidePreview = ({ selectedFeature, screenshot }) => {
   const handleImageError = () => {
     setImageLoading(false);
     setImageError(true);
+  };
+  
+  // Process features to remove duplicates based on ID
+  useEffect(() => {
+    // Check if we have multiple features or just a single one
+    const hasMultipleFeatures = Array.isArray(selectedFeatures) && selectedFeatures.length > 0;
+    const initialFeatures = hasMultipleFeatures ? selectedFeatures : (selectedFeature ? [selectedFeature] : []);
+    
+    // Create a map to deduplicate features by ID
+    const featuresMap = new Map();
+    
+    initialFeatures.forEach(feature => {
+      // Generate a unique ID for each feature
+      const featureId = feature.id || 
+                      feature.properties?.copiedFrom?.id || 
+                      feature.properties?.id || 
+                      feature.properties?.copiedFrom?.OBJECTID ||
+                      getAddressFromFeature(feature); // Use address as fallback ID
+      
+      // Only add if we don't already have this feature
+      if (!featuresMap.has(featureId)) {
+        featuresMap.set(featureId, feature);
+      }
+    });
+    
+    // Convert map back to array
+    setUniqueFeatures(Array.from(featuresMap.values()));
+  }, [selectedFeature, selectedFeatures]);
+
+  // Helper function to get the address from a feature, handling various data formats
+  const getAddressFromFeature = (feature) => {
+    // First try to get address from copiedFrom.site__address which is the most reliable
+    const address = feature?.properties?.copiedFrom?.site__address;
+    if (address) return address;
+    
+    // If that's not available, try to construct from individual parts
+    const streetNumber = feature?.properties?.street_number;
+    const streetName = feature?.properties?.street_name;
+    if (streetNumber && streetName) {
+      return `${streetNumber} ${streetName}`;
+    }
+    
+    // Try other potential locations for address data
+    return feature?.properties?.address || 
+           feature?.properties?.copiedFrom?.address ||
+           'Address not available';
   };
 
   return (
@@ -80,9 +127,18 @@ const SlidePreview = ({ selectedFeature, screenshot }) => {
                 Audit of Government<br />Land For Housing
               </div>
               <div className="text-[#002664] text-[18px] mb-2">Desktop Due Diligence Report</div>
+              
+              {/* Address section - supports multiple addresses */}
               <div className="text-[#FFCC31] text-[18px]">
-                {selectedFeature?.properties?.copiedFrom?.site__address || 'Address not available'}
+                {uniqueFeatures.length === 0 && 'Address not available'}
+                
+                {uniqueFeatures.map((feature, index) => (
+                  <div key={index} className="mb-1">
+                    {getAddressFromFeature(feature)}
+                  </div>
+                ))}
               </div>
+              
               <div className="absolute bottom-8 text-[#363636] text-sm">
                 {new Date().toLocaleDateString('en-GB', {
                   year: 'numeric',

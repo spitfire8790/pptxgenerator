@@ -41,6 +41,32 @@ export async function proxyRequest(url, options = {}) {
           console.log('Moved query parameters to request body');
         }
       }
+    } else if (url.includes('arcgis') && (url.includes('/export') || url.includes('/MapServer'))) {
+      // Special handling for ArcGIS export and MapServer requests
+      console.log('ArcGIS Export or MapServer request detected');
+      
+      // Add specific headers for ArcGIS services
+      if (!options.headers) {
+        options.headers = {};
+      }
+      
+      // Add referer header to help with CORS issues
+      if (!options.headers['Referer']) {
+        options.headers['Referer'] = window.location.origin;
+        console.log('Added Referer header for ArcGIS service');
+      }
+      
+      // Add specific timeout for ArcGIS services
+      if (!options.timeout) {
+        options.timeout = 60000; // 60 seconds for ArcGIS services
+        console.log('Set extended timeout for ArcGIS service');
+      }
+      
+      // Log the specific ArcGIS service being called
+      const serviceMatch = url.match(/\/arcgis\/rest\/services\/([^\/]+)\/([^\/]+)/);
+      if (serviceMatch) {
+        console.log(`ArcGIS Service: ${serviceMatch[1]}/${serviceMatch[2]}`);
+      }
     }
     
     // Log the request details for debugging

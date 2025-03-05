@@ -48,15 +48,18 @@ const parseZoning = (zoningString, developableAreaZones = []) => {
     }
   }
 
-  // Add developable area zoning description
+  // If developable area zones are available, only return that description
   if (developableAreaZones && developableAreaZones.length > 0) {
-    const developableZoningText = developableAreaZones.length === 1
-      ? `The developable area is zoned ${developableAreaZones[0]}.`
-      : `The developable area is zoned ${developableAreaZones.slice(0, -1).join(', ')} and ${developableAreaZones[developableAreaZones.length - 1]}.`;
+    // Remove duplicates from developable area zones
+    const uniqueZones = [...new Set(developableAreaZones)];
     
-    return `${mainZoningDescription} ${developableZoningText}`;
+    // Return only the developable area zoning description
+    return uniqueZones.length === 1
+      ? `The developable area is zoned ${uniqueZones[0]}.`
+      : `The developable areas are zoned ${uniqueZones.slice(0, -1).join(', ')} and ${uniqueZones[uniqueZones.length - 1]}.`;
   }
 
+  // Only return the site zoning if no developable area zones
   return mainZoningDescription;
 };
 
@@ -123,7 +126,9 @@ const getDevelopableAreaFSR = async (geometry) => {
     
     const data = await response.json();
     if (data.features && data.features.length > 0) {
-      return data.features[0].attributes.FSR;
+      // Return all FSR values found, not just the first one
+      const fsrValues = data.features.map(f => f.attributes.FSR).filter(fsr => fsr !== null);
+      return fsrValues.length > 0 ? fsrValues : null;
     }
     return null;
   } catch (error) {
@@ -155,7 +160,9 @@ const getDevelopableAreaHoB = async (geometry) => {
     
     const data = await response.json();
     if (data.features && data.features.length > 0) {
-      return data.features[0].attributes.MAX_B_H;
+      // Return all HoB values found, not just the first one
+      const hobValues = data.features.map(f => f.attributes.MAX_B_H).filter(hob => hob !== null);
+      return hobValues.length > 0 ? hobValues : null;
     }
     return null;
   } catch (error) {
@@ -306,24 +313,58 @@ export async function addPlanningSlide(pptx, properties) {
   try {
     // Get developable area data if it exists
     let developableAreaZones = [];
-    let developableAreaFSR = null;
-    let developableAreaHoB = null;
+    let developableAreaFSRs = [];
+    let developableAreaHoBs = [];
     
-    if (properties.developableArea && properties.developableArea[0]) {
-      const geometry = {
-        rings: [properties.developableArea[0].geometry.coordinates[0]]
-      };
+    if (properties.developableArea && properties.developableArea.length > 0) {
+      // Process all developable areas
+      const developableAreaPromises = properties.developableArea.map(async (area, index) => {
+        const geometry = {
+          rings: [area.geometry.coordinates[0]]
+        };
+        
+        console.log(`Processing developable area ${index + 1}/${properties.developableArea.length}`);
+        
+        try {
+          const [zones, fsrValues, hobValues] = await Promise.all([
+            getDevelopableAreaZoning(geometry),
+            getDevelopableAreaFSR(geometry),
+            getDevelopableAreaHoB(geometry)
+          ]);
+          
+          return { 
+            zones, 
+            fsrValues: fsrValues || [], 
+            hobValues: hobValues || [] 
+          };
+        } catch (error) {
+          console.error(`Error getting data for developable area ${index + 1}:`, error);
+          return { zones: [], fsrValues: [], hobValues: [] };
+        }
+      });
       
-      try {
-        [developableAreaZones, developableAreaFSR, developableAreaHoB] = await Promise.all([
-          getDevelopableAreaZoning(geometry),
-          getDevelopableAreaFSR(geometry),
-          getDevelopableAreaHoB(geometry)
-        ]);
-      } catch (error) {
-        console.error('Error getting developable area data:', error);
-      }
+      // Wait for all promises to resolve
+      const developableAreaResults = await Promise.all(developableAreaPromises);
+      
+      // Combine results from all developable areas
+      developableAreaZones = developableAreaResults.flatMap(result => result.zones);
+      // Remove duplicates
+      developableAreaZones = [...new Set(developableAreaZones)];
+      
+      // Collect all FSR and HoB values
+      developableAreaFSRs = developableAreaResults.flatMap(result => result.fsrValues);
+      developableAreaHoBs = developableAreaResults.flatMap(result => result.hobValues);
+      
+      console.log('Combined developable area data:', {
+        zones: developableAreaZones,
+        fsrValues: developableAreaFSRs,
+        hobValues: developableAreaHoBs
+      });
     }
+
+    // Find the maximum FSR and HoB values for scoring and display
+    const developableAreaFSR = developableAreaFSRs.length > 0 ? Math.max(...developableAreaFSRs) : null;
+    const developableAreaHoB = developableAreaHoBs.length > 0 ? Math.max(...developableAreaHoBs) : null;
 
     // Add inside the try block after getting developable area data
     const planningScore = scoringCriteria.planning.calculateScore(
@@ -519,14 +560,22 @@ export async function addPlanningSlide(pptx, properties) {
       }));
 
       // Update FSR Description
-      const fsrDescription = properties.site_suitability__floorspace_ratio 
-        ? `The site has a maximum FSR of ${properties.site_suitability__floorspace_ratio}:1.` 
-        : 'The site has no FSR specified.';
-      const developableAreaFSRText = developableAreaFSR 
-        ? ` The developable area has a maximum FSR of ${developableAreaFSR}:1.` 
-        : '';
+      let fsrText = '';
+      if (developableAreaFSRs.length > 0) {
+        // If we have multiple different FSR values
+        if (new Set(developableAreaFSRs).size > 1) {
+          const fsrValues = [...new Set(developableAreaFSRs)].sort((a, b) => b - a); // Sort descending
+          fsrText = `The developable areas have FSR values of ${fsrValues.join(', ')}:1.`;
+        } else {
+          fsrText = `The developable area${properties.developableArea.length > 1 ? 's have' : ' has'} a maximum FSR of ${developableAreaFSR}:1.`;
+        }
+      } else if (properties.site_suitability__floorspace_ratio) {
+        fsrText = `The site has a maximum FSR of ${properties.site_suitability__floorspace_ratio}:1.`;
+      } else {
+        fsrText = 'The site has no FSR specified.';
+      }
       
-      slide.addText(fsrDescription + developableAreaFSRText, {
+      slide.addText(fsrText, {
         x: '36%',
         y: '75%',
         w: '28%',
@@ -616,14 +665,22 @@ export async function addPlanningSlide(pptx, properties) {
       }));
 
     // Update HoB Description
-    const hobDescription = properties.site_suitability__height_of_building 
-      ? `The site has a maximum HoB of ${properties.site_suitability__height_of_building} metres.` 
-      : 'The site has no HoB specified.';
-    const developableAreaHoBText = developableAreaHoB 
-      ? ` The developable area has a maximum HoB of ${developableAreaHoB} metres.` 
-      : '';
+    let hobText = '';
+    if (developableAreaHoBs.length > 0) {
+      // If we have multiple different HoB values
+      if (new Set(developableAreaHoBs).size > 1) {
+        const hobValues = [...new Set(developableAreaHoBs)].sort((a, b) => b - a); // Sort descending
+        hobText = `The developable areas have HoB values of ${hobValues.join(', ')} metres.`;
+      } else {
+        hobText = `The developable area${properties.developableArea.length > 1 ? 's have' : ' has'} a maximum HoB of ${developableAreaHoB} metres.`;
+      }
+    } else if (properties.site_suitability__height_of_building) {
+      hobText = `The site has a maximum HoB of ${properties.site_suitability__height_of_building} metres.`;
+    } else {
+      hobText = 'The site has no HoB specified.';
+    }
 
-    slide.addText(hobDescription + developableAreaHoBText, {
+    slide.addText(hobText, {
       x: '67%',
       y: '75%',
       w: '28%',

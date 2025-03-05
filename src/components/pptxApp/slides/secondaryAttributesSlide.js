@@ -1,6 +1,7 @@
 import { convertCmValues } from '../utils/units';
 import scoringCriteria from './scoringLogic';
 import { proxyRequest } from '../utils/services/proxyService';
+import * as turf from '@turf/turf';
 
 const getElevationData = async (geometry) => {
   const url = 'https://spatial.industry.nsw.gov.au/arcgis/rest/services/PUBLIC/Contours/MapServer/0/query';
@@ -271,19 +272,59 @@ export async function addSecondaryAttributesSlide(pptx, properties) {
     let contourScore = 0;
     let elevationChange = 0;
 
-    if (properties.developableArea && properties.developableArea[0]) {
-      const geometry = {
-        rings: [properties.developableArea[0].geometry.coordinates[0]]
-      };
-      const elevationData = await getElevationData(geometry);
-      if (elevationData === null) {
-        // No contours found - site is flat
-        contourScore = 3;
-        elevationText = 'The developable area is flat with no change in elevation.';
-      } else {
-        elevationChange = elevationData.max - elevationData.min;
-        contourScore = scoringCriteria.contours.calculateScore(elevationChange);
-        elevationText = `The developable area has a minimum elevation of ${elevationData.min} metres, maximum elevation of ${elevationData.max} metres, and change in elevation of ${elevationChange} metres.`;
+    if (properties.developableArea && properties.developableArea.length > 0) {
+      try {
+        // Process all developable areas instead of just the first one
+        let allElevations = [];
+        let hasElevationData = false;
+        
+        // Query elevation data for each developable area
+        for (const area of properties.developableArea) {
+          if (area.geometry && area.geometry.coordinates && area.geometry.coordinates[0]) {
+            const geometry = {
+              rings: [area.geometry.coordinates[0]]
+            };
+            const elevationData = await getElevationData(geometry);
+            
+            if (elevationData && elevationData.min !== undefined && elevationData.max !== undefined) {
+              hasElevationData = true;
+              // Add all elevations to our collection
+              allElevations.push(elevationData.min, elevationData.max);
+            }
+          }
+        }
+        
+        if (hasElevationData && allElevations.length > 0) {
+          // Calculate overall min and max from all developable areas
+          const minElevation = Math.min(...allElevations);
+          const maxElevation = Math.max(...allElevations);
+          elevationChange = maxElevation - minElevation;
+          
+          contourScore = scoringCriteria.contours.calculateScore(elevationChange);
+          elevationText = `The developable area${properties.developableArea.length > 1 ? 's have' : ' has'} a minimum elevation of ${minElevation} metres, maximum elevation of ${maxElevation} metres, and change in elevation of ${elevationChange} metres.`;
+        } else {
+          // No contours found - site is flat
+          contourScore = 3;
+          elevationText = `The developable area${properties.developableArea.length > 1 ? 's are' : ' is'} flat with no change in elevation.`;
+        }
+      } catch (error) {
+        console.error('Error processing developable area elevation data:', error);
+        // Fallback to site geometry
+        if (properties.site__geometry) {
+          const geometry = {
+            rings: [properties.site__geometry]
+          };
+          const elevationData = await getElevationData(geometry);
+          if (elevationData === null) {
+            // No contours found - site is flat
+            contourScore = 3;
+            elevationText = 'The site is flat with no change in elevation.';
+          } else {
+            elevationChange = elevationData.max - elevationData.min;
+            contourScore = scoringCriteria.contours.calculateScore(elevationChange);
+            elevationText = `The site has a minimum elevation of ${elevationData.min} metres, maximum elevation of ${elevationData.max} metres, and change in elevation of ${elevationChange} metres.`;
+          }
+        }
       }
     } else if (properties.site__geometry) {
       // Fallback to site geometry if no developable area
@@ -447,20 +488,95 @@ export async function addSecondaryAttributesSlide(pptx, properties) {
     let regularityScore = 0;
     let regularityText = 'Site regularity could not be assessed.';
 
-    if (properties.developableArea && properties.developableArea[0]) {
-      const geometry = {
-        type: 'Feature',
-        geometry: properties.developableArea[0].geometry
-      };
-      console.log('Developable area geometry:', JSON.stringify(geometry));
-      console.log('Developable area geometry details:', {
-        type: geometry.type,
-        coordinates: geometry.geometry.coordinates,
-        holes: geometry.geometry.coordinates.length > 1 ? 'Yes' : 'No',
-        vertexCount: geometry.geometry.coordinates[0].length
-      });
-      regularityScore = scoringCriteria.siteRegularity.calculateScore(geometry);
-      regularityText = `The developable area is ${regularityScore === 3 ? 'highly regular' : regularityScore === 2 ? 'moderately regular' : 'irregular'} in shape.`;
+    if (properties.developableArea && properties.developableArea.length > 0) {
+      try {
+        // If there are multiple developable areas, we need to assess each one
+        if (properties.developableArea.length > 1) {
+          // Calculate scores for each developable area
+          const areaScores = [];
+          const areaDetails = [];
+          
+          console.log(`Calculating regularity for ${properties.developableArea.length} developable areas`);
+          
+          for (let i = 0; i < properties.developableArea.length; i++) {
+            const area = properties.developableArea[i];
+            if (area.geometry) {
+              const geometry = {
+                type: 'Feature',
+                geometry: area.geometry
+              };
+              
+              console.log(`Processing developable area ${i+1}/${properties.developableArea.length}`);
+              
+              // Calculate area in square meters for reference
+              const areaInSqM = turf.area(geometry);
+              
+              const areaScore = scoringCriteria.siteRegularity.calculateScore(geometry);
+              areaScores.push(areaScore);
+              
+              // Store details for logging
+              areaDetails.push({
+                index: i,
+                score: areaScore,
+                areaInSqM: Math.round(areaInSqM),
+                vertexCount: area.geometry.coordinates[0].length
+              });
+              
+              console.log(`Area ${i+1} score: ${areaScore}/3 (${areaInSqM.toFixed(2)} sq m)`);
+            }
+          }
+          
+          console.log('Developable area regularity scores:', areaDetails);
+          
+          // Use the average score rounded to nearest integer
+          if (areaScores.length > 0) {
+            const avgScore = areaScores.reduce((sum, score) => sum + score, 0) / areaScores.length;
+            regularityScore = Math.round(avgScore);
+            
+            console.log(`Average regularity score: ${avgScore.toFixed(2)}, rounded to: ${regularityScore}`);
+            
+            // Create appropriate text based on multiple areas
+            regularityText = `The developable areas have varying regularity with an average score of ${avgScore.toFixed(1)}/3.`;
+          }
+        } else {
+          // Single developable area - use existing logic
+          const geometry = {
+            type: 'Feature',
+            geometry: properties.developableArea[0].geometry
+          };
+          
+          // Calculate area in square meters for reference
+          const areaInSqM = turf.area(geometry);
+          
+          console.log('Single developable area geometry:', JSON.stringify(geometry));
+          console.log('Developable area geometry details:', {
+            type: geometry.type,
+            coordinates: geometry.geometry.coordinates,
+            holes: geometry.geometry.coordinates.length > 1 ? 'Yes' : 'No',
+            vertexCount: geometry.geometry.coordinates[0].length,
+            areaInSqM: Math.round(areaInSqM)
+          });
+          
+          regularityScore = scoringCriteria.siteRegularity.calculateScore(geometry);
+          console.log(`Single area regularity score: ${regularityScore}/3 (${areaInSqM.toFixed(2)} sq m)`);
+          
+          regularityText = `The developable area is ${regularityScore === 3 ? 'highly regular' : regularityScore === 2 ? 'moderately regular' : 'irregular'} in shape.`;
+        }
+      } catch (error) {
+        console.error('Error calculating site regularity:', error);
+        // Fallback to site geometry
+        if (properties.site__geometry) {
+          const geometry = {
+            type: 'Feature',
+            geometry: {
+              type: 'Polygon',
+              coordinates: [properties.site__geometry]
+            }
+          };
+          regularityScore = scoringCriteria.siteRegularity.calculateScore(geometry);
+          regularityText = `The site is ${regularityScore === 3 ? 'highly regular' : regularityScore === 2 ? 'moderately regular' : 'irregular'} in shape.`;
+        }
+      }
     } else if (properties.site__geometry) {
       const geometry = {
         type: 'Feature',

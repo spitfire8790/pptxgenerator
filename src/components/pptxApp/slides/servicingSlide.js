@@ -156,10 +156,60 @@ export async function addServicingSlide(pptx, propertyData) {
     console.log('Water Features type:', typeof propertyData.waterFeatures);
     console.log('Water Features structure:', JSON.stringify(propertyData.waterFeatures, null, 2));
     console.log('Developable Area:', propertyData.developableArea);
-    const waterResult = scoringCriteria.water.calculateScore(propertyData.waterFeatures, propertyData.developableArea);
+    
+    // Check if we have developable areas and validate the format
+    let developableArea = null;
+    
+    // Ensure we have a properly formatted developable area
+    if (propertyData.developableArea) {
+      if (Array.isArray(propertyData.developableArea)) {
+        // If it's an array, convert it to a FeatureCollection
+        developableArea = {
+          type: 'FeatureCollection',
+          features: propertyData.developableArea.map(area => {
+            if (area.type === 'Feature') return area;
+            return { type: 'Feature', geometry: area };
+          })
+        };
+        console.log('Converted array of developable areas to FeatureCollection:', developableArea);
+      } else if (propertyData.developableArea.type === 'FeatureCollection' && propertyData.developableArea.features) {
+        // If it's already a FeatureCollection, use it directly
+        developableArea = propertyData.developableArea;
+        console.log('Using existing FeatureCollection:', developableArea);
+      } else if (propertyData.developableArea.type === 'Feature') {
+        // If it's a single Feature, wrap it in a FeatureCollection
+        developableArea = {
+          type: 'FeatureCollection',
+          features: [propertyData.developableArea]
+        };
+        console.log('Wrapped single Feature in FeatureCollection:', developableArea);
+      } else if (propertyData.developableArea.geometry) {
+        // If it's a geometry object, wrap it in a Feature and FeatureCollection
+        developableArea = {
+          type: 'FeatureCollection',
+          features: [{ type: 'Feature', geometry: propertyData.developableArea }]
+        };
+        console.log('Wrapped geometry in Feature and FeatureCollection:', developableArea);
+      } else {
+        console.error('Invalid developable area format:', propertyData.developableArea);
+      }
+    } else {
+      console.warn('No developable area found in propertyData');
+    }
+    
+    // Validate the FeatureCollection format
+    if (developableArea && (!developableArea.features || !Array.isArray(developableArea.features) || developableArea.features.length === 0)) {
+      console.error('Invalid FeatureCollection structure:', developableArea);
+      developableArea = null;
+    }
+    
+    // Log final developable area structure that will be used for scoring
+    console.log('Final developable area structure used for scoring:', JSON.stringify(developableArea, null, 2));
+    
+    const waterResult = scoringCriteria.water.calculateScore(propertyData.waterFeatures, developableArea);
     console.log('Water Result:', waterResult);
-    const sewerResult = scoringCriteria.sewer.calculateScore(propertyData.sewerFeatures, propertyData.developableArea);
-    const powerResult = scoringCriteria.power.calculateScore(propertyData.powerFeatures, propertyData.developableArea);
+    const sewerResult = scoringCriteria.sewer.calculateScore(propertyData.sewerFeatures, developableArea);
+    const powerResult = scoringCriteria.power.calculateScore(propertyData.powerFeatures, developableArea);
 
     // Store scores
     const waterScore = waterResult.score;
@@ -187,13 +237,18 @@ export async function addServicingSlide(pptx, propertyData) {
     const sewerDescription = scoringCriteria.sewer.getScoreDescription(sewerScore, sewerResult.minDistance);
     const powerDescription = scoringCriteria.power.getScoreDescription(powerScore, powerResult.minDistance);
 
+    // Determine fill colors based on scores (red if not within 20m, green if within 20m)
+    const waterFill = waterScore > 1 ? 'E6F2DE' : 'FFE6EA'; // Green if score > 1, red otherwise
+    const sewerFill = sewerScore > 1 ? 'E6F2DE' : 'FFE6EA'; // Green if score > 1, red otherwise
+    const powerFill = powerScore > 1 ? 'E6F2DE' : 'FFE6EA'; // Green if score > 1, red otherwise
+
     // Water Text Box
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
       x: '5%',
       y: '75%',
       w: '28%',
       h: '9%',
-      fill: waterScore === 1 ? 'E6F2DE' : 'FFE6EA',  // Light green if 1, light red if 0
+      fill: waterFill,  // Use dynamic color based on proximity
       line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
     }));
 
@@ -240,7 +295,7 @@ export async function addServicingSlide(pptx, propertyData) {
       y: '75%',
       w: '28%',
       h: '9%',
-      fill: sewerScore === 1 ? 'E6F2DE' : 'FFE6EA',  // Light green if 1, light red if 0
+      fill: sewerFill,  // Use dynamic color based on proximity
       line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
     }));
 
@@ -287,7 +342,7 @@ export async function addServicingSlide(pptx, propertyData) {
       y: '75%',
       w: '28%',
       h: '9%',
-      fill: powerScore === 1 ? 'E6F2DE' : 'FFE6EA',  // Light green if 1, light red if 0
+      fill: powerFill,  // Use dynamic color based on proximity
       line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
     }));
 
@@ -331,7 +386,7 @@ export async function addServicingSlide(pptx, propertyData) {
     // Add score container with dynamic color based on score
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
       ...styles.scoreContainer,
-      fill: scoringCriteria.servicing.getScoreColor(servicingScore)
+      fill: scoringCriteria.servicing.getScoreColor(servicingScore).replace('#', '')
     }));
 
     // Add score text

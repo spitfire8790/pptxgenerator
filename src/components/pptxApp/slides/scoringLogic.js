@@ -147,7 +147,9 @@ const scoringCriteria = {
         }
 
         // For a rectangle, all angles should be close to 90 degrees
-        const isRectangular = angles.every(angle => Math.abs(angle - 90) < 15);
+        // Increased tolerance from 15 to 25 degrees to be more lenient
+        const angleTolerance = 25;
+        const isRectangular = angles.every(angle => Math.abs(angle - 90) < angleTolerance);
         
         // Calculate area ratio as before
         const actualArea = turf.area(simplified);
@@ -156,24 +158,37 @@ const scoringCriteria = {
         const mbrArea = turf.area(bboxPolygon);
         const regularityRatio = actualArea / mbrArea;
         
+        // Log detailed information for debugging
         console.log('Site regularity calculation:', {
           actualArea,
           mbrArea,
           regularityRatio,
           angles,
+          anglesTolerance: angleTolerance,
           isRectangular,
           originalVertices: geometry.geometry.coordinates[0].length,
           simplifiedVertices: simplified.geometry.coordinates[0].length
         });
         
         // If shape is rectangular (based on angles), give it a high score
-        if (isRectangular && regularityRatio > 0.4) {
+        // Lowered the ratio requirement from 0.4 to 0.3
+        if (isRectangular && regularityRatio > 0.3) {
+          console.log('Shape is considered rectangular with ratio:', regularityRatio);
           return 3;
         }
         
         // Otherwise use the area ratio with adjusted thresholds
-        if (regularityRatio >= 0.75) return 3;
-        if (regularityRatio >= 0.60) return 2;
+        // Lowered thresholds to be more lenient
+        if (regularityRatio >= 0.65) {
+          console.log('High regularity ratio:', regularityRatio);
+          return 3;
+        }
+        if (regularityRatio >= 0.5) {
+          console.log('Medium regularity ratio:', regularityRatio);
+          return 2;
+        }
+        
+        console.log('Low regularity ratio:', regularityRatio);
         return 1;
         
       } catch (error) {
@@ -199,19 +214,43 @@ const scoringCriteria = {
   },
   heritage: {
     calculateScore: (heritageData) => {
+      // Now handling either a single item or an array of items
       if (!heritageData) return 3; // No heritage impact
       
-      const significance = heritageData.SIG?.toLowerCase();
-      
-      if (!significance) return 3; // No heritage significance specified
-      
-      if (significance.includes('state') || significance.includes('national')) {
-        return 1;
-      } else if (significance.includes('local')) {
-        return 2;
+      // If it's an array, process all items
+      if (Array.isArray(heritageData)) {
+        if (heritageData.length === 0) return 3; // Empty array, no impact
+        
+        // Find the lowest score (highest impact) across all areas
+        let lowestScore = 3;
+        
+        for (const data of heritageData) {
+          const significance = data.SIG?.toLowerCase();
+          
+          if (!significance) continue; // Skip items with no significance
+          
+          if (significance.includes('state') || significance.includes('national')) {
+            lowestScore = Math.min(lowestScore, 1);
+          } else if (significance.includes('local')) {
+            lowestScore = Math.min(lowestScore, 2);
+          }
+        }
+        
+        return lowestScore;
+      } else {
+        // Original logic for single item
+        const significance = heritageData.SIG?.toLowerCase();
+        
+        if (!significance) return 3; // No heritage significance specified
+        
+        if (significance.includes('state') || significance.includes('national')) {
+          return 1;
+        } else if (significance.includes('local')) {
+          return 2;
+        }
+        
+        return 3; // Default to no heritage impact if significance is unknown
       }
-      
-      return 3; // Default to no heritage impact if significance is unknown
     },
     getScoreDescription: (score) => {
       switch (score) {
@@ -231,52 +270,173 @@ const scoringCriteria = {
   },
   acidSulfateSoils: {
     calculateScore: (soilsData) => {
-      if (!soilsData || !soilsData.LAY_CLASS) return 3; // No acid sulfate soils impact
+      // Now handling either a single item or an array of items
+      if (!soilsData) return 3; // No acid sulfate soils impact
       
-      const classes = soilsData.LAY_CLASS.split(',').map(c => c.trim());
-      
-      // Check for Class 1 or other high risk classifications (high risk)
-      if (classes.some(c => 
-        c === 'Class 1' || 
-        c === 'Class 2' || 
-        c === 'Disturbed terrain' || 
-        c === 'High probability at or near the ground surface'
-      )) {
-        return 1;
+      // If it's an array, process all items
+      if (Array.isArray(soilsData)) {
+        if (soilsData.length === 0) return 3; // Empty array, no impact
+        
+        // Find the lowest score (highest impact) across all areas
+        let lowestScore = 3;
+        
+        for (const data of soilsData) {
+          if (!data.LAY_CLASS) continue; // Skip items with no LAY_CLASS
+          
+          const classes = data.LAY_CLASS.split(',').map(c => c.trim());
+          
+          // Check for Class 1 or other high risk classifications (high risk)
+          if (classes.some(c => 
+            c === 'Class 1' || 
+            c === 'Class 2' || 
+            c === 'Disturbed terrain' || 
+            c === 'High probability at or near the ground surface'
+          )) {
+            lowestScore = Math.min(lowestScore, 1);
+            continue;
+          }
+          
+          // Check for Class 3, 4, 5 or other medium risk classifications
+          if (classes.some(c => 
+            c === 'Class 3' || 
+            c === 'Class 4' || 
+            c === 'Class 5' ||
+            c === 'Class 2a' ||
+            c === 'Class 2b' ||
+            c === 'High probability within 1 m of the ground surface' ||
+            c === 'High probability of bottom sediments below water level' ||
+            c === 'Acid Sulfate Soil Area (land up to 5 metres AHD)' ||
+            c === 'Buffer Area (land greater than 5 metres but less then 10 metres AHD or within 170 metres of Acid Su*'
+          )) {
+            lowestScore = Math.min(lowestScore, 2);
+          }
+        }
+        
+        return lowestScore;
+      } else {
+        // Original logic for single item
+        if (!soilsData.LAY_CLASS) return 3;
+        
+        const classes = soilsData.LAY_CLASS.split(',').map(c => c.trim());
+        
+        // Check for Class 1 or other high risk classifications (high risk)
+        if (classes.some(c => 
+          c === 'Class 1' || 
+          c === 'Class 2' || 
+          c === 'Disturbed terrain' || 
+          c === 'High probability at or near the ground surface'
+        )) {
+          return 1;
+        }
+        
+        // Check for Class 3, 4, 5 or other medium risk classifications
+        if (classes.some(c => 
+          c === 'Class 3' || 
+          c === 'Class 4' || 
+          c === 'Class 5' ||
+          c === 'Class 2a' ||
+          c === 'Class 2b' ||
+          c === 'High probability within 1 m of the ground surface' ||
+          c === 'High probability of bottom sediments below water level' ||
+          c === 'Acid Sulfate Soil Area (land up to 5 metres AHD)' ||
+          c === 'Buffer Area (land greater than 5 metres but less then 10 metres AHD or within 170 metres of Acid Su*'
+        )) {
+          return 2;
+        }
+        
+        return 3; // Default to no impact if class is unknown
       }
-      
-      // Check for Class 3, 4, 5 or other medium risk classifications
-      if (classes.some(c => 
-        c === 'Class 3' || 
-        c === 'Class 4' || 
-        c === 'Class 5' ||
-        c === 'Class 2a' ||
-        c === 'Class 2b' ||
-        c === 'High probability within 1 m of the ground surface' ||
-        c === 'High probability of bottom sediments below water level' ||
-        c === 'Acid Sulfate Soil Area (land up to 5 metres AHD)' ||
-        c === 'Buffer Area (land greater than 5 metres but less then 10 metres AHD or within 170 metres of Acid Su*'
-      )) {
-        return 2;
-      }
-      
-      return 3; // Default to no impact if class is unknown
     },
     getScoreDescription: (score, soilsData) => {
-      if (!soilsData || !soilsData.LAY_CLASS) {
+      if (!soilsData) {
         return "Developable area is not impacted by acid sulfate soils.";
       }
       
-      const classes = soilsData.LAY_CLASS.split(',').map(c => c.trim()).join(', ');
-      
-      switch (score) {
-        case 3:
+      // Handle array of soil data
+      if (Array.isArray(soilsData)) {
+        if (soilsData.length === 0) {
           return "Developable area is not impacted by acid sulfate soils.";
-        case 2:
-        case 1:
-          return `Developable area is impacted by ${classes} Acid Sulfate Soils.`;
-        default:
-          return "Acid sulfate soils impact not assessed.";
+        }
+        
+        // For arrays, find the most significant soil data (with lowest score)
+        let significantSoilData = null;
+        
+        // First try to find Class 1 or 2 (score 1)
+        if (score === 1) {
+          significantSoilData = soilsData.find(data => {
+            if (!data.LAY_CLASS) return false;
+            const classes = data.LAY_CLASS.split(',').map(c => c.trim());
+            return classes.some(c => 
+              c === 'Class 1' || 
+              c === 'Class 2' || 
+              c === 'Disturbed terrain' || 
+              c === 'High probability at or near the ground surface'
+            );
+          });
+        }
+        
+        // If not found and score is 2, look for medium risk classes
+        if (!significantSoilData && score === 2) {
+          significantSoilData = soilsData.find(data => {
+            if (!data.LAY_CLASS) return false;
+            const classes = data.LAY_CLASS.split(',').map(c => c.trim());
+            return classes.some(c => 
+              c === 'Class 3' || 
+              c === 'Class 4' || 
+              c === 'Class 5' ||
+              c === 'Class 2a' ||
+              c === 'Class 2b' ||
+              c === 'High probability within 1 m of the ground surface' ||
+              c === 'High probability of bottom sediments below water level' ||
+              c === 'Acid Sulfate Soil Area (land up to 5 metres AHD)' ||
+              c === 'Buffer Area (land greater than 5 metres but less then 10 metres AHD or within 170 metres of Acid Su*'
+            );
+          });
+        }
+        
+        // If we found significant soil data, use it
+        if (significantSoilData && significantSoilData.LAY_CLASS) {
+          const classes = significantSoilData.LAY_CLASS.split(',').map(c => c.trim()).join(', ');
+          
+          switch (score) {
+            case 3:
+              return "Developable area is not impacted by acid sulfate soils.";
+            case 2:
+            case 1:
+              return `Developable area is impacted by ${classes} Acid Sulfate Soils.`;
+            default:
+              return "Acid sulfate soils impact not assessed.";
+          }
+        }
+        
+        // If no specific data found but we have a score
+        switch (score) {
+          case 3:
+            return "Developable area is not impacted by acid sulfate soils.";
+          case 2:
+            return "Developable area is impacted by medium risk acid sulfate soils.";
+          case 1:
+            return "Developable area is impacted by high risk acid sulfate soils.";
+          default:
+            return "Acid sulfate soils impact not assessed.";
+        }
+      } else {
+        // Original logic for single item
+        if (!soilsData.LAY_CLASS) {
+          return "Developable area is not impacted by acid sulfate soils.";
+        }
+        
+        const classes = soilsData.LAY_CLASS.split(',').map(c => c.trim()).join(', ');
+        
+        switch (score) {
+          case 3:
+            return "Developable area is not impacted by acid sulfate soils.";
+          case 2:
+          case 1:
+            return `Developable area is impacted by ${classes} Acid Sulfate Soils.`;
+          default:
+            return "Acid sulfate soils impact not assessed.";
+        }
       }
     },
     getScoreColor: (score) => {
@@ -284,7 +444,57 @@ const scoringCriteria = {
     }
   },
   ptal: {
-    calculateScore: (ptalValues) => {
+    calculateScore: (ptalValues, featurePTALs) => {
+      console.log('=== PTAL Score Calculation Start ===');
+      console.log('PTAL values:', ptalValues);
+      console.log('Feature PTALs:', featurePTALs);
+      
+      // Check if we have feature-specific PTAL values
+      if (featurePTALs && Array.isArray(featurePTALs)) {
+        console.log('Processing PTAL for multiple features');
+        
+        // Find the best PTAL value across all features
+        let bestPtalScore = 1;
+        
+        featurePTALs.forEach(featurePtal => {
+          const featureValues = featurePtal.ptalValues || [];
+          
+          // Get the highest PTAL value from this feature
+          const highestPtal = featureValues.reduce((highest, current) => {
+            const valueMap = {
+              '6 - Very High': 6,
+              '5 - High': 5,
+              '4 - Medium-High': 4,
+              '3 - Medium': 3,
+              '2 - Low-Medium': 2,
+              '1 - Low': 1
+            };
+            
+            const currentValue = valueMap[current] || 0;
+            const highestValue = valueMap[highest] || 0;
+            
+            return currentValue > highestValue ? current : highest;
+          }, featureValues[0]);
+          
+          // Score based on highest PTAL value
+          let featureScore = 1;
+          if (highestPtal === '6 - Very High' || highestPtal === '5 - High') {
+            featureScore = 3;
+          } else if (highestPtal === '4 - Medium-High' || highestPtal === '3 - Medium') {
+            featureScore = 2;
+          }
+          
+          // Update best score if this feature has a better score
+          if (featureScore > bestPtalScore) {
+            bestPtalScore = featureScore;
+          }
+        });
+        
+        console.log('Best PTAL score across all features:', bestPtalScore);
+        return bestPtalScore;
+      }
+      
+      // Original approach for single feature or fallback
       if (!ptalValues || ptalValues.length === 0) return 1;
       
       // Get the highest PTAL value from the intersecting values
@@ -318,7 +528,73 @@ const scoringCriteria = {
       
       return 1;
     },
-    getScoreDescription: (score, ptalValues) => {
+    getScoreDescription: (score, ptalValues, featurePTALs) => {
+      // Check if we have feature-specific PTAL values
+      if (featurePTALs && Array.isArray(featurePTALs)) {
+        // Find the best PTAL feature
+        let bestFeature = null;
+        let bestPtalValue = null;
+        
+        featurePTALs.forEach(featurePtal => {
+          const featureValues = featurePtal.ptalValues || [];
+          
+          // Skip empty features
+          if (featureValues.length === 0) return;
+          
+          // Get the highest PTAL value from this feature
+          const highestPtal = featureValues.reduce((highest, current) => {
+            const valueMap = {
+              '6 - Very High': 6,
+              '5 - High': 5,
+              '4 - Medium-High': 4,
+              '3 - Medium': 3,
+              '2 - Low-Medium': 2,
+              '1 - Low': 1
+            };
+            
+            const currentValue = valueMap[current] || 0;
+            const highestValue = valueMap[highest] || 0;
+            
+            return currentValue > highestValue ? current : highest;
+          }, featureValues[0]);
+          
+          // Check if this is the best PTAL value we've seen
+          const valueMap = {
+            '6 - Very High': 6,
+            '5 - High': 5,
+            '4 - Medium-High': 4,
+            '3 - Medium': 3,
+            '2 - Low-Medium': 2,
+            '1 - Low': 1
+          };
+          
+          const currentValue = valueMap[highestPtal] || 0;
+          const bestValue = bestPtalValue ? (valueMap[bestPtalValue] || 0) : 0;
+          
+          if (currentValue > bestValue) {
+            bestFeature = featurePtal.featureIndex;
+            bestPtalValue = highestPtal;
+          }
+        });
+        
+        // Create description based on best feature
+        if (bestFeature !== null && bestPtalValue) {
+          const featureText = `The site`;
+          
+          switch (score) {
+            case 3:
+              return `${featureText} has good public transport access: PTAL (8:00-9:00 AM) = ${bestPtalValue}`;
+            case 2:
+              return `${featureText} has moderate public transport access: PTAL (8:00-9:00 AM) = ${bestPtalValue}`;
+            case 1:
+              return `${featureText} has low public transport access: PTAL (8:00-9:00 AM) = ${bestPtalValue}`;
+            default:
+              return "PTAL not assessed";
+          }
+        }
+      }
+      
+      // Original approach for single feature
       if (!ptalValues || ptalValues.length === 0) {
         return "PTAL not assessed";
       }
@@ -406,6 +682,7 @@ const scoringCriteria = {
             
             // Add polygon to array for intersection checking
             developablePolygons.push(developablePolygon);
+            console.log(`Processed developable area ${index+1}`);
           } catch (error) {
             console.error(`Error processing developable area feature ${index}:`, error);
           }
@@ -423,33 +700,87 @@ const scoringCriteria = {
         const relevantFeatures = [];
         console.log('Processing geoscape features...');
         
-        geoscapeFeatures.features.forEach((feature, index) => {
-          console.log(`\nProcessing feature ${index + 1}:`, feature);
-          if (feature.geometry?.type === 'Polygon' || feature.geometry?.type === 'MultiPolygon') {
-            try {
-              let featurePolygon = feature;
-              console.log(`Feature ${index + 1} area before intersection:`, turf.area(featurePolygon), 'square meters');
-              
-              // First check if the feature is within or intersects the developable area
-              const containsFeature = turf.booleanContains(developablePolygon, featurePolygon);
-              
-              if (containsFeature) {
-                // If developable area contains feature, use feature area
-                const featureArea = turf.area(featurePolygon);
-                geoscapeArea += featureArea;
-                relevantFeatures.push(feature);
-                console.log(`Feature ${index + 1} is contained within developable area, using feature area:`, featureArea);
-              } else {
-                console.log(`Feature ${index + 1} is not within developable area`);
-              }
-            } catch (error) {
-              console.error(`Error processing feature ${index + 1}:`, error);
-              console.error('Feature geometry:', feature.geometry);
-            }
+        try {
+          if (!geoscapeFeatures.features || !Array.isArray(geoscapeFeatures.features)) {
+            console.error('No valid features array in geoscapeFeatures:', geoscapeFeatures);
           } else {
-            console.log(`Feature ${index + 1} is not a Polygon/MultiPolygon: ${feature.geometry?.type}`);
+            geoscapeFeatures.features.forEach((feature, index) => {
+              try {
+                console.log(`\nProcessing feature ${index + 1}:`, feature);
+                if (feature.geometry?.type === 'Polygon' || feature.geometry?.type === 'MultiPolygon') {
+                  try {
+                    let featurePolygon = feature;
+                    console.log(`Feature ${index + 1} area before intersection:`, turf.area(featurePolygon), 'square meters');
+                    
+                    // Check if the feature intersects ANY of the developable areas
+                    let includeFeature = false;
+                    let featureArea = 0;
+                    
+                    // Check each developable area for intersections
+                    for (const developablePolygon of developablePolygons) {
+                      try {
+                        // Check if feature is completely contained within the developable area
+                        const containsFeature = turf.booleanContains(developablePolygon, featurePolygon);
+                        
+                        if (containsFeature) {
+                          // If developable area completely contains the feature, use the entire feature area
+                          featureArea = turf.area(featurePolygon);
+                          includeFeature = true;
+                          console.log(`Feature ${index + 1} is completely contained within a developable area, using full feature area:`, featureArea);
+                          break;
+                        }
+                        
+                        // Check if feature partially overlaps the developable area
+                        const overlapsFeature = turf.booleanOverlap(developablePolygon, featurePolygon);
+                        
+                        if (overlapsFeature) {
+                          // Calculate the actual intersection area for overlapping features
+                          try {
+                            const intersection = turf.intersect(developablePolygon, featurePolygon);
+                            
+                            if (intersection) {
+                              // Calculate area of the intersection polygon
+                              const intersectionArea = turf.area(intersection);
+                              featureArea = intersectionArea;
+                              includeFeature = true;
+                              console.log(`Feature ${index + 1} partially overlaps a developable area, using intersection area:`, featureArea);
+                              break;
+                            }
+                          } catch (intersectError) {
+                            console.error(`Error calculating intersection for feature ${index + 1}:`, intersectError);
+                            // Fallback to using the entire feature area
+                            featureArea = turf.area(featurePolygon);
+                            includeFeature = true;
+                            console.log(`Failed to calculate intersection area for feature ${index + 1}, falling back to full feature area:`, featureArea);
+                            break;
+                          }
+                        }
+                      } catch (checkError) {
+                        console.error(`Error checking feature ${index + 1} against developable area:`, checkError);
+                      }
+                    }
+                    
+                    if (includeFeature) {
+                      geoscapeArea += featureArea;
+                      relevantFeatures.push(feature);
+                    } else {
+                      console.log(`Feature ${index + 1} is not within any developable area`);
+                    }
+                  } catch (error) {
+                    console.error(`Error processing feature ${index + 1}:`, error);
+                    console.error('Feature geometry:', feature.geometry);
+                  }
+                } else {
+                  console.log(`Feature ${index + 1} is not a Polygon/MultiPolygon: ${feature.geometry?.type}`);
+                }
+              } catch (featureError) {
+                console.error(`Error processing feature at index ${index}:`, featureError);
+              }
+            });
           }
-        });
+        } catch (featuresError) {
+          console.error('Error processing features array:', featuresError);
+        }
 
         console.log('\nTotal geoscape feature area:', geoscapeArea, 'square meters');
 
@@ -467,7 +798,7 @@ const scoringCriteria = {
           console.log('Coverage < 20% - Score: 2');
         } else {
           score = 1;
-          console.log('Coverage >= 50% - Score: 1');
+          console.log('Coverage >= 20% - Score: 1');
         }
 
         console.log('=== Final Result ===');
@@ -492,27 +823,55 @@ const scoringCriteria = {
 
       // Find the tallest building height if there are features
       let maxHeight = 0;
+      let buildingCount = 0;
+      
       if (features?.length > 0) {
         features.forEach(feature => {
-          const height = parseFloat(feature.properties?.roof_heigh) || 0;
-          maxHeight = Math.max(maxHeight, height);
+          buildingCount++;
+          
+          // Check multiple possible height fields in the properties
+          // Different data sources may use different field names
+          const heightFields = ['roof_heigh', 'MAX_ROOF_H', 'MAX_HEIGHT', 'roofheight', 'height', 'HEIGHT'];
+          let buildingHeight = 0;
+          
+          for (const field of heightFields) {
+            if (feature.properties && feature.properties[field] !== undefined) {
+              const height = parseFloat(feature.properties[field]) || 0;
+              if (height > 0) {
+                buildingHeight = height;
+                break;
+              }
+            }
+          }
+          
+          // If no specific height field was found, try a default value
+          if (buildingHeight === 0 && feature.properties?.type === 'building') {
+            // Assume a default single-story building height (4m) if no height is specified
+            buildingHeight = 4;
+          }
+          
+          maxHeight = Math.max(maxHeight, buildingHeight);
         });
       }
 
       let description = '';
       if (score === 3) {
-        description = "Developable area has no building coverage.";
+        description = "Developable areas have no building coverage.";
       } else if (score === 2) {
-        description = `Developable area has limited building coverage (${coverage.toFixed(1)}%).`;
+        description = `Developable areas have limited building coverage (${coverage.toFixed(1)}%).`;
       } else if (score === 1) {
-        description = `Developable area has significant building coverage (${coverage.toFixed(1)}%).`;
+        description = `Developable areas have significant building coverage (${coverage.toFixed(1)}%).`;
       } else {
         return "Building coverage not assessed";
       }
 
-      // Add height information if buildings exist
-      if (maxHeight > 0) {
-        description += ` Tallest building is ${maxHeight.toFixed(1)}m.`;
+      // Add height and building count information if buildings exist
+      if (buildingCount > 0) {
+        description += ` Found ${buildingCount} building${buildingCount !== 1 ? 's' : ''}.`;
+        
+        if (maxHeight > 0) {
+          description += ` Tallest building is ${maxHeight.toFixed(1)}m.`;
+        }
       }
 
       return description;
@@ -611,10 +970,11 @@ const scoringCriteria = {
             
             // Transform coordinates and create buffered polygon for this feature
             const transformedPolygon = turf.transformScale(developablePolygon, 1, { units: 'meters' });
+            // Changed buffer to 20m as requested
             const bufferedPolygon = turf.buffer(transformedPolygon, 20, { units: 'meters' });
             
             developablePolygons.push(bufferedPolygon);
-            console.log(`Processed developable area ${index+1}: Created buffered polygon`);
+            console.log(`Processed developable area ${index+1}: Created buffered polygon with 20m buffer`);
           } catch (error) {
             console.error(`Error processing developable area feature ${index}:`, error);
           }
@@ -625,36 +985,41 @@ const scoringCriteria = {
           return { score: 0, minDistance: Infinity };
         }
         
-        // Check intersections
+        // Check intersections with any developable area
         let intersectionFound = false;
-        features.forEach((feature, index) => {
-          console.log(`\nChecking water feature ${index}:`, feature);
-          console.log(`Water feature ${index} coordinates:`, feature.geometry?.coordinates);
+        let minDistance = Infinity;
+        
+        // For each water feature
+        features.forEach((feature, featureIndex) => {
+          console.log(`\nChecking water feature ${featureIndex}:`, feature);
+          console.log(`Water feature ${featureIndex} coordinates:`, feature.geometry?.coordinates);
           
           if (feature.geometry?.type === 'LineString' || feature.geometry?.type === 'MultiLineString') {
             const line = turf.lineString(feature.geometry.coordinates);
             console.log('Created line:', line);
             console.log('Line coordinates:', line.geometry.coordinates);
-        
-            const intersects = turf.booleanIntersects(bufferedPolygon, line);
-            console.log(`Intersection result for feature ${index}:`, intersects);
-            console.log('Intersection test between:', {
-              bufferedPolygonCoords: bufferedPolygon.geometry.coordinates[0],
-              lineCoords: line.geometry.coordinates
+            
+            // Check against each developable area
+            developablePolygons.forEach((bufferedPolygon, areaIndex) => {
+              console.log(`Testing against developable area ${areaIndex}`);
+              
+              const intersects = turf.booleanIntersects(bufferedPolygon, line);
+              console.log(`Intersection result for feature ${featureIndex} with area ${areaIndex}:`, intersects);
+              
+              if (intersects) {
+                intersectionFound = true;
+                minDistance = 0; // If intersects, distance is 0
+                console.log(`Found intersection with area ${areaIndex} - will return score 3`);
+              }
             });
-        
-            if (intersects) {
-              intersectionFound = true;
-              console.log('Found intersection - will return score 1');
-            }
           } else {
-            console.log(`Feature ${index} is not a LineString:`, feature.geometry?.type);
+            console.log(`Feature ${featureIndex} is not a LineString:`, feature.geometry?.type);
           }
         });
 
         const result = {
-          score: intersectionFound ? 1 : 0,
-          minDistance: intersectionFound ? 0 : Infinity
+          score: intersectionFound ? 3 : 1,  // Changed score to 3 if within 20m, 1 if not
+          minDistance: minDistance
         };
 
         console.log('=== Final Result ===');
@@ -671,9 +1036,9 @@ const scoringCriteria = {
     },
     getScoreDescription: (score, minDistance) => {
       switch (score) {
-        case 1:
+        case 3:
           return "Developable area has water servicing within 20m";
-        case 0:
+        case 1:
           return "Developable area has no water servicing within 20m";
         default:
           return "Water servicing not assessed";
@@ -693,59 +1058,102 @@ const scoringCriteria = {
       console.log('developableArea type:', typeof developableArea);
       console.log('developableArea:', JSON.stringify(developableArea, null, 2));
 
+      // Handle null/undefined developableArea
+      if (!developableArea || !developableArea.features || developableArea.features.length === 0) {
+        console.log('No valid developable area provided - returning score 0');
+        return { score: 0, minDistance: Infinity };
+      }
+
       // Handle both direct features array and FeatureCollection format
       const features = Array.isArray(sewerFeatures) ? sewerFeatures : sewerFeatures?.features || [];
       console.log('Processed features:', features);
 
-      if (!features?.length || !developableArea?.[0]) {
-        console.log('Missing required inputs - returning 0 score');
+      if (!features?.length) {
+        console.log('No sewer features found - returning score 0');
         return { score: 0, minDistance: Infinity };
       }
 
       try {
-        const developableCoords = developableArea[0].geometry.coordinates[0];
-        console.log('Developable area coordinates:', developableCoords);
+        // Process all developable area features
+        const developablePolygons = [];
         
-        const developablePolygon = turf.polygon([developableCoords]);
-        console.log('Created developable polygon:', developablePolygon);
+        // Process each feature in the developable area
+        developableArea.features.forEach((feature, index) => {
+          try {
+            if (!feature.geometry || !feature.geometry.coordinates) {
+              console.log(`Skipping developable area feature ${index} - invalid geometry`);
+              return;
+            }
+
+            // For polygon coordinates, we need at least one ring with at least 3 points
+            const developableCoords = feature.geometry.coordinates;
+            
+            if (!Array.isArray(developableCoords[0]) || !Array.isArray(developableCoords[0][0]) || developableCoords[0].length < 3) {
+              console.error(`Invalid developable area polygon structure for feature ${index}:`, developableCoords);
+              return;
+            }
+            
+            // Create a valid GeoJSON polygon
+            const developablePolygon = turf.polygon(developableCoords);
+            
+            // Validate the created polygon
+            if (!turf.booleanValid(developablePolygon)) {
+              console.error(`Invalid developable polygon geometry for feature ${index}`);
+              return;
+            }
+            
+            // Transform coordinates and create buffered polygon for this feature
+            const transformedPolygon = turf.transformScale(developablePolygon, 1, { units: 'meters' });
+            // Changed buffer to 20m as requested
+            const bufferedPolygon = turf.buffer(transformedPolygon, 20, { units: 'meters' });
+            
+            developablePolygons.push(bufferedPolygon);
+            console.log(`Processed developable area ${index+1}: Created buffered polygon with 20m buffer`);
+          } catch (error) {
+            console.error(`Error processing developable area feature ${index}:`, error);
+          }
+        });
+
+        if (developablePolygons.length === 0) {
+          console.error('No valid developable polygons found');
+          return { score: 0, minDistance: Infinity };
+        }
         
-        // Transform coordinates to EPSG:3857 if they are in EPSG:4326
-        const transformedPolygon = turf.transformScale(developablePolygon, 1, { units: 'meters' });
-        console.log('Transformed polygon:', transformedPolygon);
-        
-        const bufferedPolygon = turf.buffer(transformedPolygon, 20, { units: 'meters' });
-        console.log('Buffered polygon:', bufferedPolygon);
-        
-        // Check intersections
+        // Check intersections with any developable area
         let intersectionFound = false;
-        features.forEach((feature, index) => {
-          console.log(`\nChecking sewer feature ${index}:`, feature);
-          console.log(`Sewer feature ${index} coordinates:`, feature.geometry?.coordinates);
+        let minDistance = Infinity;
+        
+        // For each sewer feature
+        features.forEach((feature, featureIndex) => {
+          console.log(`\nChecking sewer feature ${featureIndex}:`, feature);
+          console.log(`Sewer feature ${featureIndex} coordinates:`, feature.geometry?.coordinates);
           
           if (feature.geometry?.type === 'LineString' || feature.geometry?.type === 'MultiLineString') {
             const line = turf.lineString(feature.geometry.coordinates);
             console.log('Created line:', line);
             console.log('Line coordinates:', line.geometry.coordinates);
-        
-            const intersects = turf.booleanIntersects(bufferedPolygon, line);
-            console.log(`Intersection result for feature ${index}:`, intersects);
-            console.log('Intersection test between:', {
-              bufferedPolygonCoords: bufferedPolygon.geometry.coordinates[0],
-              lineCoords: line.geometry.coordinates
+            
+            // Check against each developable area
+            developablePolygons.forEach((bufferedPolygon, areaIndex) => {
+              console.log(`Testing against developable area ${areaIndex}`);
+              
+              const intersects = turf.booleanIntersects(bufferedPolygon, line);
+              console.log(`Intersection result for feature ${featureIndex} with area ${areaIndex}:`, intersects);
+              
+              if (intersects) {
+                intersectionFound = true;
+                minDistance = 0; // If intersects, distance is 0
+                console.log(`Found intersection with area ${areaIndex} - will return score 3`);
+              }
             });
-        
-            if (intersects) {
-              intersectionFound = true;
-              console.log('Found intersection - will return score 1');
-            }
           } else {
-            console.log(`Feature ${index} is not a LineString:`, feature.geometry?.type);
+            console.log(`Feature ${featureIndex} is not a LineString:`, feature.geometry?.type);
           }
         });
 
         const result = {
-          score: intersectionFound ? 1 : 0,
-          minDistance: intersectionFound ? 0 : Infinity
+          score: intersectionFound ? 3 : 1,  // Changed score to 3 if within 20m, 1 if not
+          minDistance: minDistance
         };
 
         console.log('=== Final Result ===');
@@ -762,9 +1170,9 @@ const scoringCriteria = {
     },
     getScoreDescription: (score, minDistance) => {
       switch (score) {
-        case 1:
+        case 3:
           return "Developable area has sewer servicing within 20m";
-        case 0:
+        case 1:
           return "Developable area has no sewer servicing within 20m";
         default:
           return "Sewer servicing not assessed";
@@ -784,59 +1192,102 @@ const scoringCriteria = {
       console.log('developableArea type:', typeof developableArea);
       console.log('developableArea:', JSON.stringify(developableArea, null, 2));
 
+      // Handle null/undefined developableArea
+      if (!developableArea || !developableArea.features || developableArea.features.length === 0) {
+        console.log('No valid developable area provided - returning score 0');
+        return { score: 0, minDistance: Infinity };
+      }
+
       // Handle both direct features array and FeatureCollection format
       const features = Array.isArray(powerFeatures) ? powerFeatures : powerFeatures?.features || [];
       console.log('Processed features:', features);
 
-      if (!features?.length || !developableArea?.[0]) {
-        console.log('Missing required inputs - returning 0 score');
+      if (!features?.length) {
+        console.log('No power features found - returning score 0');
         return { score: 0, minDistance: Infinity };
       }
 
       try {
-        const developableCoords = developableArea[0].geometry.coordinates[0];
-        console.log('Developable area coordinates:', developableCoords);
+        // Process all developable area features
+        const developablePolygons = [];
         
-        const developablePolygon = turf.polygon([developableCoords]);
-        console.log('Created developable polygon:', developablePolygon);
+        // Process each feature in the developable area
+        developableArea.features.forEach((feature, index) => {
+          try {
+            if (!feature.geometry || !feature.geometry.coordinates) {
+              console.log(`Skipping developable area feature ${index} - invalid geometry`);
+              return;
+            }
+
+            // For polygon coordinates, we need at least one ring with at least 3 points
+            const developableCoords = feature.geometry.coordinates;
+            
+            if (!Array.isArray(developableCoords[0]) || !Array.isArray(developableCoords[0][0]) || developableCoords[0].length < 3) {
+              console.error(`Invalid developable area polygon structure for feature ${index}:`, developableCoords);
+              return;
+            }
+            
+            // Create a valid GeoJSON polygon
+            const developablePolygon = turf.polygon(developableCoords);
+            
+            // Validate the created polygon
+            if (!turf.booleanValid(developablePolygon)) {
+              console.error(`Invalid developable polygon geometry for feature ${index}`);
+              return;
+            }
+            
+            // Transform coordinates and create buffered polygon for this feature
+            const transformedPolygon = turf.transformScale(developablePolygon, 1, { units: 'meters' });
+            // Changed buffer to 20m as requested
+            const bufferedPolygon = turf.buffer(transformedPolygon, 20, { units: 'meters' });
+            
+            developablePolygons.push(bufferedPolygon);
+            console.log(`Processed developable area ${index+1}: Created buffered polygon with 20m buffer`);
+          } catch (error) {
+            console.error(`Error processing developable area feature ${index}:`, error);
+          }
+        });
+
+        if (developablePolygons.length === 0) {
+          console.error('No valid developable polygons found');
+          return { score: 0, minDistance: Infinity };
+        }
         
-        // Transform coordinates to EPSG:3857 if they are in EPSG:4326
-        const transformedPolygon = turf.transformScale(developablePolygon, 1, { units: 'meters' });
-        console.log('Transformed polygon:', transformedPolygon);
-        
-        const bufferedPolygon = turf.buffer(transformedPolygon, 20, { units: 'meters' });
-        console.log('Buffered polygon:', bufferedPolygon);
-        
-        // Check intersections
+        // Check intersections with any developable area
         let intersectionFound = false;
-        features.forEach((feature, index) => {
-          console.log(`\nChecking power feature ${index}:`, feature);
-          console.log(`Power feature ${index} coordinates:`, feature.geometry?.coordinates);
+        let minDistance = Infinity;
+        
+        // For each power feature
+        features.forEach((feature, featureIndex) => {
+          console.log(`\nChecking power feature ${featureIndex}:`, feature);
+          console.log(`Power feature ${featureIndex} coordinates:`, feature.geometry?.coordinates);
           
           if (feature.geometry?.type === 'LineString' || feature.geometry?.type === 'MultiLineString') {
             const line = turf.lineString(feature.geometry.coordinates);
             console.log('Created line:', line);
             console.log('Line coordinates:', line.geometry.coordinates);
-        
-            const intersects = turf.booleanIntersects(bufferedPolygon, line);
-            console.log(`Intersection result for feature ${index}:`, intersects);
-            console.log('Intersection test between:', {
-              bufferedPolygonCoords: bufferedPolygon.geometry.coordinates[0],
-              lineCoords: line.geometry.coordinates
+            
+            // Check against each developable area
+            developablePolygons.forEach((bufferedPolygon, areaIndex) => {
+              console.log(`Testing against developable area ${areaIndex}`);
+              
+              const intersects = turf.booleanIntersects(bufferedPolygon, line);
+              console.log(`Intersection result for feature ${featureIndex} with area ${areaIndex}:`, intersects);
+              
+              if (intersects) {
+                intersectionFound = true;
+                minDistance = 0; // If intersects, distance is 0
+                console.log(`Found intersection with area ${areaIndex} - will return score 3`);
+              }
             });
-        
-            if (intersects) {
-              intersectionFound = true;
-              console.log('Found intersection - will return score 1');
-            }
           } else {
-            console.log(`Feature ${index} is not a LineString:`, feature.geometry?.type);
+            console.log(`Feature ${featureIndex} is not a LineString:`, feature.geometry?.type);
           }
         });
 
         const result = {
-          score: intersectionFound ? 1 : 0,
-          minDistance: intersectionFound ? 0 : Infinity
+          score: intersectionFound ? 3 : 1,  // Changed score to 3 if within 20m, 1 if not
+          minDistance: minDistance
         };
 
         console.log('=== Final Result ===');
@@ -853,9 +1304,9 @@ const scoringCriteria = {
     },
     getScoreDescription: (score, minDistance) => {
       switch (score) {
-        case 1:
+        case 3:
           return "Developable area has power servicing within 20m";
-        case 0:
+        case 1:
           return "Developable area has no power servicing within 20m";
         default:
           return "Power servicing not assessed";
@@ -872,8 +1323,17 @@ const scoringCriteria = {
       const sewer = typeof sewerScore === 'object' ? sewerScore.score : sewerScore;
       const power = typeof powerScore === 'object' ? powerScore.score : powerScore;
       
-      // Sum up the individual scores (each will be 0 or 1)
-      return water + sewer + power;
+      // Count how many services are available within 20m
+      // Each service will be either 3 (within 20m) or 1 (not within 20m)
+      let count = 0;
+      if (water === 3) count++;
+      if (sewer === 3) count++;
+      if (power === 3) count++;
+      
+      // Return the appropriate score: 3 for all services, 2 for some, 1 for none
+      if (count === 3) return 3;
+      if (count > 0) return 2;
+      return 1;
     },
     getScoreDescription: (waterScore, sewerScore, powerScore) => {
       // Extract scores from result objects if they exist
@@ -882,33 +1342,34 @@ const scoringCriteria = {
       const power = typeof powerScore === 'object' ? powerScore.score : powerScore;
 
       const services = [];
-      if (water === 1) services.push('water');
-      if (sewer === 1) services.push('sewer');
-      if (power === 1) services.push('power');
+      if (water === 3) services.push('water');
+      if (sewer === 3) services.push('sewer');
+      if (power === 3) services.push('power');
 
       if (services.length === 0) {
-        return "No servicing infrastructure found";
+        return "Limited servicing infrastructure - additional infrastructure may be required";
       }
       
       if (services.length === 1) {
-        return `Site has ${services[0]} servicing`;
+        return `Site has ${services[0]} servicing within 20m`;
       }
       
       if (services.length === 2) {
-        return `Site has ${services[0]} and ${services[1]} servicing`;
+        return `Site has ${services[0]} and ${services[1]} servicing within 20m`;
       }
       
-      return `Site has water, sewer and power servicing`;
+      return `Site has water, sewer and power servicing within 20m`;
     },
     getScoreColor: (score) => {
       return scoreColors[score] || scoreColors[0];
     }
   },
   roads: {
-    calculateScore: (roadFeatures, developableArea) => {
+    calculateScore: (roadFeatures, developableArea, allProperties = null) => {
       console.log('=== Roads Score Calculation Start ===');
       console.log('Raw road features:', JSON.stringify(roadFeatures, null, 2));
       console.log('Raw developable area:', JSON.stringify(developableArea, null, 2));
+      console.log('All properties:', allProperties ? allProperties.length : 'none');
 
       if (!developableArea?.[0]) {
         console.log('No developable area - returning score 0');
@@ -916,72 +1377,98 @@ const scoringCriteria = {
       }
 
       try {
-        const developableCoords = developableArea[0].geometry.coordinates[0];
-        console.log('Developable coordinates:', developableCoords);
+        // Process all developable areas
+        const nearbyRoadsForAllAreas = [];
         
-        const developablePolygon = turf.polygon([developableCoords]);
-        console.log('Created developable polygon:', JSON.stringify(developablePolygon, null, 2));
-        
-        // Increase buffer distance to 20 meters to ensure we catch nearby roads
-        const bufferDistance = 20;
-        console.log(`Creating buffer of ${bufferDistance} meters around developable area`);
-        
-        const bufferedPolygon = turf.buffer(developablePolygon, bufferDistance, { units: 'meters' });
-        console.log('Buffered polygon:', JSON.stringify(bufferedPolygon, null, 2));
-        
-        // Find intersecting roads
-        const nearbyRoads = [];
-        
-        // Handle both direct features array and FeatureCollection format
-        const features = Array.isArray(roadFeatures) ? roadFeatures : 
-                        roadFeatures?.features || 
-                        (roadFeatures?.properties?.roadFeatures || []);
-        
-        console.log(`Processing ${features.length} road features`);
+        // Handle all developable areas
+        for (let areaIndex = 0; areaIndex < developableArea.length; areaIndex++) {
+          console.log(`Processing developable area ${areaIndex + 1}...`);
+          const developableCoords = developableArea[areaIndex].geometry.coordinates[0];
+          
+          const developablePolygon = turf.polygon([developableCoords]);
+          console.log(`Created developable polygon ${areaIndex + 1}`);
+          
+          // Increase buffer distance to 20 meters to ensure we catch nearby roads
+          const bufferDistance = 20;
+          console.log(`Creating buffer of ${bufferDistance} meters around developable area ${areaIndex + 1}`);
+          
+          const bufferedPolygon = turf.buffer(developablePolygon, bufferDistance, { units: 'meters' });
+          
+          // Find intersecting roads for this area
+          const nearbyRoadsForThisArea = [];
+          
+          // Handle both direct features array and FeatureCollection format
+          const features = Array.isArray(roadFeatures) ? roadFeatures : 
+                          roadFeatures?.features || 
+                          (roadFeatures?.properties?.roadFeatures || []);
+          
+          console.log(`Processing ${features.length} road features for area ${areaIndex + 1}`);
 
-        features.forEach((feature, index) => {
-          console.log(`\nAnalyzing road feature ${index}:`, {
-            type: feature.geometry?.type,
-            properties: feature.properties
-          });
+          features.forEach((feature, index) => {
+            if (feature.geometry?.type === 'LineString' || feature.geometry?.type === 'MultiLineString') {
+              try {
+                const line = turf.lineString(feature.geometry.coordinates);
+                
+                const intersects = turf.booleanIntersects(bufferedPolygon, line);
 
-          if (feature.geometry?.type === 'LineString' || feature.geometry?.type === 'MultiLineString') {
-            try {
-              const line = turf.lineString(feature.geometry.coordinates);
-              console.log(`Road ${index} coordinates:`, feature.geometry.coordinates);
-              
-              const intersects = turf.booleanIntersects(bufferedPolygon, line);
-              console.log(`Road ${index} intersection result:`, intersects);
-
-              if (intersects) {
-                const roadInfo = {
-                  name: feature.properties?.ROADNAMEST || 'Unnamed Road',
-                  function: feature.properties?.FUNCTION || 'Unknown',
-                  laneCount: parseInt(feature.properties?.LANECOUNT) || 0
-                };
-                nearbyRoads.push(roadInfo);
-                console.log(`Found nearby road:`, roadInfo);
+                if (intersects) {
+                  const roadInfo = {
+                    name: feature.properties?.ROADNAMEST || 'Unnamed Road',
+                    function: feature.properties?.FUNCTION || 'Unknown',
+                    laneCount: parseInt(feature.properties?.LANECOUNT) || 0
+                  };
+                  nearbyRoadsForThisArea.push(roadInfo);
+                  console.log(`Found nearby road for area ${areaIndex + 1}:`, roadInfo);
+                }
+              } catch (error) {
+                console.error(`Error processing road feature ${index}:`, error);
               }
-            } catch (error) {
-              console.error(`Error processing road feature ${index}:`, error);
             }
-          } else {
-            console.log(`Skipping feature ${index} - invalid geometry type:`, feature.geometry?.type);
-          }
-        });
-
-        console.log('\nNearby roads found:', nearbyRoads);
-
-        if (nearbyRoads.length === 0) {
-          console.log('No nearby roads found - returning score 1');
-          return { score: 1, nearbyRoads: [] };
+          });
+          
+          // Add area-specific roads to the combined list
+          nearbyRoadsForAllAreas.push({
+            areaIndex,
+            nearbyRoads: nearbyRoadsForThisArea
+          });
+        }
+        
+        console.log('\nNearby roads for all areas:', nearbyRoadsForAllAreas);
+        
+        // If we have no nearby roads for any area, return low score
+        if (nearbyRoadsForAllAreas.every(area => area.nearbyRoads.length === 0)) {
+          console.log('No nearby roads found for any developable area - returning score 1');
+          return { score: 1, nearbyRoads: [], nearbyRoadsByArea: nearbyRoadsForAllAreas };
         }
 
-        const hasMultipleLanes = nearbyRoads.some(road => road.laneCount >= 2);
+        // Calculate overall score by checking if ANY developable area has roads with multiple lanes
+        const hasMultipleLanes = nearbyRoadsForAllAreas.some(area => 
+          area.nearbyRoads.some(road => road.laneCount >= 2)
+        );
+        
+        // Flatten all roads for description purposes
+        const allNearbyRoads = nearbyRoadsForAllAreas.flatMap(area => area.nearbyRoads);
+        
+        // Remove duplicates based on road name and function
+        const uniqueRoads = [];
+        const roadKeys = new Set();
+        
+        allNearbyRoads.forEach(road => {
+          const key = `${road.name}|${road.function}`;
+          if (!roadKeys.has(key)) {
+            roadKeys.add(key);
+            uniqueRoads.push(road);
+          }
+        });
+        
         const score = hasMultipleLanes ? 3 : 2;
         console.log(`Final score: ${score} (Multiple lanes: ${hasMultipleLanes})`);
 
-        return { score, nearbyRoads };
+        return { 
+          score, 
+          nearbyRoads: uniqueRoads,
+          nearbyRoadsByArea: nearbyRoadsForAllAreas
+        };
       } catch (error) {
         console.error('Error calculating roads score:', error);
         console.error('Error stack:', error.stack);
@@ -1001,14 +1488,14 @@ const scoringCriteria = {
         if (roadDescriptions.length === 0) {
           return "Road information not available";
         } else if (roadDescriptions.length === 1) {
-          return `Site is accessed via ${roadDescriptions[0]}.`;
+          return `The developable areas are accessed via ${roadDescriptions[0]}.`;
         } else {
           const lastRoad = roadDescriptions.pop();
-          return `Site is accessed via ${roadDescriptions.join(', ')} and ${lastRoad}.`;
+          return `The developable areas are accessed via ${roadDescriptions.join(', ')} and ${lastRoad}.`;
         }
       }
 
-      return "Site does not have road access.";
+      return "The developable areas do not have road access.";
     },
     getScoreColor: (score) => {
       return scoreColors[score] || scoreColors[0];
@@ -1022,150 +1509,208 @@ const scoringCriteria = {
       console.log('developableArea:', JSON.stringify(developableArea, null, 2));
 
       // Check for LMR overlap first (this takes precedence if present)
+      // Look for both direct overlap and developable area overlap
       const lmrOverlap = precinctFeatures?.lmrOverlap || 
-                         (precinctFeatures?.properties?.lmrOverlap) || 
-                         { hasOverlap: false, primaryOverlap: null };
+                        (precinctFeatures?.properties?.lmrOverlap) || 
+                        { hasOverlap: false, primaryOverlap: null };
+      
+      // Also check for developable area LMR overlap that's stored separately
+      const devAreaLmrOverlap = precinctFeatures?.developableAreaLmrOverlap || 
+                               (precinctFeatures?.properties?.developableAreaLmrOverlap) || 
+                               [];
       
       console.log('LMR overlap data:', lmrOverlap);
+      console.log('Developable area LMR overlap:', devAreaLmrOverlap);
       
-      // If we have LMR overlap, return score 3 immediately
-      if (lmrOverlap.hasOverlap && lmrOverlap.primaryOverlap) {
-        console.log('Property overlaps with LMR area:', lmrOverlap.primaryOverlap);
+      // Check if any developable area is within LMR/TOD area
+      const hasDevAreaInLmr = devAreaLmrOverlap.some(overlap => overlap.hasOverlap && overlap.primaryOverlap);
+      const lmrAreaName = hasDevAreaInLmr ? 
+                         devAreaLmrOverlap.find(o => o.hasOverlap)?.primaryOverlap : 
+                         lmrOverlap.primaryOverlap;
+      
+      // If we have direct LMR overlap or any developable area is in an LMR zone, return score 3
+      if ((lmrOverlap.hasOverlap && lmrOverlap.primaryOverlap) || hasDevAreaInLmr) {
+        console.log('Property or developable area overlaps with LMR area:', lmrAreaName);
         return { 
           score: 3, 
           minDistance: 0, 
           nearestPrecinct: null,
-          lmrOverlap: lmrOverlap
+          lmrOverlap: lmrOverlap,
+          devAreaLmrOverlap: devAreaLmrOverlap,
+          hasDevAreaInLmr
         };
       }
 
       if (!developableArea?.[0]) {
         console.log('No developable area - returning score 0');
-        return { score: 0, minDistance: Infinity, nearestPrecinct: null, lmrOverlap };
+        return { 
+          score: 0, 
+          minDistance: Infinity, 
+          nearestPrecinct: null, 
+          lmrOverlap, 
+          devAreaLmrOverlap 
+        };
       }
 
       try {
-        const developableCoords = developableArea[0].geometry.coordinates[0];
-        console.log('Developable coordinates:', developableCoords);
+        // Process each developable area to find closest UDP precinct
+        const areaResults = [];
         
-        const developablePolygon = turf.polygon([developableCoords]);
-        console.log('Created developable polygon:', JSON.stringify(developablePolygon, null, 2));
+        for (let areaIndex = 0; areaIndex < developableArea.length; areaIndex++) {
+          console.log(`Processing developable area ${areaIndex + 1}...`);
+          const developableCoords = developableArea[areaIndex].geometry.coordinates[0];
+          const developablePolygon = turf.polygon([developableCoords]);
+          
+          // Handle both direct features array and FeatureCollection format
+          const features = Array.isArray(precinctFeatures) ? precinctFeatures : 
+                          precinctFeatures?.features || [];
+          
+          console.log(`Processing ${features.length} precinct features for area ${areaIndex + 1}`);
 
-        // Handle both direct features array and FeatureCollection format
-        const features = Array.isArray(precinctFeatures) ? precinctFeatures : 
-                        precinctFeatures?.features || [];
-        
-        console.log(`Processing ${features.length} precinct features`);
+          let minDistance = Infinity;
+          let nearestPrecinct = null;
+          let intersectionFound = false;
 
-        let minDistance = Infinity;
-        let nearestPrecinct = null;
-        let intersectionFound = false;
+          features.forEach((feature, index) => {
+            if (!feature.geometry) return;
 
-        features.forEach((feature, index) => {
-          if (!feature.geometry) return;
+            try {
+              if (feature.geometry.type === 'MultiPolygon') {
+                // For MultiPolygon, check each polygon
+                feature.geometry.coordinates.forEach((polygonCoords, polyIndex) => {
+                  const polygon = turf.polygon(polygonCoords);
+                  
+                  // First check for intersection
+                  const intersects = turf.booleanIntersects(developablePolygon, polygon);
+                  
+                  if (intersects) {
+                    intersectionFound = true;
+                    minDistance = 0;
+                    nearestPrecinct = feature.properties?.Precinct_Name || null;
+                    return;
+                  }
 
-          try {
-            if (feature.geometry.type === 'MultiPolygon') {
-              // For MultiPolygon, check each polygon
-              feature.geometry.coordinates.forEach((polygonCoords, polyIndex) => {
-                console.log(`Processing polygon ${polyIndex + 1} of MultiPolygon ${index + 1}`);
-                const polygon = turf.polygon(polygonCoords);
+                  // If no intersection, calculate minimum distance between boundaries
+                  if (!intersectionFound) {
+                    const distance = turf.distance(
+                      turf.nearestPoint(turf.centerOfMass(developablePolygon), turf.explode(polygon)),
+                      turf.nearestPoint(turf.centerOfMass(polygon), turf.explode(developablePolygon)),
+                      { units: 'meters' }
+                    );
+                    
+                    if (distance < minDistance) {
+                      minDistance = distance;
+                      nearestPrecinct = feature.properties?.Precinct_Name || null;
+                    }
+                  }
+                });
+              } else if (feature.geometry.type === 'Polygon') {
+                const precinctPolygon = turf.polygon(feature.geometry.coordinates);
                 
                 // First check for intersection
-                const intersects = turf.booleanIntersects(developablePolygon, polygon);
-                console.log(`Polygon ${polyIndex + 1} intersects:`, intersects);
+                const intersects = turf.booleanIntersects(developablePolygon, precinctPolygon);
                 
                 if (intersects) {
                   intersectionFound = true;
                   minDistance = 0;
                   nearestPrecinct = feature.properties?.Precinct_Name || null;
-                  console.log('Found intersection - setting minDistance to 0');
                   return;
                 }
 
                 // If no intersection, calculate minimum distance between boundaries
                 if (!intersectionFound) {
                   const distance = turf.distance(
-                    turf.nearestPoint(turf.centerOfMass(developablePolygon), turf.explode(polygon)),
-                    turf.nearestPoint(turf.centerOfMass(polygon), turf.explode(developablePolygon)),
+                    turf.nearestPoint(turf.centerOfMass(developablePolygon), turf.explode(precinctPolygon)),
+                    turf.nearestPoint(turf.centerOfMass(precinctPolygon), turf.explode(developablePolygon)),
                     { units: 'meters' }
                   );
                   
                   if (distance < minDistance) {
                     minDistance = distance;
                     nearestPrecinct = feature.properties?.Precinct_Name || null;
-                    console.log('New minimum distance found:', minDistance.toFixed(2), 'm');
                   }
                 }
-              });
-            } else if (feature.geometry.type === 'Polygon') {
-              console.log(`Processing regular polygon ${index + 1}`);
-              const precinctPolygon = turf.polygon(feature.geometry.coordinates);
-              
-              // First check for intersection
-              const intersects = turf.booleanIntersects(developablePolygon, precinctPolygon);
-              console.log(`Polygon ${index + 1} intersects:`, intersects);
-              
-              if (intersects) {
-                intersectionFound = true;
-                minDistance = 0;
-                nearestPrecinct = feature.properties?.Precinct_Name || null;
-                console.log('Found intersection - setting minDistance to 0');
-                return;
               }
-
-              // If no intersection, calculate minimum distance between boundaries
-              if (!intersectionFound) {
-                const distance = turf.distance(
-                  turf.nearestPoint(turf.centerOfMass(developablePolygon), turf.explode(precinctPolygon)),
-                  turf.nearestPoint(turf.centerOfMass(precinctPolygon), turf.explode(developablePolygon)),
-                  { units: 'meters' }
-                );
-                
-                if (distance < minDistance) {
-                  minDistance = distance;
-                  nearestPrecinct = feature.properties?.Precinct_Name || null;
-                  console.log('New minimum distance found:', minDistance.toFixed(2), 'm');
-                }
-              }
+            } catch (error) {
+              console.error(`Error processing precinct feature ${index}:`, error);
             }
-          } catch (error) {
-            console.error(`Error processing precinct feature ${index}:`, error);
-          }
-        });
-
-        let score;
+          });
+          
+          areaResults.push({
+            areaIndex,
+            minDistance,
+            nearestPrecinct,
+            intersectionFound
+          });
+        }
+        
+        console.log('Results for all developable areas:', areaResults);
+        
+        // Find best result across all areas (closest to UDP precinct)
+        const bestResult = areaResults.reduce((best, current) => {
+          return current.minDistance < best.minDistance ? current : best;
+        }, { minDistance: Infinity, nearestPrecinct: null });
+        
         // Check for LMR proximity (if we don't have direct overlap)
         // We'll use the pixel counts to estimate proximity to LMR areas
         const hasNearbyLMR = Object.values(lmrOverlap.pixelCounts || {}).some(count => count > 0);
         
-        if (minDistance === 0 || minDistance <= 800) {
+        let score;
+        if (bestResult.minDistance === 0 || bestResult.minDistance <= 800) {
           score = 3;
-        } else if (minDistance <= 1600 || hasNearbyLMR) {
+        } else if (bestResult.minDistance <= 1600 || hasNearbyLMR) {
           score = 2;
         } else {
           score = 1;
         }
 
-        console.log('\nFinal result:', { score, minDistance, nearestPrecinct, lmrOverlap, hasNearbyLMR });
-        return { score, minDistance, nearestPrecinct, lmrOverlap, hasNearbyLMR };
+        console.log('\nFinal result:', { 
+          score, 
+          bestResult,
+          lmrOverlap, 
+          hasNearbyLMR 
+        });
+        
+        return { 
+          score, 
+          minDistance: bestResult.minDistance, 
+          nearestPrecinct: bestResult.nearestPrecinct,
+          lmrOverlap, 
+          hasNearbyLMR,
+          developableAreaResults: areaResults
+        };
       } catch (error) {
         console.error('Error calculating UDP precincts score:', error);
         console.error('Error stack:', error.stack);
-        return { score: 0, minDistance: Infinity, nearestPrecinct: null, lmrOverlap };
+        return { 
+          score: 0, 
+          minDistance: Infinity, 
+          nearestPrecinct: null, 
+          lmrOverlap,
+          devAreaLmrOverlap
+        };
       }
     },
     getScoreDescription: (scoreObj) => {
-      const { score, minDistance, nearestPrecinct, lmrOverlap, hasNearbyLMR } = scoreObj;
+      const { score, minDistance, nearestPrecinct, lmrOverlap, hasNearbyLMR, hasDevAreaInLmr, developableAreaResults } = scoreObj;
       
       // Check for LMR overlap first (highest priority)
-      if (lmrOverlap?.hasOverlap && lmrOverlap.primaryOverlap) {
+      if (hasDevAreaInLmr) {
+        const lmrAreaName = scoreObj.devAreaLmrOverlap.find(o => o.hasOverlap)?.primaryOverlap;
+        return `One or more developable areas are within a ${lmrAreaName}.`;
+      } else if (lmrOverlap?.hasOverlap && lmrOverlap.primaryOverlap) {
         return `The site is within a ${lmrOverlap.primaryOverlap}.`;
       }
       
-      // Special case for when the site is within a precinct
-      if (minDistance === 0) {
-        return `The developable area is within a UDP growth precinct (${nearestPrecinct}).`;
+      // Special case for when any developable area is within a precinct
+      if (developableAreaResults && developableAreaResults.some(result => result.intersectionFound)) {
+        const inPrecinctAreas = developableAreaResults.filter(result => result.intersectionFound);
+        if (inPrecinctAreas.length === 1) {
+          return `Developable area ${inPrecinctAreas[0].areaIndex + 1} is within a UDP growth precinct (${inPrecinctAreas[0].nearestPrecinct}).`;
+        } else {
+          const areaNumbers = inPrecinctAreas.map(area => area.areaIndex + 1).join(', ');
+          return `Multiple developable areas (${areaNumbers}) are within UDP growth precincts.`;
+        }
       }
       
       // Format distance based on value for other cases
@@ -1178,14 +1723,14 @@ const scoringCriteria = {
       
       switch (score) {
         case 3:
-          return `Developable area is within ${formattedDistance} of a UDP growth precinct (${nearestPrecinct}).`;
+          return `The closest developable area is within ${formattedDistance} of a UDP growth precinct (${nearestPrecinct}).`;
         case 2:
           if (hasNearbyLMR) {
-            return `Developable area is in close proximity to a TOD area or LMR area.`;
+            return `The developable areas are in close proximity to a TOD area or LMR area.`;
           }
-          return `Developable area is within ${formattedDistance} of a UDP growth precinct (${nearestPrecinct}).`;
+          return `The closest developable area is within ${formattedDistance} of a UDP growth precinct (${nearestPrecinct}).`;
         case 1:
-          return `Developable area is greater than 1.6 kilometres from a UDP precinct. Additionally, the site is not in a TOD area or LMR area.`;
+          return `All developable areas are greater than 1.6 kilometres from a UDP precinct. Additionally, the site is not in a TOD area or LMR area.`;
         default:
           return "UDP precinct proximity not assessed";
       }
@@ -1201,155 +1746,155 @@ const scoringCriteria = {
       console.log('floodFeatures:', JSON.stringify(floodFeatures, null, 2));
       console.log('developableArea:', JSON.stringify(developableArea, null, 2));
 
-      if (!developableArea?.[0]) {
+      if (!developableArea || !developableArea.length) {
         console.log('No developable area - returning score 0');
         return { score: 0, minDistance: Infinity };
       }
 
       try {
-        const developableCoords = developableArea[0].geometry.coordinates[0];
-        console.log('Developable coordinates:', developableCoords);
+        // Process all developable areas
+        const areaResults = [];
         
-        const developablePolygon = turf.polygon([developableCoords]);
-        console.log('Created developable polygon:', JSON.stringify(developablePolygon, null, 2));
-
-        // Handle both direct features array and FeatureCollection format
-        const features = Array.isArray(floodFeatures) ? floodFeatures : 
-                        floodFeatures?.features || 
-                        (floodFeatures?.properties?.floodFeatures || []);
-        
-        console.log(`Processing ${features.length} flood features`);
-
-        // First check if developable area intersects with any flood features
-        let intersectionFound = false;
-        let minDistance = Infinity;
-
-        features.forEach((feature, index) => {
-          if (!feature.geometry) return;
-
+        // Process each feature in the developable area
+        for (let areaIndex = 0; areaIndex < developableArea.length; areaIndex++) {
           try {
-            if (feature.geometry.type === 'MultiPolygon') {
-              // For MultiPolygon, check each polygon
-              feature.geometry.coordinates.forEach((polygonCoords, polyIndex) => {
-                console.log(`\nProcessing polygon ${polyIndex + 1} of MultiPolygon ${index + 1}`);
-                const polygon = turf.polygon(polygonCoords);
-                const intersects = turf.booleanIntersects(developablePolygon, polygon);
-                console.log(`Polygon ${polyIndex + 1} intersects:`, intersects);
-                
-                if (intersects) {
-                  intersectionFound = true;
-                  minDistance = 0;
-                  console.log('Found intersection - setting minDistance to 0');
-                  return;
-                }
+            if (!developableArea[areaIndex].geometry || !developableArea[areaIndex].geometry.coordinates) {
+              console.log(`Skipping developable area feature ${areaIndex} - invalid geometry`);
+              continue;
+            }
+            
+            const developableCoords = developableArea[areaIndex].geometry.coordinates[0];
+            console.log(`Developable coordinates for area ${areaIndex}:`, developableCoords);
+            
+            const developablePolygon = turf.polygon([developableCoords]);
+            console.log(`Created developable polygon for area ${areaIndex}:`, JSON.stringify(developablePolygon, null, 2));
 
-                // Calculate minimum distance between polygon boundaries
-                try {
-                  // Create points along the boundaries of both polygons
-                  const developablePoints = turf.explode(developablePolygon);
-                  const floodPoints = turf.explode(polygon);
-                  
-                  // Find the nearest points between the two sets of points
-                  developablePoints.features.forEach(dPoint => {
-                    floodPoints.features.forEach(fPoint => {
-                      const distance = turf.distance(dPoint, fPoint, { units: 'meters' });
-                      if (distance < minDistance) {
-                        minDistance = distance;
-                        console.log('New minimum distance found:', minDistance.toFixed(2), 'm');
-                      }
-                    });
-                  });
-                } catch (distError) {
-                  console.error('Error calculating distance:', distError);
-                }
-              });
-            } else if (feature.geometry.type === 'Polygon') {
-              // For regular Polygon
-              console.log(`\nProcessing regular polygon ${index + 1}`);
-              const floodPolygon = turf.polygon(feature.geometry.coordinates);
-              const intersects = turf.booleanIntersects(developablePolygon, floodPolygon);
-              console.log(`Polygon ${index + 1} intersects:`, intersects);
-              
-              if (intersects) {
-                intersectionFound = true;
-                minDistance = 0;
-                console.log('Found intersection - setting minDistance to 0');
-                return;
-              }
+            // Handle both direct features array and FeatureCollection format
+            const features = Array.isArray(floodFeatures) ? floodFeatures : 
+                            floodFeatures?.features || 
+                            (floodFeatures?.properties?.floodFeatures || []);
+            
+            console.log(`Processing ${features.length} flood features for area ${areaIndex}`);
 
-              // Calculate minimum distance between polygon boundaries
+            // First check if developable area intersects with any flood features
+            let intersectionFound = false;
+            let minDistance = Infinity;
+
+            features.forEach((feature, index) => {
+              if (!feature.geometry) return;
+
               try {
-                // Create points along the boundaries of both polygons
-                const developablePoints = turf.explode(developablePolygon);
-                const floodPoints = turf.explode(floodPolygon);
-                
-                // Find the nearest points between the two sets of points
-                developablePoints.features.forEach(dPoint => {
-                  floodPoints.features.forEach(fPoint => {
-                    const distance = turf.distance(dPoint, fPoint, { units: 'meters' });
-                    if (distance < minDistance) {
-                      minDistance = distance;
-                      console.log('New minimum distance found:', minDistance.toFixed(2), 'm');
+                if (feature.geometry.type === 'MultiPolygon') {
+                  // For MultiPolygon, check each polygon
+                  feature.geometry.coordinates.forEach((polygonCoords, polyIndex) => {
+                    console.log(`\nProcessing polygon ${polyIndex + 1} of MultiPolygon ${index + 1} for area ${areaIndex}`);
+                    const polygon = turf.polygon(polygonCoords);
+                    const intersects = turf.booleanIntersects(developablePolygon, polygon);
+                    console.log(`Polygon ${polyIndex + 1} intersects with area ${areaIndex}:`, intersects);
+                    
+                    if (intersects) {
+                      intersectionFound = true;
+                      minDistance = 0;
+                      console.log(`Found intersection for area ${areaIndex} - setting minDistance to 0`);
+                      return;
                     }
-                  });
-                });
-              } catch (distError) {
-                console.error('Error calculating distance:', distError);
-              }
-            }
-          } catch (error) {
-            console.error(`Error processing flood feature ${index}:`, error);
-          }
-        });
 
-        let score;
-        if (intersectionFound) {
-          score = 1; // Developable area is impacted by flood
-          console.log('Intersection found - setting score to 1');
-        } else if (minDistance <= 500) {
-          score = 2; // Within 500m of flood area
-          console.log(`Distance ${minDistance.toFixed(2)}m is within 500m - setting score to 2`);
-        } else {
-          score = 3; // Further than 500m from flood area
-          console.log(`Distance ${minDistance.toFixed(2)}m is beyond 500m - setting score to 3`);
-          // Find the nearest feature even when beyond 500m
-          let nearestFeature = features[0]; // Default to first feature
-          let currentMinDistance = Infinity;
-          features.forEach(feature => {
-            if (feature.geometry.type === 'MultiPolygon') {
-              feature.geometry.coordinates.forEach(polygonCoords => {
-                const polygon = turf.polygon(polygonCoords);
-                const developablePoints = turf.explode(developablePolygon);
-                const floodPoints = turf.explode(polygon);
-                developablePoints.features.forEach(dPoint => {
-                  floodPoints.features.forEach(fPoint => {
-                    const distance = turf.distance(dPoint, fPoint, { units: 'meters' });
-                    if (distance < currentMinDistance) {
-                      currentMinDistance = distance;
-                      nearestFeature = feature;
+                    // Calculate minimum distance between polygon boundaries
+                    try {
+                      // Create points along the boundaries of both polygons
+                      const developablePoints = turf.explode(developablePolygon);
+                      const floodPoints = turf.explode(polygon);
+                      
+                      // Find the nearest points between the two sets of points
+                      developablePoints.features.forEach(dPoint => {
+                        floodPoints.features.forEach(fPoint => {
+                          const distance = turf.distance(dPoint, fPoint, { units: 'meters' });
+                          if (distance < minDistance) {
+                            minDistance = distance;
+                            console.log(`Area ${areaIndex}: New minimum distance found:`, minDistance.toFixed(2), 'm');
+                          }
+                        });
+                      });
+                    } catch (distError) {
+                      console.error(`Error calculating distance for area ${areaIndex}:`, distError);
                     }
                   });
-                });
-              });
-            } else if (feature.geometry.type === 'Polygon') {
-              const polygon = turf.polygon(feature.geometry.coordinates);
-              const developablePoints = turf.explode(developablePolygon);
-              const floodPoints = turf.explode(polygon);
-              developablePoints.features.forEach(dPoint => {
-                floodPoints.features.forEach(fPoint => {
-                  const distance = turf.distance(dPoint, fPoint, { units: 'meters' });
-                  if (distance < currentMinDistance) {
-                    currentMinDistance = distance;
-                    nearestFeature = feature;
+                } else if (feature.geometry.type === 'Polygon') {
+                  // For regular Polygon
+                  console.log(`\nProcessing regular polygon ${index + 1} for area ${areaIndex}`);
+                  const floodPolygon = turf.polygon(feature.geometry.coordinates);
+                  const intersects = turf.booleanIntersects(developablePolygon, floodPolygon);
+                  console.log(`Polygon ${index + 1} intersects with area ${areaIndex}:`, intersects);
+                  
+                  if (intersects) {
+                    intersectionFound = true;
+                    minDistance = 0;
+                    console.log(`Found intersection for area ${areaIndex} - setting minDistance to 0`);
+                    return;
                   }
-                });
-              });
+
+                  // Calculate minimum distance between polygon boundaries
+                  try {
+                    // Create points along the boundaries of both polygons
+                    const developablePoints = turf.explode(developablePolygon);
+                    const floodPoints = turf.explode(floodPolygon);
+                    
+                    // Find the nearest points between the two sets of points
+                    developablePoints.features.forEach(dPoint => {
+                      floodPoints.features.forEach(fPoint => {
+                        const distance = turf.distance(dPoint, fPoint, { units: 'meters' });
+                        if (distance < minDistance) {
+                          minDistance = distance;
+                          console.log(`Area ${areaIndex}: New minimum distance found:`, minDistance.toFixed(2), 'm');
+                        }
+                      });
+                    });
+                  } catch (distError) {
+                    console.error(`Error calculating distance for area ${areaIndex}:`, distError);
+                  }
+                }
+              } catch (error) {
+                console.error(`Error processing flood feature ${index} for area ${areaIndex}:`, error);
+              }
+            });
+
+            let score;
+            if (intersectionFound) {
+              score = 1; // Developable area is impacted by flood
+              console.log(`Area ${areaIndex}: Intersection found - setting score to 1`);
+            } else if (minDistance <= 500) {
+              score = 2; // Within 500m of flood area
+              console.log(`Area ${areaIndex}: Distance ${minDistance.toFixed(2)}m is within 500m - setting score to 2`);
+            } else {
+              score = 3; // Further than 500m from flood area
+              console.log(`Area ${areaIndex}: Distance ${minDistance.toFixed(2)}m is beyond 500m - setting score to 3`);
             }
-          });
+
+            areaResults.push({
+              areaIndex,
+              score, 
+              minDistance
+            });
+          } catch (error) {
+            console.error(`Error processing developable area ${areaIndex}:`, error);
+            areaResults.push({
+              areaIndex,
+              score: 0,
+              minDistance: Infinity
+            });
+          }
         }
 
-        console.log('\nFinal result:', { score, minDistance: minDistance.toFixed(2) });
-        return { score, minDistance };
+        console.log('\nResults for all developable areas:', areaResults);
+        
+        // Find worst score (lowest is worst) across all areas
+        const worstResult = areaResults.reduce((worst, current) => {
+          return current.score < worst.score ? current : 
+                 (current.score === worst.score && current.minDistance < worst.minDistance) ? current : worst;
+        }, { score: 3, minDistance: Infinity });
+        
+        console.log('\nFinal result (worst case):', worstResult);
+        return worstResult;
       } catch (error) {
         console.error('Error calculating flood score:', error);
         console.error('Error stack:', error.stack);
@@ -1357,7 +1902,8 @@ const scoringCriteria = {
       }
     },
     getScoreDescription: (scoreObj) => {
-      const { score, minDistance } = scoreObj;
+      const { score, minDistance, areaIndex } = scoreObj;
+      
       
       switch (score) {
         case 3:
@@ -1365,7 +1911,7 @@ const scoringCriteria = {
         case 2:
           return `Developable area is not impacted by flooding but is ${minDistance.toFixed(0)}m from the nearest flood extent.`;
         case 1:
-          return "Developable area is impacted by flooding.";
+          return `Developable area is impacted by flooding.`;
         default:
           return "Flood risk not assessed";
       }
@@ -1375,127 +1921,161 @@ const scoringCriteria = {
     }
   },
   bushfire: {
-    calculateScore: (bushfireFeatures, developableArea = null) => {
+    calculateScore: (bushfireFeatures, developableArea) => {
       console.log('=== Bushfire Score Calculation Start ===');
       console.log('Input validation:');
       console.log('bushfireFeatures:', JSON.stringify(bushfireFeatures, null, 2));
       console.log('developableArea:', JSON.stringify(developableArea, null, 2));
 
-      if (!developableArea?.[0]) {
+      if (!developableArea || !developableArea.length) {
         console.log('No developable area - returning score 0');
         return { score: 0, minDistance: Infinity };
       }
 
       try {
-        const developableCoords = developableArea[0].geometry.coordinates[0];
-        console.log('Developable coordinates:', developableCoords);
+        // Process all developable areas
+        const areaResults = [];
         
-        const developablePolygon = turf.polygon([developableCoords]);
-        console.log('Created developable polygon:', JSON.stringify(developablePolygon, null, 2));
-
-        // Handle both direct features array and FeatureCollection format
-        const features = Array.isArray(bushfireFeatures) ? bushfireFeatures : 
-                        bushfireFeatures?.features || 
-                        (bushfireFeatures?.properties?.bushfireFeatures || []);
-        
-        console.log(`Processing ${features.length} bushfire features`);
-
-        // First check if developable area intersects with any bushfire features
-        let intersectionFound = false;
-        let minDistance = Infinity;
-
-        features.forEach((feature, index) => {
-          if (!feature.geometry) return;
-
+        // Process each feature in the developable area
+        for (let areaIndex = 0; areaIndex < developableArea.length; areaIndex++) {
           try {
-            if (feature.geometry.type === 'MultiPolygon') {
-              // For MultiPolygon, check each polygon
-              feature.geometry.coordinates.forEach((polygonCoords, polyIndex) => {
-                console.log(`\nProcessing polygon ${polyIndex + 1} of MultiPolygon ${index + 1}`);
-                const polygon = turf.polygon(polygonCoords);
-                const intersects = turf.booleanIntersects(developablePolygon, polygon);
-                console.log(`Polygon ${polyIndex + 1} intersects:`, intersects);
-                
-                if (intersects) {
-                  intersectionFound = true;
-                  minDistance = 0;
-                  console.log('Found intersection - setting minDistance to 0');
-                  return;
-                }
+            if (!developableArea[areaIndex].geometry || !developableArea[areaIndex].geometry.coordinates) {
+              console.log(`Skipping developable area feature ${areaIndex} - invalid geometry`);
+              continue;
+            }
+            
+            const developableCoords = developableArea[areaIndex].geometry.coordinates[0];
+            console.log(`Developable coordinates for area ${areaIndex}:`, developableCoords);
+            
+            const developablePolygon = turf.polygon([developableCoords]);
+            console.log(`Created developable polygon for area ${areaIndex}:`, JSON.stringify(developablePolygon, null, 2));
 
-                // Calculate minimum distance between polygon boundaries
-                try {
-                  // Create points along the boundaries of both polygons
-                  const developablePoints = turf.explode(developablePolygon);
-                  const bushfirePoints = turf.explode(polygon);
-                  
-                  // Find the nearest points between the two sets of points
-                  developablePoints.features.forEach(dPoint => {
-                    bushfirePoints.features.forEach(fPoint => {
-                      const distance = turf.distance(dPoint, fPoint, { units: 'meters' });
-                      if (distance < minDistance) {
-                        minDistance = distance;
-                        console.log('New minimum distance found:', minDistance.toFixed(2), 'm');
-                      }
-                    });
-                  });
-                } catch (distError) {
-                  console.error('Error calculating distance:', distError);
-                }
-              });
-            } else if (feature.geometry.type === 'Polygon') {
-              // For regular Polygon
-              console.log(`\nProcessing regular polygon ${index + 1}`);
-              const bushfirePolygon = turf.polygon(feature.geometry.coordinates);
-              const intersects = turf.booleanIntersects(developablePolygon, bushfirePolygon);
-              console.log(`Polygon ${index + 1} intersects:`, intersects);
-              
-              if (intersects) {
-                intersectionFound = true;
-                minDistance = 0;
-                console.log('Found intersection - setting minDistance to 0');
-                return;
-              }
+            // Handle both direct features array and FeatureCollection format
+            const features = Array.isArray(bushfireFeatures) ? bushfireFeatures : 
+                            bushfireFeatures?.features || 
+                            (bushfireFeatures?.properties?.bushfireFeatures || []);
+            
+            console.log(`Processing ${features.length} bushfire features for area ${areaIndex}`);
 
-              // Calculate minimum distance between polygon boundaries
+            // First check if developable area intersects with any bushfire features
+            let intersectionFound = false;
+            let minDistance = Infinity;
+
+            features.forEach((feature, index) => {
+              if (!feature.geometry) return;
+
               try {
-                // Create points along the boundaries of both polygons
-                const developablePoints = turf.explode(developablePolygon);
-                const bushfirePoints = turf.explode(bushfirePolygon);
-                
-                // Find the nearest points between the two sets of points
-                developablePoints.features.forEach(dPoint => {
-                  bushfirePoints.features.forEach(fPoint => {
-                    const distance = turf.distance(dPoint, fPoint, { units: 'meters' });
-                    if (distance < minDistance) {
-                      minDistance = distance;
-                      console.log('New minimum distance found:', minDistance.toFixed(2), 'm');
+                if (feature.geometry.type === 'MultiPolygon') {
+                  // For MultiPolygon, check each polygon
+                  feature.geometry.coordinates.forEach((polygonCoords, polyIndex) => {
+                    console.log(`\nProcessing polygon ${polyIndex + 1} of MultiPolygon ${index + 1} for area ${areaIndex}`);
+                    const polygon = turf.polygon(polygonCoords);
+                    const intersects = turf.booleanIntersects(developablePolygon, polygon);
+                    console.log(`Polygon ${polyIndex + 1} intersects with area ${areaIndex}:`, intersects);
+                    
+                    if (intersects) {
+                      intersectionFound = true;
+                      minDistance = 0;
+                      console.log(`Found intersection for area ${areaIndex} - setting minDistance to 0`);
+                      return;
+                    }
+
+                    // Calculate minimum distance between polygon boundaries
+                    try {
+                      // Create points along the boundaries of both polygons
+                      const developablePoints = turf.explode(developablePolygon);
+                      const bushfirePoints = turf.explode(polygon);
+                      
+                      // Find the nearest points between the two sets of points
+                      developablePoints.features.forEach(dPoint => {
+                        bushfirePoints.features.forEach(fPoint => {
+                          const distance = turf.distance(dPoint, fPoint, { units: 'meters' });
+                          if (distance < minDistance) {
+                            minDistance = distance;
+                            console.log(`Area ${areaIndex}: New minimum distance found:`, minDistance.toFixed(2), 'm');
+                          }
+                        });
+                      });
+                    } catch (distError) {
+                      console.error(`Error calculating distance for area ${areaIndex}:`, distError);
                     }
                   });
-                });
-              } catch (distError) {
-                console.error('Error calculating distance:', distError);
-              }
-            }
-          } catch (error) {
-            console.error(`Error processing bushfire feature ${index}:`, error);
-          }
-        });
+                } else if (feature.geometry.type === 'Polygon') {
+                  // For regular Polygon
+                  console.log(`\nProcessing regular polygon ${index + 1} for area ${areaIndex}`);
+                  const bushfirePolygon = turf.polygon(feature.geometry.coordinates);
+                  const intersects = turf.booleanIntersects(developablePolygon, bushfirePolygon);
+                  console.log(`Polygon ${index + 1} intersects with area ${areaIndex}:`, intersects);
+                  
+                  if (intersects) {
+                    intersectionFound = true;
+                    minDistance = 0;
+                    console.log(`Found intersection for area ${areaIndex} - setting minDistance to 0`);
+                    return;
+                  }
 
-        let score;
-        if (intersectionFound) {
-          score = 1; // Developable area is impacted by bushfire risk
-          console.log('Intersection found - setting score to 1');
-        } else if (minDistance <= 100) {
-          score = 2; // Within 100m of bushfire risk area
-          console.log(`Distance ${minDistance.toFixed(2)}m is within 100m - setting score to 2`);
-        } else {
-          score = 3; // Further than 100m from bushfire risk area
-          console.log(`Distance ${minDistance.toFixed(2)}m is beyond 100m - setting score to 3`);
+                  // Calculate minimum distance between polygon boundaries
+                  try {
+                    // Create points along the boundaries of both polygons
+                    const developablePoints = turf.explode(developablePolygon);
+                    const bushfirePoints = turf.explode(bushfirePolygon);
+                    
+                    // Find the nearest points between the two sets of points
+                    developablePoints.features.forEach(dPoint => {
+                      bushfirePoints.features.forEach(fPoint => {
+                        const distance = turf.distance(dPoint, fPoint, { units: 'meters' });
+                        if (distance < minDistance) {
+                          minDistance = distance;
+                          console.log(`Area ${areaIndex}: New minimum distance found:`, minDistance.toFixed(2), 'm');
+                        }
+                      });
+                    });
+                  } catch (distError) {
+                    console.error(`Error calculating distance for area ${areaIndex}:`, distError);
+                  }
+                }
+              } catch (error) {
+                console.error(`Error processing bushfire feature ${index} for area ${areaIndex}:`, error);
+              }
+            });
+
+            let score;
+            if (intersectionFound) {
+              score = 1; // Developable area is impacted by bushfire risk
+              console.log(`Area ${areaIndex}: Intersection found - setting score to 1`);
+            } else if (minDistance <= 100) {
+              score = 2; // Within 100m of bushfire risk area
+              console.log(`Area ${areaIndex}: Distance ${minDistance.toFixed(2)}m is within 100m - setting score to 2`);
+            } else {
+              score = 3; // Further than 100m from bushfire risk area
+              console.log(`Area ${areaIndex}: Distance ${minDistance.toFixed(2)}m is beyond 100m - setting score to 3`);
+            }
+
+            areaResults.push({
+              areaIndex,
+              score, 
+              minDistance
+            });
+          } catch (error) {
+            console.error(`Error processing developable area ${areaIndex}:`, error);
+            areaResults.push({
+              areaIndex,
+              score: 0,
+              minDistance: Infinity
+            });
+          }
         }
 
-        console.log('\nFinal result:', { score, minDistance: minDistance.toFixed(2) });
-        return { score, minDistance };
+        console.log('\nResults for all developable areas:', areaResults);
+        
+        // Find worst score (lowest is worst) across all areas
+        const worstResult = areaResults.reduce((worst, current) => {
+          return current.score < worst.score ? current : 
+                 (current.score === worst.score && current.minDistance < worst.minDistance) ? current : worst;
+        }, { score: 3, minDistance: Infinity });
+        
+        console.log('\nFinal result (worst case):', worstResult);
+        return worstResult;
       } catch (error) {
         console.error('Error calculating bushfire score:', error);
         console.error('Error stack:', error.stack);
@@ -1503,15 +2083,15 @@ const scoringCriteria = {
       }
     },
     getScoreDescription: (scoreObj) => {
-      const { score, minDistance } = scoreObj;
-      
+      const { score, minDistance, areaIndex } = scoreObj;
+            
       switch (score) {
         case 3:
           return `Developable area is not impacted by bushfire risk and is ${minDistance.toFixed(0)}m from the nearest bushfire prone area.`;
         case 2:
           return `Developable area is not impacted by bushfire risk but is ${minDistance.toFixed(0)}m from the nearest bushfire prone area.`;
         case 1:
-          return "Developable area is within a bushfire prone area.";
+          return `Developable area is within a bushfire prone area.`;
         default:
           return "Bushfire risk not assessed";
       }
@@ -1520,439 +2100,6 @@ const scoringCriteria = {
       return scoreColors[score] || scoreColors[0];
     }
   },
-  contamination: {
-    calculateScore: (contaminationFeatures, developableArea) => {
-      console.log('=== Contamination Score Calculation Start ===');
-      console.log('Input validation:');
-      console.log('contaminationFeatures:', JSON.stringify(contaminationFeatures, null, 2));
-      console.log('developableArea:', JSON.stringify(developableArea, null, 2));
-
-      if (!developableArea?.[0]) {
-        console.log('No developable area provided - returning score 0');
-        return { score: 0, minDistance: Infinity, features: [] };
-      }
-
-      try {
-        const developableCoords = developableArea[0].geometry.coordinates[0];
-        console.log('Developable coordinates:', developableCoords);
-        
-        const developablePolygon = turf.polygon([developableCoords]);
-        const developableCenter = turf.center(developablePolygon);
-        console.log('Created developable polygon:', JSON.stringify(developablePolygon, null, 2));
-
-        // Handle both direct features array and FeatureCollection format
-        const features = Array.isArray(contaminationFeatures) ? contaminationFeatures : 
-                        contaminationFeatures?.features || [];
-        
-        console.log(`Processing ${features.length} contamination features`);
-
-        // First check if developable area intersects with any contamination features
-        let intersectionFound = false;
-        let minDistance = Infinity;
-        let nearestFeature = null;
-
-        features.forEach((feature, index) => {
-          try {
-            // Handle point features from lat/long coordinates
-            if (!feature.geometry && feature.properties?.Latitude && feature.properties?.Longitude) {
-              const featurePoint = turf.point([
-                parseFloat(feature.properties.Longitude),
-                parseFloat(feature.properties.Latitude)
-              ]);
-              console.log(`Created point from lat/long for feature ${index}:`, featurePoint);
-
-              // Calculate distance from point to developable area
-              const distance = turf.distance(developableCenter, featurePoint, { units: 'meters' });
-              console.log(`Distance to point feature ${index}:`, distance.toFixed(2), 'm');
-
-              if (distance < minDistance) {
-                minDistance = distance;
-                nearestFeature = feature;
-                console.log('New minimum distance found:', minDistance.toFixed(2), 'm');
-              }
-            }
-            // Handle polygon features
-            else if (feature.geometry?.type === 'MultiPolygon') {
-              feature.geometry.coordinates.forEach((polygonCoords, polyIndex) => {
-                console.log(`\nProcessing polygon ${polyIndex + 1} of MultiPolygon ${index + 1}`);
-                const polygon = turf.polygon(polygonCoords);
-                const intersects = turf.booleanIntersects(developablePolygon, polygon);
-                console.log(`Polygon ${polyIndex + 1} intersects:`, intersects);
-                
-                if (intersects) {
-                  intersectionFound = true;
-                  minDistance = 0;
-                  nearestFeature = feature;
-                  console.log('Found intersection - setting minDistance to 0');
-                  return;
-                }
-
-                // Calculate minimum distance between polygon boundaries
-                try {
-                  const distance = turf.distance(
-                    turf.center(developablePolygon),
-                    turf.center(polygon),
-                    { units: 'meters' }
-                  );
-                  if (distance < minDistance) {
-                    minDistance = distance;
-                    nearestFeature = feature;
-                    console.log('New minimum distance found:', minDistance.toFixed(2), 'm');
-                  }
-                } catch (distError) {
-                  console.error('Error calculating polygon distance:', distError);
-                }
-              });
-            }
-            else if (feature.geometry?.type === 'Polygon') {
-              const polygon = turf.polygon(feature.geometry.coordinates);
-              const intersects = turf.booleanIntersects(developablePolygon, polygon);
-              console.log(`Polygon ${index} intersects:`, intersects);
-              
-              if (intersects) {
-                intersectionFound = true;
-                minDistance = 0;
-                nearestFeature = feature;
-                console.log('Found intersection - setting minDistance to 0');
-                return;
-              }
-
-              // Calculate minimum distance between polygon boundaries
-              try {
-                const distance = turf.distance(
-                  turf.center(developablePolygon),
-                  turf.center(polygon),
-                  { units: 'meters' }
-                );
-                if (distance < minDistance) {
-                  minDistance = distance;
-                  nearestFeature = feature;
-                  console.log('New minimum distance found:', minDistance.toFixed(2), 'm');
-                }
-              } catch (distError) {
-                console.error('Error calculating polygon distance:', distError);
-              }
-            }
-          } catch (error) {
-            console.error(`Error processing contamination feature ${index}:`, error);
-          }
-        });
-
-        let score;
-        if (intersectionFound || minDistance <= 20) {
-          score = 1; // Developable area is impacted by contamination or within 20m
-          console.log('Site is impacted by contamination or within 20m - setting score to 1');
-        } else if (minDistance <= 100) {
-          score = 2; // Within 100m of contaminated site
-          console.log(`Distance ${minDistance.toFixed(2)}m is within 100m - setting score to 2`);
-        } else {
-          score = 3; // Further than 100m from contaminated site
-          console.log(`Distance ${minDistance.toFixed(2)}m is beyond 100m - setting score to 3`);
-        }
-
-        console.log('=== Final Result ===');
-        console.log({
-          score,
-          minDistance,
-          nearestFeature
-        });
-
-        return {
-          score,
-          minDistance,
-          features: nearestFeature ? [nearestFeature] : []
-        };
-      } catch (error) {
-        console.error('Error calculating contamination score:', error);
-        console.error('Error stack:', error.stack);
-        return { score: 0, minDistance: Infinity };
-      }
-    },
-    getScoreDescription: (scoreObj, developableArea) => {
-      const { score, minDistance, features } = scoreObj;
-      
-      // Get site name from the nearest feature if available
-      let siteName = '';
-      if (features?.[0]?.properties?.SiteName) {
-        siteName = ` (${features[0].properties.SiteName})`;
-      }
-
-      // If we have a point feature, check if it's inside the developable area
-      if (features?.[0] && features[0].properties?.Latitude && features[0].properties?.Longitude) {
-        const point = turf.point([
-          parseFloat(features[0].properties.Longitude),
-          parseFloat(features[0].properties.Latitude)
-        ]);
-        
-        // If we have a developable area polygon, check if point is inside
-        if (developableArea?.[0]?.geometry?.coordinates) {
-          const polygon = turf.polygon(developableArea[0].geometry.coordinates);
-          if (turf.booleanPointInPolygon(point, polygon)) {
-            return `Developable area contains a contaminated site${siteName}.`;
-          }
-        }
-      }
-      
-      switch (score) {
-        case 3:
-          if (minDistance === Infinity || features.length === 0) {
-            return "Developable area is not impacted by contamination and there is no known contamination in close proximity to the site.";
-          }
-          return `Developable area is not impacted by contamination and is ${minDistance.toFixed(0)}m from the nearest contaminated site${siteName}.`;
-        case 2:
-          return `Developable area is not impacted by contamination but is ${minDistance.toFixed(0)}m from the nearest contaminated site${siteName}.`;
-        case 1:
-          if (minDistance === 0) {
-            return `Developable area is impacted by a contaminated site${siteName}.`;
-          }
-          return `Developable area is within ${minDistance.toFixed(0)}m of a contaminated site${siteName}.`;
-        default:
-          return "Contamination risk not assessed";
-      }
-    },
-    getScoreColor: (score) => {
-      return scoreColors[score] || scoreColors[0];
-    }
-  },
-  tec: {
-    calculateScore: (tecFeatures, developableArea) => {
-      console.log('=== TEC Score Calculation Start ===');
-      console.log('Input validation:');
-      console.log('tecFeatures:', JSON.stringify(tecFeatures));
-      console.log('developableArea:', developableArea);
-
-      if (!developableArea?.[0] || !developableArea[0].geometry) {
-        console.log('No developable area provided - returning score 0');
-        return { score: 0, coverage: 0, features: [] };
-      }
-
-      try {
-        const developableCoords = developableArea[0].geometry.coordinates;
-        console.log('Raw developable coordinates:', developableCoords);
-        
-        // Validate developable area coordinates
-        if (!developableCoords || !Array.isArray(developableCoords) || developableCoords.length === 0) {
-          console.error('Invalid developable area coordinates:', developableCoords);
-          return { score: 0, coverage: 0, features: [] };
-        }
-        
-        // For polygon coordinates, we need at least one ring with at least 3 points
-        if (!Array.isArray(developableCoords[0]) || !Array.isArray(developableCoords[0][0]) || developableCoords[0].length < 3) {
-          console.error('Invalid developable area polygon structure:', developableCoords);
-          return { score: 0, coverage: 0, features: [] };
-        }
-        
-        // Create a valid GeoJSON polygon - ensure coordinates are properly wrapped
-        const developablePolygon = {
-          type: 'Feature',
-          properties: {},
-          geometry: {
-            type: 'Polygon',
-            coordinates: developableCoords
-          }
-        };
-
-        // Validate the created polygon
-        if (!turf.booleanValid(developablePolygon)) {
-          console.error('Invalid developable polygon geometry');
-          return { score: 0, coverage: 0, features: [] };
-        }
-
-        console.log('Created valid developable polygon:', JSON.stringify(developablePolygon));
-        const totalArea = turf.area(developablePolygon);
-        console.log('Total developable area:', totalArea, 'square meters');
-
-        // Calculate total area of TEC features
-        let tecArea = 0;
-        const relevantFeatures = [];
-        console.log('Processing TEC features...');
-        
-        const features = tecFeatures?.features || [];
-        features.forEach((feature, index) => {
-          console.log(`\nProcessing feature ${index + 1}:`, feature);
-          
-          if (!feature.geometry?.coordinates) {
-            console.log(`Feature ${index + 1} has no coordinates`);
-            return;
-          }
-
-          try {
-            let featurePolygon;
-            if (feature.geometry.type === 'Polygon') {
-              try {
-                console.log('Processing Polygon feature:', {
-                  coordinates: feature.geometry.coordinates
-                });
-
-                // Create a valid polygon from the feature
-                featurePolygon = turf.polygon(feature.geometry.coordinates);
-                console.log('Created polygon feature');
-
-                if (!turf.booleanValid(featurePolygon)) {
-                  console.error('Created polygon is invalid');
-                  return;
-                }
-
-                // Check intersection
-                const doesIntersect = turf.booleanIntersects(developablePolygon, featurePolygon);
-                console.log('Intersection check:', doesIntersect);
-
-                if (doesIntersect) {
-                  try {
-                    // Calculate intersection using a try-catch block for each method
-                    let intersection;
-                    try {
-                      intersection = turf.intersect(developablePolygon, featurePolygon);
-                    } catch (intersectError) {
-                      console.log('Primary intersection method failed, trying alternative...');
-                      // If direct intersection fails, try with simplified geometries
-                      const simplifiedDevelopable = turf.simplify(developablePolygon, { tolerance: 0.0001 });
-                      const simplifiedFeature = turf.simplify(featurePolygon, { tolerance: 0.0001 });
-                      intersection = turf.intersect(simplifiedDevelopable, simplifiedFeature);
-                    }
-
-                    if (intersection) {
-                      const intersectionArea = turf.area(intersection);
-                      tecArea += intersectionArea;
-                      relevantFeatures.push({
-                        ...feature,
-                        intersectionArea
-                      });
-                      console.log('Intersection area:', intersectionArea);
-                    } else {
-                      console.log('No valid intersection found');
-                    }
-                  } catch (intersectError) {
-                    console.error('All intersection calculation methods failed:', intersectError);
-                    // If all intersection methods fail, estimate using overlap
-                    const featureArea = turf.area(featurePolygon);
-                    const estimatedIntersectionArea = Math.min(totalArea, featureArea) * 0.1; // Conservative 10% estimate
-                    tecArea += estimatedIntersectionArea;
-                    relevantFeatures.push({
-                      ...feature,
-                      intersectionArea: estimatedIntersectionArea,
-                      estimated: true
-                    });
-                    console.log('Using estimated intersection area:', estimatedIntersectionArea);
-                  }
-                }
-              } catch (error) {
-                console.error('Error processing polygon feature:', error);
-              }
-            } else if (feature.geometry.type === 'MultiPolygon') {
-              try {
-                console.log('Processing MultiPolygon feature');
-                feature.geometry.coordinates.forEach((polygonCoords, polyIndex) => {
-                  try {
-                    const polygon = turf.polygon(polygonCoords);
-                    if (!turf.booleanValid(polygon)) {
-                      console.error(`Invalid polygon ${polyIndex} in MultiPolygon`);
-                      return;
-                    }
-
-                    const doesIntersect = turf.booleanIntersects(developablePolygon, polygon);
-                    if (doesIntersect) {
-                      try {
-                        let intersection;
-                        try {
-                          intersection = turf.intersect(developablePolygon, polygon);
-                        } catch (intersectError) {
-                          console.log('Primary intersection method failed for MultiPolygon, trying alternative...');
-                          const simplifiedDevelopable = turf.simplify(developablePolygon, { tolerance: 0.0001 });
-                          const simplifiedPolygon = turf.simplify(polygon, { tolerance: 0.0001 });
-                          intersection = turf.intersect(simplifiedDevelopable, simplifiedPolygon);
-                        }
-
-                        if (intersection) {
-                          const intersectionArea = turf.area(intersection);
-                          tecArea += intersectionArea;
-                          relevantFeatures.push({
-                            ...feature,
-                            intersectionArea,
-                            polygonIndex: polyIndex
-                          });
-                          console.log(`Intersection area for polygon ${polyIndex}:`, intersectionArea);
-                        }
-                      } catch (intersectError) {
-                        console.error(`Intersection calculation failed for polygon ${polyIndex}:`, intersectError);
-                        // Estimate intersection area
-                        const polygonArea = turf.area(polygon);
-                        const estimatedIntersectionArea = Math.min(totalArea, polygonArea) * 0.1;
-                        tecArea += estimatedIntersectionArea;
-                        relevantFeatures.push({
-                          ...feature,
-                          intersectionArea: estimatedIntersectionArea,
-                          polygonIndex: polyIndex,
-                          estimated: true
-                        });
-                        console.log(`Using estimated intersection area for polygon ${polyIndex}:`, estimatedIntersectionArea);
-                      }
-                    }
-                  } catch (polyError) {
-                    console.error(`Error processing polygon ${polyIndex} in MultiPolygon:`, polyError);
-                  }
-                });
-              } catch (error) {
-                console.error('Error processing MultiPolygon feature:', error);
-              }
-            }
-          } catch (error) {
-            console.error(`Error processing feature ${index + 1}:`, error);
-            console.error('Feature geometry:', feature.geometry);
-          }
-        });
-
-        console.log('\nTotal TEC feature area:', tecArea, 'square meters');
-
-        // Calculate coverage percentage
-        const coverage = (tecArea / totalArea) * 100;
-        console.log('Coverage percentage:', coverage.toFixed(2) + '%');
-
-        // Determine score based on coverage
-        let score;
-        if (coverage === 0) {
-          score = 3;
-          console.log('No coverage (0%) - Score: 3');
-        } else if (coverage < 50) {
-          score = 2;
-          console.log('Coverage < 50% - Score: 2');
-        } else {
-          score = 1;
-          console.log('Coverage >= 50% - Score: 1');
-        }
-
-        console.log('=== Final Result ===');
-        console.log({ score, coverage: parseFloat(coverage.toFixed(2)), features: relevantFeatures });
-
-        return { 
-          score, 
-          coverage: parseFloat(coverage.toFixed(2)), 
-          features: relevantFeatures 
-        };
-      } catch (error) {
-        console.error('Error calculating TEC score:', error);
-        console.error('Error stack:', error.stack);
-        return { score: 0, coverage: 0, features: [] };
-      }
-    },
-    getScoreDescription: (scoreObj) => {
-      const { score, coverage, features = [] } = scoreObj;
-      
-      switch (score) {
-        case 3:
-          return "Developable area is not impacted by any Threatened Ecological Communities.";
-        case 2:
-          return `Developable area has limited TEC coverage (${coverage.toFixed(1)}%).`;
-        case 1:
-          return `Developable area has significant TEC coverage (${coverage.toFixed(1)}%).`;
-        default:
-          return "TEC impact not assessed";
-      }
-    },
-    getScoreColor: (score) => {
-      return scoreColors[score] || scoreColors[0];
-    }
-  }
 };
 
 export default scoringCriteria;

@@ -13,6 +13,7 @@ import AreaOverview from './AreaOverview';
 import LayerDrawing from './LayerDrawing';
 import ReportGenerator from './ReportGenerator';
 import IssueModal from './IssueModal';
+import PropertySelector from './PropertySelector';
 import { AlertCircle } from 'lucide-react';
 import { setNewWidthInPixels } from '../../lib/sidebarWidth';
 

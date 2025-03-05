@@ -88,18 +88,45 @@ export async function addAccessSlide(pptx, propertyData) {
       }))
     } : null;
     
-    // Calculate scores and descriptions first
-    const roadsScoreResult = scoringCriteria.roads.calculateScore(propertyData.roadFeatures, propertyData.developableArea);
-    const roadsDescription = scoringCriteria.roads.getScoreDescription(roadsScoreResult);
-    
-    // Get UDP precincts map with LMR layers
-    const udpMapFeature = {
+    // Use the combinedGeometry if it exists (for multiple properties), otherwise create a single feature
+    const featureToUse = propertyData.combinedGeometry || {
+      type: 'Feature',
       geometry: {
+        type: 'Polygon',
         coordinates: [propertyData.site__geometry]
       },
       properties: propertyData
     };
-    const udpScreenshot = await captureUDPPrecinctMap(udpMapFeature, formattedDevelopableArea, propertyData.showDevelopableArea);
+
+    // If we don't have valid geometry, throw an error
+    if (!featureToUse) {
+      throw new Error('No valid geometry data found in property data');
+    }
+    
+    // Calculate scores and descriptions first
+    const roadsScoreResult = scoringCriteria.roads.calculateScore(
+      propertyData.roadFeatures, 
+      propertyData.developableArea,
+      propertyData.isMultipleProperties ? propertyData.allProperties : null
+    );
+    const roadsDescription = scoringCriteria.roads.getScoreDescription(roadsScoreResult);
+    
+    // Get roads map showing all features and developable areas
+    const roadsScreenshot = await captureRoadsMap(
+      featureToUse, 
+      formattedDevelopableArea, 
+      true, // Always show developable areas for roads map
+      false
+    );
+    
+    // Get UDP precincts map with LMR layers - don't show developable areas
+    const udpMapFeature = featureToUse;
+    const udpScreenshot = await captureUDPPrecinctMap(
+      udpMapFeature, 
+      formattedDevelopableArea, 
+      false, // Don't show developable areas
+      false
+    );
     
     // Get the LMR overlap information from the updated feature after map capture
     const lmrOverlap = udpMapFeature.properties?.lmrOverlap || { 
@@ -108,32 +135,44 @@ export async function addAccessSlide(pptx, propertyData) {
       pixelCounts: {}
     };
     
+    // Get developable area LMR overlap information
+    const developableAreaLmrOverlap = udpMapFeature.properties?.developableAreaLmrOverlap || [];
+    
     console.log('LMR overlap data for scoring:', lmrOverlap);
+    console.log('Developable area LMR overlap for scoring:', developableAreaLmrOverlap);
     
     // Store LMR status in propertyData for use by other slides
-    propertyData.isInLMRArea = lmrOverlap.hasOverlap;
+    propertyData.isInLMRArea = lmrOverlap.hasOverlap || developableAreaLmrOverlap.some(o => o.hasOverlap);
     propertyData.lmrOverlap = lmrOverlap;  // Store full overlap data for reference
+    propertyData.developableAreaLmrOverlap = developableAreaLmrOverlap;
     
     // Calculate UDP score using the enhanced scoring logic that includes LMR overlap
     const udpScoreResult = scoringCriteria.udpPrecincts.calculateScore(
-      { ...propertyData.udpPrecincts, lmrOverlap }, 
+      { 
+        ...propertyData.udpPrecincts, 
+        lmrOverlap,
+        developableAreaLmrOverlap
+      }, 
       propertyData.developableArea
     );
     const udpDescription = scoringCriteria.udpPrecincts.getScoreDescription(udpScoreResult);
 
-    // Get PTAL values from the map capture if they exist
-    const ptalMapFeature = {
-      geometry: {
-        coordinates: [propertyData.site__geometry]
-      },
-      properties: propertyData
-    };
-    const ptalScreenshot = await capturePTALMap(ptalMapFeature, formattedDevelopableArea, propertyData.showDevelopableArea);
+    // Get PTAL map showing all features but not developable areas
+    const ptalMapFeature = featureToUse;
+    const ptalScreenshot = await capturePTALMap(
+      ptalMapFeature, 
+      formattedDevelopableArea, 
+      false, // Don't show developable areas
+      false
+    );
     
     // Get PTAL values from the updated feature after map capture
     const ptalValues = ptalMapFeature.properties?.ptalValues || [];
-    const ptalScoreResult = scoringCriteria.ptal.calculateScore(ptalValues);
-    const ptalDescription = scoringCriteria.ptal.getScoreDescription(ptalScoreResult, ptalValues);
+    const featurePTALs = ptalMapFeature.properties?.featurePTALs || [];
+    
+    // Calculate PTAL score based on the best PTAL for different features
+    const ptalScoreResult = scoringCriteria.ptal.calculateScore(ptalValues, featurePTALs);
+    const ptalDescription = scoringCriteria.ptal.getScoreDescription(ptalScoreResult, ptalValues, featurePTALs);
 
     // Ensure scores object exists and store the scores
     if (!propertyData.scores) {
@@ -193,12 +232,6 @@ export async function addAccessSlide(pptx, propertyData) {
     }));
 
     // Add roads map
-    const roadsScreenshot = await captureRoadsMap({
-      geometry: {
-        coordinates: [propertyData.site__geometry]
-      },
-      properties: propertyData
-    }, formattedDevelopableArea, propertyData.showDevelopableArea);
     if (roadsScreenshot) {
       slide.addImage({
         data: roadsScreenshot,

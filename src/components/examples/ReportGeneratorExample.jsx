@@ -40,7 +40,7 @@ import { SCREENSHOT_TYPES } from './utils/map/config/screenshotTypes';
 import SlidePreview from './SlidePreview';
 import PlanningMapView from './PlanningMapView';
 import PptxGenJS from 'pptxgenjs';
-import DevelopableAreaSelector, { DevelopableAreaOptions } from './DevelopableAreaSelector';
+import DevelopableAreaSelector from './DevelopableAreaSelector';
 import GenerationProgress from './GenerationProgress';
 import { addPrimarySiteAttributesSlide } from './slides/primarySiteAttributesSlide';
 import { addSecondaryAttributesSlide } from './slides/secondaryAttributesSlide';
@@ -83,7 +83,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import IssuesList from './IssuesList';
 import FeasibilityManager from './components/FeasibilityManager';
 import Papa from 'papaparse';
-import PropertyListSelector from './PropertyListSelector';
 
 const slideOptions = [
   { id: 'cover', label: 'Cover Page', addSlide: addCoverSlide, icon: Home },
@@ -144,17 +143,45 @@ const getStepDescription = (stepId) => {
 
 const calculateDevelopableArea = (geometry) => {
   if (!geometry) return 0;
-  
-  // If this is a feature collection with multiple features, calculate the total area
-  if (geometry.features && Array.isArray(geometry.features)) {
-    return Math.round(geometry.features.reduce((total, feature) => {
-      return total + area(feature.geometry);
-    }, 0));
-  }
-  
-  // Single geometry case
   const areaInSqMeters = area(geometry);
   return Math.round(areaInSqMeters);
+};
+
+const ScreenshotProgress = ({ screenshots, failedScreenshots }) => {
+  return (
+    <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+      <h3 className="text-sm font-medium text-gray-700 mb-3">Screenshot Progress</h3>
+      <div className="space-y-2">
+        {Object.entries(screenshots).map(([key, value]) => {
+          const isFailed = failedScreenshots?.includes(key);
+          return (
+            <div key={key} className="flex items-center justify-between text-sm">
+              <span className="text-gray-600">{key.replace(/Screenshot$/, '')}</span>
+              <div className="flex items-center">
+                {value ? (
+                  <span className="text-green-600 flex items-center">
+                    <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                    Captured
+                  </span>
+                ) : isFailed ? (
+                  <span className="text-red-600 flex items-center">
+                    <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                    Failed
+                  </span>
+                ) : (
+                  <span className="text-gray-400">Pending</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 };
 
 const formatTime = (ms) => {
@@ -197,13 +224,7 @@ const Timer = ({ isRunning, onComplete }) => {
   );
 };
 
-const ReportGenerator = ({ 
-  selectedFeatures = [], 
-  onPropertySelect, 
-  isMultiSelectMode, 
-  toggleMultiSelectMode,
-  clearSelectedFeatures
-}) => {
+const ReportGenerator = ({ selectedFeature }) => {
   const [screenshots, setScreenshots] = useState({});
   const [previewScreenshot, setPreviewScreenshot] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -229,7 +250,6 @@ const ReportGenerator = ({
   });
   const [developableArea, setDevelopableArea] = useState(null);
   const [showDevelopableArea, setShowDevelopableArea] = useState(true);
-  const [useDevelopableAreaForBounds, setUseDevelopableAreaForBounds] = useState(false);
   const planningMapRef = useRef();
   const [currentStep, setCurrentStep] = useState(null);
   const [completedSteps, setCompletedSteps] = useState([]);
@@ -243,7 +263,6 @@ const ReportGenerator = ({
   const [showIssuesList, setShowIssuesList] = useState(false);
   const [generationStartTime, setGenerationStartTime] = useState(null);
   const [generationLogs, setGenerationLogs] = useState([]);
-  const [logs, setLogs] = useState([]);
   const logCounterRef = useRef(0);
   const [feasibilitySettings, setFeasibilitySettings] = useState({
     lowMidDensity: {
@@ -279,84 +298,23 @@ const ReportGenerator = ({
   });
   const [salesData, setSalesData] = useState([]);
   const [showFeasibilitySettings, setShowFeasibilitySettings] = useState(false);
-  const [selectedSiteFeatures, setSelectedSiteFeatures] = useState(selectedFeatures);
-  
-  // Use the first selected feature as the primary for display
-  const primaryFeature = selectedSiteFeatures.length > 0 ? selectedSiteFeatures[0] : null;
-
-  // When selectedFeatures prop changes, update our internal state
-  useEffect(() => {
-    setSelectedSiteFeatures(selectedFeatures);
-  }, [selectedFeatures]);
-
-  // Handler for when sites are selected in the PropertyListSelector
-  const handleSiteSelection = (features) => {
-    // Ensure each feature has a unique ID
-    const processedFeatures = features.map(feature => {
-      if (feature.id) {
-        return feature;
-      }
-      
-      const id = feature.properties?.copiedFrom?.id || 
-                feature.properties?.id || 
-                feature.properties?.copiedFrom?.OBJECTID ||
-                Math.random().toString(36).substring(2, 9);
-                
-      return { ...feature, id };
-    });
-    
-    // Use the onPropertySelect prop to update the parent's state
-    if (onPropertySelect) {
-      onPropertySelect(processedFeatures);
-    } else {
-      setSelectedSiteFeatures(processedFeatures);
-    }
-  };
-  
-  // Compute combined area of all selected features
-  const combinedArea = React.useMemo(() => {
-    if (!selectedFeatures.length) return 0;
-    
-    return selectedFeatures.reduce((total, feature) => {
-      const featureArea = feature.properties?.copiedFrom?.site_suitability__area
-        ? parseFloat(feature.properties.copiedFrom.site_suitability__area)
-        : calculateDevelopableArea(feature.geometry);
-        
-      return total + featureArea;
-    }, 0);
-  }, [selectedFeatures]);
-  
-  // Create a combined geometry from all selected features
-  const combinedGeometry = React.useMemo(() => {
-    if (!selectedFeatures.length) return null;
-    if (selectedFeatures.length === 1) return selectedFeatures[0].geometry;
-    
-    // Create a GeoJSON FeatureCollection with all geometries
-    return {
-      type: 'FeatureCollection',
-      features: selectedFeatures.map(feature => ({
-        type: 'Feature',
-        geometry: feature.geometry
-      }))
-    };
-  }, [selectedFeatures]);
 
   useEffect(() => {
-    if (selectedFeatures.length > 0) {
-      console.log('Selected Features:', selectedFeatures);
-      console.log('Addresses:', selectedFeatures.map(feature => feature.properties?.copiedFrom?.site__address));
+    if (selectedFeature) {
+      console.log('Selected Feature:', selectedFeature);
+      console.log('Address path:', selectedFeature?.properties?.copiedFrom?.site__address);
       handleScreenshotCapture();
     }
-  }, [selectedFeatures]);
+  }, [selectedFeature]);
 
   useEffect(() => {
-    if (selectedFeatures.length > 0 && selectedFeatures[0].properties?.copiedFrom?.site_suitability__suburb) {
+    if (selectedFeature?.properties?.copiedFrom?.site_suitability__suburb) {
       const fetchSalesData = async () => {
-        const suburb = selectedFeatures[0].properties.copiedFrom.site_suitability__suburb.toUpperCase();
+        const suburb = selectedFeature.properties.copiedFrom.site_suitability__suburb.toUpperCase();
         console.log('Starting fetchSalesData with params:', {
-          originalSuburb: selectedFeatures[0].properties.copiedFrom.site_suitability__suburb,
+          originalSuburb: selectedFeature.properties.copiedFrom.site_suitability__suburb,
           uppercaseSuburb: suburb,
-          fullProperties: selectedFeatures[0].properties
+          fullProperties: selectedFeature.properties
         });
         
         try {
@@ -440,12 +398,12 @@ const ReportGenerator = ({
       fetchSalesData();
     } else {
       console.log('No suburb data available:', {
-        properties: selectedFeatures.map(feature => feature.properties),
-        copiedFrom: selectedFeatures.map(feature => feature.properties?.copiedFrom),
-        suburb: selectedFeatures.map(feature => feature.properties?.copiedFrom?.site_suitability__suburb)
+        properties: selectedFeature?.properties,
+        copiedFrom: selectedFeature?.properties?.copiedFrom,
+        suburb: selectedFeature?.properties?.copiedFrom?.site_suitability__suburb
       });
     }
-  }, [selectedFeatures]);
+  }, [selectedFeature?.properties?.copiedFrom?.site_suitability__suburb]);
 
   const addLog = (message, type = 'default') => {
     const timestamp = new Date().toLocaleTimeString();
@@ -456,35 +414,31 @@ const ReportGenerator = ({
       type,
       timestamp
     }]);
-    // Also update the logs state for backward compatibility
-    setLogs(prev => [...prev, { message, type }]);
   };
 
   const generatePropertyReport = async () => {
-    if (!selectedSiteFeatures.length) return;
+    if (!selectedFeature) return;
     
     setIsGenerating(true);
     setStatus('generating');
-    setProgress(0);
     setCurrentStep('screenshots');
     setCompletedSteps([]);
     setFailedScreenshots([]);
     setGenerationStartTime(Date.now());
     setGenerationLogs([]);
     logCounterRef.current = 0;
-    setLogs([{ message: 'Starting report generation...', type: 'info' }]);
     
     clearServiceCache();
     
     try {
       // Fetch fresh sales data before generating report
       let currentSalesData = [];
-      if (selectedSiteFeatures.length > 0 && selectedSiteFeatures[0].properties?.copiedFrom?.site_suitability__suburb) {
-        const suburb = selectedSiteFeatures[0].properties.copiedFrom.site_suitability__suburb.toUpperCase();
+      if (selectedFeature?.properties?.copiedFrom?.site_suitability__suburb) {
+        const suburb = selectedFeature.properties.copiedFrom.site_suitability__suburb.toUpperCase();
         console.log('Attempting to fetch sales data for:', {
           suburb,
-          rawSuburb: selectedSiteFeatures[0].properties.copiedFrom.site_suitability__suburb,
-          fullProperties: selectedSiteFeatures[0].properties.copiedFrom
+          rawSuburb: selectedFeature.properties.copiedFrom.site_suitability__suburb,
+          fullProperties: selectedFeature.properties.copiedFrom
         });
 
         try {
@@ -543,11 +497,19 @@ const ReportGenerator = ({
         }
       }
 
+      // Verify the sales data before proceeding
       console.log('Final sales data check before report generation:', {
         hasData: currentSalesData.length > 0,
         length: currentSalesData.length,
         sample: currentSalesData.slice(0, 3),
-        suburb: selectedSiteFeatures[0]?.properties.copiedFrom?.site_suitability__suburb
+        suburb: selectedFeature.properties.copiedFrom?.site_suitability__suburb
+      });
+
+      console.log('Starting report generation with:', {
+        suburb: selectedFeature.properties.site__suburb,
+        salesData: currentSalesData,
+        salesDataLength: currentSalesData.length,
+        feasibilitySettings
       });
 
       const screenshots = {};
@@ -558,35 +520,7 @@ const ReportGenerator = ({
       if (selectedSlides.cover) {
         addLog('Capturing cover screenshot...', 'image');
         try {
-          // Use combinedGeometry if multiple features are selected, otherwise use primaryFeature
-          let featureToCapture;
-          if (selectedSiteFeatures.length > 1) {
-            // For multiple features, create a FeatureCollection instead of flatmapping the coordinates
-            // This prevents the line drawing between the features
-            featureToCapture = {
-              type: 'FeatureCollection',
-              features: selectedSiteFeatures.map(feature => ({
-                type: 'Feature',
-                geometry: feature.geometry
-              }))
-            };
-          } else {
-            featureToCapture = primaryFeature;
-          }
-          
-          // For cover slide, use COVER type and always show the boundary in red (drawBoundaryLine = true)
-          // Pass showLabels: false to prevent adding A, B, etc. labels on the cover slide
-          const coverScreenshot = await captureMapScreenshot(
-            featureToCapture, 
-            SCREENSHOT_TYPES.COVER, 
-            true, 
-            developableArea, 
-            false, // Don't show developable area on cover
-            useDevelopableAreaForBounds, 
-            false, // Don't show feature labels on cover
-            false  // Don't show developable area labels on cover
-          );
-          screenshots.coverScreenshot = coverScreenshot;
+          screenshots.coverScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.COVER);
           addLog('Cover screenshot captured successfully', 'success');
         } catch (error) {
           console.error('Failed to capture cover screenshot:', error);
@@ -598,44 +532,8 @@ const ReportGenerator = ({
       if (selectedSlides.propertySnapshot) {
         addLog('Capturing aerial and snapshot images...', 'image');
         try {
-          // For multiple features, create a FeatureCollection
-          let featureToCapture;
-          if (selectedSiteFeatures.length > 1) {
-            featureToCapture = {
-              type: 'FeatureCollection',
-              features: selectedSiteFeatures.map(feature => ({
-                type: 'Feature',
-                geometry: feature.geometry
-              }))
-            };
-          } else {
-            featureToCapture = primaryFeature;
-          }
-          
-          screenshots.aerialScreenshot = await captureMapScreenshot(
-            featureToCapture, 
-            SCREENSHOT_TYPES.AERIAL, 
-            true, 
-            developableArea, 
-            showDevelopableArea, 
-            useDevelopableAreaForBounds, 
-            true, // Show feature labels
-            true  // Show developable area labels
-          );
-          
-          // For the snapshot screenshot, we want to show the developable area boundaries but not the labels
-          // Pass an additional parameter to control developable area labels separately from feature labels
-          screenshots.snapshotScreenshot = await captureMapScreenshot(
-            featureToCapture, 
-            SCREENSHOT_TYPES.SNAPSHOT, 
-            true, 
-            developableArea, 
-            showDevelopableArea, 
-            useDevelopableAreaForBounds, 
-            true, 
-            false // Don't show developable area labels
-          );
-          
+          screenshots.aerialScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.AERIAL);
+          screenshots.snapshotScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.SNAPSHOT);
           addLog('Aerial and snapshot images captured successfully', 'success');
         } catch (error) {
           console.error('Failed to capture snapshot screenshots:', error);
@@ -646,241 +544,74 @@ const ReportGenerator = ({
       
       if (selectedSlides.planning) {
         await planningMapRef.current?.captureScreenshots();
-        
-        // Use featureToCapture for multiple features
-        let featureToCapture;
-        if (selectedSiteFeatures.length > 1) {
-          featureToCapture = {
-            type: 'FeatureCollection',
-            features: selectedSiteFeatures.map(feature => ({
-              type: 'Feature',
-              geometry: feature.geometry
-            }))
-          };
-        } else {
-          featureToCapture = primaryFeature;
-        }
-        
-        screenshots.zoningScreenshot = await captureMapScreenshot(
-          featureToCapture, 
-          SCREENSHOT_TYPES.ZONING, 
-          true, 
-          developableArea, 
-          showDevelopableArea, 
-          useDevelopableAreaForBounds, 
-          false, // Don't show feature labels
-          false  // Don't show developable area labels
-        );
-        screenshots.fsrScreenshot = await captureMapScreenshot(
-          featureToCapture, 
-          SCREENSHOT_TYPES.FSR, 
-          true, 
-          developableArea, 
-          showDevelopableArea, 
-          useDevelopableAreaForBounds, 
-          false, // Don't show feature labels
-          false  // Don't show developable area labels
-        );
-        screenshots.hobScreenshot = await captureMapScreenshot(
-          featureToCapture, 
-          SCREENSHOT_TYPES.HOB, 
-          true, 
-          developableArea, 
-          showDevelopableArea, 
-          useDevelopableAreaForBounds, 
-          false, // Don't show feature labels
-          false  // Don't show developable area labels
-        );
+        screenshots.zoningScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.ZONING, true, developableArea, showDevelopableArea);
+        screenshots.fsrScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.FSR, true, developableArea, showDevelopableArea);
+        screenshots.hobScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.HOB, true, developableArea, showDevelopableArea);
       }
       
       if (selectedSlides.primarySiteAttributes) {
-        // Use featureToCapture for multiple features, similar to the property snapshot slide
-        let featureToCapture;
-        if (selectedSiteFeatures.length > 1) {
-          // For multiple features, create a FeatureCollection
-          featureToCapture = {
-            type: 'FeatureCollection',
-            features: selectedSiteFeatures.map(feature => ({
-              type: 'Feature',
-              geometry: feature.geometry
-            }))
-          };
-        } else {
-          featureToCapture = primaryFeature;
-        }
-        screenshots.compositeMapScreenshot = await capturePrimarySiteAttributesMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
+        screenshots.compositeMapScreenshot = await capturePrimarySiteAttributesMap(selectedFeature, developableArea, showDevelopableArea);
       }
       
       if (selectedSlides.secondaryAttributes) {
-        // Use featureToCapture for multiple features
-        let featureToCapture;
-        if (selectedSiteFeatures.length > 1) {
-          featureToCapture = {
-            type: 'FeatureCollection',
-            features: selectedSiteFeatures.map(feature => ({
-              type: 'Feature',
-              geometry: feature.geometry
-            }))
-          };
-        } else {
-          featureToCapture = primaryFeature;
-        }
-        screenshots.contourScreenshot = await captureContourMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, false, false);
-        screenshots.regularityScreenshot = await captureRegularityMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, false, false);
+        screenshots.contourScreenshot = await captureContourMap(selectedFeature, developableArea, showDevelopableArea);
+        screenshots.regularityScreenshot = await captureRegularityMap(selectedFeature, developableArea, showDevelopableArea);
       }
       
       if (selectedSlides.planningTwo) {
-        // Use featureToCapture for multiple features
-        let featureToCapture;
-        if (selectedSiteFeatures.length > 1) {
-          featureToCapture = {
-            type: 'FeatureCollection',
-            features: selectedSiteFeatures.map(feature => ({
-              type: 'Feature',
-              geometry: feature.geometry
-            }))
-          };
-        } else {
-          featureToCapture = primaryFeature;
-        }
-        screenshots.heritageScreenshot = await captureHeritageMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
-        screenshots.acidSulfateSoilsScreenshot = await captureAcidSulfateMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
+        screenshots.heritageScreenshot = await captureHeritageMap(selectedFeature, developableArea, showDevelopableArea);
+        screenshots.acidSulfateSoilsScreenshot = await captureAcidSulfateMap(selectedFeature, developableArea, showDevelopableArea);
       }
       
       if (selectedSlides.servicing) {
-        // Use featureToCapture for multiple features
-        let featureToCapture;
-        if (selectedSiteFeatures.length > 1) {
-          featureToCapture = {
-            type: 'FeatureCollection',
-            features: selectedSiteFeatures.map(feature => ({
-              type: 'Feature',
-              geometry: feature.geometry
-            }))
-          };
-        } else {
-          featureToCapture = primaryFeature;
-        }
-        const waterMains = await captureWaterMainsMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
+        const waterMains = await captureWaterMainsMap(selectedFeature, developableArea, showDevelopableArea);
         screenshots.waterMainsScreenshot = waterMains?.image;
         screenshots.waterFeatures = waterMains?.features;
         
-        const sewer = await captureSewerMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
+        const sewer = await captureSewerMap(selectedFeature, developableArea, showDevelopableArea);
         screenshots.sewerScreenshot = sewer?.image;
         screenshots.sewerFeatures = sewer?.features;
         
-        const power = await capturePowerMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
+        const power = await capturePowerMap(selectedFeature, developableArea, showDevelopableArea);
         screenshots.powerScreenshot = power?.image;
         screenshots.powerFeatures = power?.features;
       }
       
       if (selectedSlides.utilisation) {
-        // Use featureToCapture for multiple features
-        let featureToCapture;
-        if (selectedSiteFeatures.length > 1) {
-          featureToCapture = {
-            type: 'FeatureCollection',
-            features: selectedSiteFeatures.map(feature => ({
-              type: 'Feature',
-              geometry: feature.geometry
-            }))
-          };
-        } else {
-          featureToCapture = primaryFeature;
-        }
-        const geoscape = await captureGeoscapeMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
+        const geoscape = await captureGeoscapeMap(selectedFeature, developableArea, showDevelopableArea);
         screenshots.geoscapeScreenshot = geoscape?.image;
         screenshots.geoscapeFeatures = geoscape?.features;
       }
       
       if (selectedSlides.access) {
-        // Use featureToCapture for multiple features
-        let featureToCapture;
-        if (selectedSiteFeatures.length > 1) {
-          featureToCapture = {
-            type: 'FeatureCollection',
-            features: selectedSiteFeatures.map(feature => ({
-              type: 'Feature',
-              geometry: feature.geometry
-            }))
-          };
-        } else {
-          featureToCapture = primaryFeature;
-        }
-        screenshots.roadsScreenshot = await captureRoadsMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
-        screenshots.udpPrecinctsScreenshot = await captureUDPPrecinctMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
-        screenshots.ptalScreenshot = await capturePTALMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
+        screenshots.roadsScreenshot = await captureRoadsMap(selectedFeature, developableArea, showDevelopableArea);
+        screenshots.udpPrecinctsScreenshot = await captureUDPPrecinctMap(selectedFeature, developableArea, showDevelopableArea);
+        screenshots.ptalScreenshot = await capturePTALMap(selectedFeature, developableArea, showDevelopableArea);
       }
       
       if (selectedSlides.hazards) {
-        // Use featureToCapture for multiple features
-        let featureToCapture;
-        if (selectedSiteFeatures.length > 1) {
-          featureToCapture = {
-            type: 'FeatureCollection',
-            features: selectedSiteFeatures.map(feature => ({
-              type: 'Feature',
-              geometry: feature.geometry
-            }))
-          };
-        } else {
-          featureToCapture = primaryFeature;
-        }
-        const floodResult = await captureFloodMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
-        const bushfireResult = await captureBushfireMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
-        
-        // Store both images and feature data
-        screenshots.floodMapScreenshot = floodResult?.dataURL;
-        screenshots.site_suitability__floodFeatures = floodResult?.properties?.site_suitability__floodFeatures;
-        
-        screenshots.bushfireMapScreenshot = bushfireResult?.dataURL;
-        screenshots.site_suitability__bushfireFeatures = bushfireResult?.properties?.site_suitability__bushfireFeatures;
+        screenshots.floodMapScreenshot = await captureFloodMap(selectedFeature, developableArea, showDevelopableArea);
+        screenshots.bushfireMapScreenshot = await captureBushfireMap(selectedFeature, developableArea, showDevelopableArea);
       }
       
       if (selectedSlides.environmental) {
-        // Use featureToCapture for multiple features
-        let featureToCapture;
-        if (selectedSiteFeatures.length > 1) {
-          featureToCapture = {
-            type: 'FeatureCollection',
-            features: selectedSiteFeatures.map(feature => ({
-              type: 'Feature',
-              geometry: feature.geometry
-            }))
-          };
-        } else {
-          featureToCapture = primaryFeature;
-        }
-        screenshots.tecMapScreenshot = await captureTECMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
+        screenshots.tecMapScreenshot = await captureTECMap(selectedFeature, developableArea, showDevelopableArea);
         screenshots.tecFeatures = screenshots.tecMapScreenshot?.features;
-        screenshots.biodiversityMapScreenshot = await captureBiodiversityMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
+        screenshots.biodiversityMapScreenshot = await captureBiodiversityMap(selectedFeature, developableArea, showDevelopableArea);
         screenshots.biodiversityFeatures = screenshots.biodiversityMapScreenshot?.features;
       }
       
       if (selectedSlides.contamination) {
-        // Use featureToCapture for multiple features
-        let featureToCapture;
-        if (selectedSiteFeatures.length > 1) {
-          featureToCapture = {
-            type: 'FeatureCollection',
-            features: selectedSiteFeatures.map(feature => ({
-              type: 'Feature',
-              geometry: feature.geometry
-            }))
-          };
-        } else {
-          featureToCapture = primaryFeature;
-        }
-        const contaminationResult = await captureContaminationMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
+        const contaminationResult = await captureContaminationMap(selectedFeature, developableArea, showDevelopableArea);
         screenshots.contaminationMapScreenshot = contaminationResult?.image;
         screenshots.contaminationFeatures = contaminationResult?.features;
         
-        screenshots.historicalImagery = await captureHistoricalImagery(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
+        screenshots.historicalImagery = await captureHistoricalImagery(selectedFeature, developableArea, showDevelopableArea);
       }
 
       setFailedScreenshots(failed);
       if (failed.length > 0) {
-        addLog(`${failed.length} screenshots failed to capture`, 'warning');
+        throw new Error('Some screenshots failed to capture');
       }
 
       setCompletedSteps(prev => [...prev, 'screenshots']);
@@ -892,88 +623,37 @@ const ReportGenerator = ({
         day: 'numeric'
       });
 
-      const pptx = new PptxGenJS();
-      
-      // Set document properties
-      pptx.title = getCombinedSiteName();
-      pptx.subject = `Property Analysis for ${getPropertiesDescription()}`;
-      pptx.author = "Property Analysis Tool";
-  
-      // Prepare data for all selected properties
-      const propertiesData = selectedSiteFeatures.map(feature => {
-        const props = feature.properties?.copiedFrom || {};
-        return {
-          ...feature.properties,
-          copiedFrom: props,
-          address: props.site__address || 'Unknown Address',
-          suburb: props.site_suitability__suburb || 'Unknown Suburb',
-          lga: props.site_suitability__LGA || 'Unknown LGA',
-          lot: props.site__related_lot_references?.split('/')[0] || 'Unknown',
-          dp: props.site__related_lot_references?.split('/')[2] || 'Unknown',
-          zoning: props.site_suitability__landzone || 'Unknown',
-          area: props.site_suitability__area || 'Unknown',
-        };
-      });
-
-      // Prepare data for report generation
       const propertyData = {
-        ...primaryFeature.properties,
-        copiedFrom: primaryFeature.properties.copiedFrom,
-        
-        // Include isMultipleProperties flag and multiple addresses if needed
-        isMultipleProperties: selectedSiteFeatures.length > 1,
-        site__multiple_addresses: selectedSiteFeatures.length > 1 ? 
-          selectedSiteFeatures
-            .map(feature => feature.properties?.copiedFrom?.site__address || 'Unnamed Location')
-            .filter(address => address && address.trim() !== '')
-          : undefined,
-        
-        // Include all properties' details for multi-property table
-        allProperties: selectedSiteFeatures.length > 1 ? 
-          selectedSiteFeatures.map(feature => ({
-            // Include both properties from the feature and its copiedFrom
-            ...feature.properties,
-            copiedFrom: feature.properties?.copiedFrom || {}
-          }))
-          : undefined,
-        
+        ...selectedFeature.properties,
+        copiedFrom: selectedFeature.properties.copiedFrom,
         reportDate,
         selectedSlides,
-          
-        site_suitability__principal_zone_identifier: primaryFeature.properties.copiedFrom?.site_suitability__principal_zone_identifier,
-        site_suitability__area: primaryFeature.properties.copiedFrom?.site_suitability__area,
-        site_suitability__site_width: primaryFeature.properties.copiedFrom?.site_suitability__site_width,
-        site__related_lot_references: primaryFeature.properties.copiedFrom?.site__related_lot_references,
-        site_suitability__public_transport_access_level_AM: primaryFeature.properties.copiedFrom?.site_suitability__public_transport_access_level_AM,
-        site_suitability__current_government_land_use: primaryFeature.properties.copiedFrom?.site_suitability__current_government_land_use,
-        site_suitability__floorspace_ratio: primaryFeature.properties.copiedFrom?.site_suitability__floorspace_ratio,  
-        site_suitability__height_of_building: primaryFeature.properties.copiedFrom?.site_suitability__height_of_building,
-        site_suitability__NSW_government_agency: primaryFeature.properties.copiedFrom?.site_suitability__NSW_government_agency,
-        site_suitability__landzone: primaryFeature.properties.copiedFrom?.site_suitability__landzone,
-        site__geometry: primaryFeature.geometry.type === 'Polygon' ? 
-                        primaryFeature.geometry.coordinates[0] : 
-                        primaryFeature.geometry.coordinates,
-        site__address: primaryFeature.properties.copiedFrom?.site__address || 'Unnamed Location',
-        site__property_id: primaryFeature.properties.copiedFrom?.site__property_id,
-        site_suitability__LGA: primaryFeature.properties.copiedFrom?.site_suitability__LGA,
-        site_suitability__electorate: primaryFeature.properties.copiedFrom?.site_suitability__electorate,
-        site_suitability__suburb: primaryFeature.properties.copiedFrom?.site_suitability__suburb?.toUpperCase(),
+        site_suitability__principal_zone_identifier: selectedFeature.properties.copiedFrom?.site_suitability__principal_zone_identifier,
+        site_suitability__area: selectedFeature.properties.copiedFrom?.site_suitability__area,  
+        site_suitability__site_width: selectedFeature.properties.copiedFrom?.site_suitability__site_width,
+        site__related_lot_references: selectedFeature.properties.copiedFrom?.site__related_lot_references,
+        site_suitability__public_transport_access_level_AM: selectedFeature.properties.copiedFrom?.site_suitability__public_transport_access_level_AM,
+        site_suitability__current_government_land_use: selectedFeature.properties.copiedFrom?.site_suitability__current_government_land_use,
+        site_suitability__floorspace_ratio: selectedFeature.properties.copiedFrom?.site_suitability__floorspace_ratio,  
+        site_suitability__height_of_building: selectedFeature.properties.copiedFrom?.site_suitability__height_of_building,
+        site_suitability__NSW_government_agency: selectedFeature.properties.copiedFrom?.site_suitability__NSW_government_agency,
+        site_suitability__landzone: selectedFeature.properties.copiedFrom?.site_suitability__landzone,
+        site__geometry: selectedFeature.geometry.coordinates[0],
+        site__address: selectedFeature.properties.copiedFrom?.site__address || 'Unnamed Location',
+        site__property_id: selectedFeature.properties.copiedFrom?.site__property_id,
+        site_suitability__LGA: selectedFeature.properties.copiedFrom?.site_suitability__LGA,
+        site_suitability__electorate: selectedFeature.properties.copiedFrom?.site_suitability__electorate,
+        site_suitability__suburb: selectedFeature.properties.copiedFrom?.site_suitability__suburb?.toUpperCase(),
         developableArea: developableArea?.features || null,
         showDevelopableArea,
         scores: {}, // Initialize empty scores object that will be populated by each slide
         screenshot: screenshots.coverScreenshot,
         feasibilitySettings,
-        salesData: currentSalesData,
-        allProperties: propertiesData,
-        combinedArea, // Add the combined area calculation
-        combinedGeometry, // Add the combined geometry
+        salesData: currentSalesData,  // Use the freshly fetched sales data
         ...screenshots,
-        // Explicitly include flood and bushfire features if they exist in the screenshots
-        site_suitability__floodFeatures: screenshots.site_suitability__floodFeatures || primaryFeature.properties?.site_suitability__floodFeatures,
-        site_suitability__bushfireFeatures: screenshots.site_suitability__bushfireFeatures || primaryFeature.properties?.site_suitability__bushfireFeatures,
         // Include any features stored during screenshot capture
         ...Object.fromEntries(
-          Object.entries(primaryFeature.properties || {})
+          Object.entries(selectedFeature.properties || {})
             .filter(([key]) => key.startsWith('site_suitability__') || 
                              key === 'roadFeatures' || 
                              key === 'udpPrecincts' || 
@@ -1028,15 +708,13 @@ const ReportGenerator = ({
       });
 
       const generationTime = Date.now() - generationStartTime;
-      await recordReportGeneration(generationTime, selectedSlides, primaryFeature.properties.copiedFrom);
+      await recordReportGeneration(generationTime, selectedSlides, selectedFeature.properties.copiedFrom);
       
       setCompletedSteps(prev => [...prev, 'finalising']);
       setStatus('success');
-      triggerConfetti();
     } catch (error) {
       console.error('Error generating report:', error);
       setStatus('error');
-      addLog(`Error generating report: ${error.message}`, 'error');
     } finally {
       setIsGenerating(false);
       setCurrentStep(null);
@@ -1045,52 +723,17 @@ const ReportGenerator = ({
   };
 
   const handleScreenshotCapture = async () => {
-    if (selectedFeatures.length > 0) {
+    if (selectedFeature) {
       // Clear the service cache before capturing preview screenshots
       clearServiceCache();
       
-      // Use combinedGeometry if multiple features are selected, otherwise use the first feature
-      let featureToCapture;
-      if (selectedFeatures.length > 1) {
-        // For multiple features, create a FeatureCollection instead of flatmapping the coordinates
-        // This prevents the line drawing between the features
-        featureToCapture = {
-          type: 'FeatureCollection',
-          features: selectedFeatures.map(feature => ({
-            type: 'Feature',
-            geometry: feature.geometry
-          }))
-        };
-      } else {
-        featureToCapture = selectedFeatures[0];
-      }
-      
-      // For cover slide, use COVER type and always show the boundary in red (drawBoundaryLine = true)
-      // Pass showLabels: false to prevent adding A, B, etc. labels on the cover slide
-      const coverScreenshot = await captureMapScreenshot(
-        featureToCapture, 
-        SCREENSHOT_TYPES.COVER, 
-        true, 
-        developableArea, 
-        false, // Don't show developable area on cover
-        useDevelopableAreaForBounds, 
-        false, // Don't show feature labels on cover
-        false  // Don't show developable area labels on cover
-      );
-      // For other slides, keep boundary and use AERIAL type with labels
-      const snapshotScreenshot = await captureMapScreenshot(
-        featureToCapture, 
-        SCREENSHOT_TYPES.AERIAL, 
-        true, 
-        developableArea, 
-        showDevelopableArea, 
-        useDevelopableAreaForBounds, 
-        true, // Show feature labels
-        true  // Show developable area labels
-      );
+      // For cover slide, use COVER type without boundary
+      const coverScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.COVER, false);
+      // For other slides, keep boundary and use AERIAL type
+      const snapshotScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.AERIAL, true);
       
       // Capture GPR map for context slide
-      const gprResult = await captureGPRMap(selectedFeatures[0], developableArea, showDevelopableArea, useDevelopableAreaForBounds);
+      const gprResult = await captureGPRMap(selectedFeature, developableArea);
       
       setPreviewScreenshot(coverScreenshot);
       setScreenshots({
@@ -1202,30 +845,6 @@ const ReportGenerator = ({
     }));
   };
 
-  // Generate a descriptive name for the combined site
-  const getCombinedSiteName = () => {
-    if (!selectedSiteFeatures.length) return 'No Site Selected';
-    if (selectedSiteFeatures.length === 1) {
-      return primaryFeature.properties?.copiedFrom?.site__address || 'Selected Site';
-    }
-    
-    // If multiple features, create a combined name
-    const firstFeatureAddress = primaryFeature.properties?.copiedFrom?.site__address || '';
-    const suburb = primaryFeature.properties?.copiedFrom?.site_suitability__suburb || '';
-    return `Combined Site (${selectedSiteFeatures.length} properties) - ${suburb}`;
-  };
-  
-  // Get a descriptor of all selected properties for the report
-  const getPropertiesDescription = () => {
-    if (!selectedSiteFeatures.length) return 'No properties selected';
-    if (selectedSiteFeatures.length === 1) return primaryFeature.properties?.copiedFrom?.site__address || 'Single property';
-    
-    // List all addresses with numbers
-    return selectedSiteFeatures.map((feature, index) => 
-      `${index + 1}. ${feature.properties?.copiedFrom?.site__address || 'Unnamed property'}`
-    ).join('\n');
-  };
-
   return (
     <div className="h-full overflow-auto">
       <div className="p-4 relative z-50">
@@ -1297,46 +916,40 @@ const ReportGenerator = ({
 
         <div className="mb-4">
           <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Desktop Due Diligence PowerPoint Report Generator</h2>
+            <h2 className="text-xl font-semibold">Desktop Due Diligence PowerPoint Report Generator (WIP)</h2>
           </div>
-          <div className="h-1 bg-[#da2244] mt-2 rounded-full"></div>
         </div>
         
         <PlanningMapView 
           ref={planningMapRef}
-          feature={primaryFeature} 
+          feature={selectedFeature} 
           onScreenshotCapture={handlePlanningScreenshotsCapture}
           developableArea={developableArea}
           showDevelopableArea={showDevelopableArea}
         />
 
-        {/* Property selection and Developable Area panels - 3 column layout */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-          <PropertyListSelector 
-            onSelect={handleSiteSelection}
-            selectedFeatures={selectedSiteFeatures}
-          />
-          <DevelopableAreaSelector 
-            onLayerSelect={handleDevelopableAreaSelect} 
-            selectedFeature={primaryFeature}
-            showDevelopableArea={showDevelopableArea}
-            setShowDevelopableArea={setShowDevelopableArea}
-            useDevelopableAreaForBounds={useDevelopableAreaForBounds}
-            setUseDevelopableAreaForBounds={setUseDevelopableAreaForBounds}
-          />
-          <DevelopableAreaOptions
-            selectedLayers={developableArea ? [1] : []} // Pass a non-empty array when developableArea exists
-            showDevelopableArea={showDevelopableArea}
-            setShowDevelopableArea={setShowDevelopableArea}
-            useDevelopableAreaForBounds={useDevelopableAreaForBounds}
-            setUseDevelopableAreaForBounds={setUseDevelopableAreaForBounds}
-          />
-        </div>
+        <DevelopableAreaSelector onLayerSelect={handleDevelopableAreaSelect} selectedFeature={selectedFeature} />
         
+        {developableArea && (
+          <div className="p-4 bg-white rounded-lg shadow mb-4">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center space-x-3">
+                <input
+                  type="checkbox"
+                  checked={showDevelopableArea}
+                  onChange={(e) => setShowDevelopableArea(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 rounded"
+                  disabled={isGenerating}
+                />
+                <span className="text-0.5g font-small">Show Blue Dash Developable Area Boundary in Screenshots?</span>
+              </label>
+            </div>
+          </div>
+        )}
+
         <div className="bg-white p-6 rounded-lg shadow mb-4">
           <SlidePreview 
-            selectedFeature={primaryFeature}
-            selectedFeatures={selectedSiteFeatures}
+            selectedFeature={selectedFeature}
             screenshot={previewScreenshot}
           />
 
@@ -1492,10 +1105,10 @@ const ReportGenerator = ({
             <div className="mt-6">
               <button
                 onClick={generatePropertyReport}
-                disabled={isGenerating || !selectedFeatures.length || Object.values(selectedSlides).every(v => !v)}
+                disabled={isGenerating || !selectedFeature || Object.values(selectedSlides).every(v => !v)}
                 className={`
                   w-full px-4 py-3 rounded-lg font-medium
-                  ${isGenerating || !selectedFeatures.length || Object.values(selectedSlides).every(v => !v)
+                  ${isGenerating || !selectedFeature || Object.values(selectedSlides).every(v => !v)
                     ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                     : 'bg-blue-600 text-white hover:bg-blue-700'}
                   flex items-center justify-center gap-2 transition-colors
@@ -1541,14 +1154,14 @@ const ReportGenerator = ({
           salesData={salesData}
           open={showFeasibilitySettings}
           onClose={() => setShowFeasibilitySettings(false)}
-          selectedFeature={primaryFeature ? {
-            ...primaryFeature,
+          selectedFeature={selectedFeature ? {
+            ...selectedFeature,
             properties: {
-              ...primaryFeature.properties,
-              copiedFrom: primaryFeature.properties.copiedFrom,
-              site__address: primaryFeature.properties.copiedFrom?.site__address,
-              site_suitability__LGA: primaryFeature.properties.copiedFrom?.site_suitability__LGA,
-              site_suitability__suburb: primaryFeature.properties.copiedFrom?.site_suitability__suburb
+              ...selectedFeature.properties,
+              copiedFrom: selectedFeature.properties.copiedFrom,
+              site__address: selectedFeature.properties.copiedFrom?.site__address,
+              site_suitability__LGA: selectedFeature.properties.copiedFrom?.site_suitability__LGA,
+              site_suitability__suburb: selectedFeature.properties.copiedFrom?.site_suitability__suburb
             }
           } : null}
         />

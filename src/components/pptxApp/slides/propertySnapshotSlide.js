@@ -1,4 +1,6 @@
 import { convertCmValues } from '../utils/units';
+import * as turf from '@turf/turf';
+import { formatAddresses } from '../utils/addressFormatting';
 
 
 const styles = {
@@ -134,12 +136,150 @@ const formatLotDP = (lotDP) => {
   return lotDP.replace(/,/g, ', ');
 };
 
+// Helper function to get unique values from an array of properties for a given key
+const getUniqueValues = (properties, key, formatter = null) => {
+  if (!properties || properties.length === 0 || !key) return 'Not specified';
+  
+  // Extract values, handling the case where the value might be in copiedFrom
+  const values = properties
+    .map(prop => {
+      const value = prop.copiedFrom?.[key] || prop[key];
+      return formatter ? formatter(value) : value;
+    })
+    .filter(val => val && val !== 'Not specified' && val !== 'Unknown' && val !== 'N/A');
+  
+  // Return unique values
+  const uniqueValues = [...new Set(values)];
+  
+  if (uniqueValues.length === 0) return 'Not specified';
+  if (uniqueValues.length === 1) return uniqueValues[0];
+  
+  return uniqueValues.join(', ');
+};
+
+// Helper function to format string values with labels (A, B, C...)
+const formatStringValuesWithLabels = (properties, key, formatter = null) => {
+  if (!properties || properties.length === 0 || !key) return 'Not specified';
+  
+  // Extract values
+  const values = properties
+    .map((prop, index) => {
+      const value = prop.copiedFrom?.[key] || prop[key];
+      if (!value) return null;
+      
+      // Format the value if a formatter function is provided
+      const formattedValue = formatter ? formatter(value) : value;
+      
+      // Use letters as labels (A, B, C...)
+      const label = String.fromCharCode(65 + index); // A=65, B=66, etc.
+      return { label, formattedValue };
+    })
+    .filter(item => item !== null);
+  
+  if (values.length === 0) return 'Not specified';
+  
+  // If there's only one property, don't use labels
+  if (values.length === 1) {
+    return values[0].formattedValue;
+  }
+  
+  // Format each value with label
+  return values.map(item => `${item.label}: ${item.formattedValue}`).join(', ');
+};
+
+// Helper function to format numerical values with labels (A, B, C...) and optional bold total
+const formatNumericalValuesWithLabels = (properties, key, unit = '', formatFn = null, showTotal = false) => {
+  if (!properties || properties.length === 0 || !key) return 'Not specified';
+  
+  // Extract numerical values
+  const values = properties
+    .map((prop, index) => {
+      const value = prop.copiedFrom?.[key] || prop[key];
+      const numValue = typeof value === 'number' ? value : parseFloat(value);
+      if (isNaN(numValue)) return null;
+      
+      // Format the value if a formatter function is provided
+      const formattedValue = formatFn ? formatFn(numValue) : numValue.toLocaleString();
+      
+      // Use letters as labels (A, B, C...)
+      const label = String.fromCharCode(65 + index); // A=65, B=66, etc.
+      return { label, value: numValue, formattedValue };
+    })
+    .filter(item => item !== null);
+  
+  if (values.length === 0) return 'Not specified';
+  
+  // If there's only one property, don't use labels
+  if (values.length === 1) {
+    return `${values[0].formattedValue}${unit}`;
+  }
+  
+  // Format each value with label
+  const formattedValues = values.map(item => `${item.label}: ${item.formattedValue}${unit}`).join(', ');
+  
+  // Add total only if requested (for Site Area)
+  if (showTotal) {
+    // Calculate total for numerical values
+    const total = values.reduce((sum, item) => sum + item.value, 0);
+    const formattedTotal = formatFn ? formatFn(total) : total.toLocaleString();
+    return `${formattedValues}, Total: ${formattedTotal}${unit}`;
+  }
+  
+  return formattedValues;
+};
+
+// Format area values with labels (wrapper for backward compatibility)
+const formatAreaWithLabels = (properties, key) => {
+  return formatNumericalValuesWithLabels(properties, key, ' sqm', null, true);
+};
+
+// Helper function to aggregate numerical values
+const aggregateNumericalValues = (properties, key, formatFn = null) => {
+  if (!properties || properties.length === 0 || !key) return 'Not specified';
+  
+  // Extract numerical values
+  const values = properties
+    .map(prop => {
+      const value = prop.copiedFrom?.[key] || prop[key];
+      return typeof value === 'number' ? value : parseFloat(value);
+    })
+    .filter(val => !isNaN(val));
+  
+  if (values.length === 0) return 'Not specified';
+  if (values.length === 1) return formatFn ? formatFn(values[0]) : values[0].toString();
+  
+  // Calculate total
+  const total = values.reduce((sum, val) => sum + val, 0);
+  
+  // Format the total
+  return formatFn ? formatFn(total) : `${total.toLocaleString()} (total)`;
+};
+
 export function addPropertySnapshotSlide(pptx, properties) {
   const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
   
+  // Determine if we're dealing with multiple properties
+  const isMultipleProperties = properties.isMultipleProperties || 
+                              (properties.site__multiple_addresses && 
+                              Array.isArray(properties.site__multiple_addresses) && 
+                              properties.site__multiple_addresses.length > 1);
+  
+  // Get the appropriate address text using formatAddresses
+  const addressText = isMultipleProperties 
+    ? formatAddresses(properties.site__multiple_addresses)
+    : properties.site__address;
+  
+  // Prepare an array of all property data for multi-property scenarios
+  let allProperties = [];
+  if (isMultipleProperties && properties.allProperties) {
+    allProperties = properties.allProperties;
+  } else {
+    allProperties = [properties];
+  }
+  
   // Add title with line break
   slide.addText([
-    { text: properties.site__address, options: { color: styles.title.color } },
+    { text: addressText, options: { color: styles.title.color } },
     { text: ' ', options: { breakLine: true } },
     { text: 'Property Snapshot', options: { color: styles.subtitle.color } }
   ], convertCmValues({
@@ -159,6 +299,61 @@ export function addPropertySnapshotSlide(pptx, properties) {
     ...convertCmValues(styles.nswLogo)
   });
 
+  // Get values for table based on whether we have multiple properties
+  const lgaValue = isMultipleProperties 
+    ? getUniqueValues(allProperties, 'site_suitability__LGA')
+    : properties.site_suitability__LGA || 'Not specified';
+    
+  const electorateValue = isMultipleProperties
+    ? getUniqueValues(allProperties, 'site_suitability__electorate') 
+    : properties.site_suitability__electorate || 'Not specified';
+    
+  const landOwningAgencyValue = isMultipleProperties
+    ? getUniqueValues(allProperties, 'site_suitability__NSW_government_agency', 
+        val => val ? val.split(':')[0].replace(/[\[\]]/g, '') : 'N/A')
+    : properties.site_suitability__NSW_government_agency 
+      ? properties.site_suitability__NSW_government_agency.split(':')[0].replace(/[\[\]]/g, '') 
+      : 'N/A';
+      
+  // Use the new formatStringValuesWithLabels function for Lot/DP when multiple properties
+  const lotDpValue = isMultipleProperties && allProperties.length > 1
+    ? formatStringValuesWithLabels(allProperties, 'site__related_lot_references', formatLotDP)
+    : formatLotDP(properties.site__related_lot_references) || 'Not specified';
+    
+  // Use the appropriate formatting function based on whether we have multiple properties
+  // Only show total for Site Area
+  const areaValue = isMultipleProperties && allProperties.length > 1
+    ? formatAreaWithLabels(allProperties, 'site_suitability__area')
+    : `${properties.site_suitability__area ? properties.site_suitability__area.toLocaleString() : 'Not specified'} sqm`;
+    
+  // Format site width with labels if multiple properties, but no total
+  const siteWidthValue = isMultipleProperties && allProperties.length > 1
+    ? formatNumericalValuesWithLabels(allProperties, 'site_suitability__site_width', ' m', 
+        val => parseFloat(val).toFixed(1), false)
+    : `${properties.site_suitability__site_width ? properties.site_suitability__site_width.toFixed(1) : 'Not specified'} m`;
+    
+  const ptalValue = isMultipleProperties
+    ? getUniqueValues(allProperties, 'site_suitability__public_transport_access_level_AM',
+        val => val ? val.split(':')[0].replace(/[\[\]]/g, '') : 'Not specified')
+    : properties.site_suitability__public_transport_access_level_AM 
+      ? properties.site_suitability__public_transport_access_level_AM.split(':')[0].replace(/[\[\]]/g, '') 
+      : 'Not specified';
+      
+  const zoningValue = isMultipleProperties
+    ? getUniqueValues(allProperties, 'site_suitability__principal_zone_identifier', formatZoning)
+    : formatZoning(properties.site_suitability__principal_zone_identifier);
+    
+  // Format FSR with labels if multiple properties, but no total
+  const fsrValue = isMultipleProperties && allProperties.length > 1
+    ? formatNumericalValuesWithLabels(allProperties, 'site_suitability__floorspace_ratio', ':1', null, false)
+    : properties.site_suitability__floorspace_ratio ? `${properties.site_suitability__floorspace_ratio}:1` : 'Not specified';
+    
+  // Format HOB with labels if multiple properties, but no total
+  const hobValue = isMultipleProperties && allProperties.length > 1
+    ? formatNumericalValuesWithLabels(allProperties, 'site_suitability__height_of_building', 'm', null, false)
+    : properties.site_suitability__height_of_building ? `${properties.site_suitability__height_of_building}m` : 'Not specified';
+
+  // Build table data with unique/aggregated values
   const tableData = [
     // Headers
     [{ text: 'Category', options: { fill: '002664', color: 'FFFFFF' } }, 
@@ -171,16 +366,14 @@ export function addPropertySnapshotSlide(pptx, properties) {
         rowspan: 8,
         valign: 'middle'
       }
-    }, 'Address', properties.site__address],
-    ['LGA', properties.site_suitability__LGA || 'Not specified'],
-    ['Electorate', properties.site_suitability__electorate || 'Not specified'],
-    ['Land Owning Agency', properties.site_suitability__NSW_government_agency ? 
-      properties.site_suitability__NSW_government_agency.split(':')[0].replace(/[\[\]]/g, '') : 'N/A'],
-    ['Lot/DP', formatLotDP(properties.site__related_lot_references) || 'Not specified'],
-    ['Site Area', `${properties.site_suitability__area ? properties.site_suitability__area.toLocaleString() : 'Not specified'} sqm`],
-    ['Site Width', `${properties.site_suitability__site_width ? properties.site_suitability__site_width.toFixed(1) : 'Not specified'} m`],
-    ['Public Transport Accessibility', properties.site_suitability__public_transport_access_level_AM ? 
-      properties.site_suitability__public_transport_access_level_AM.split(':')[0].replace(/[\[\]]/g, '') : 'Not specified'],
+    }, 'Address', addressText],
+    ['LGA', lgaValue],
+    ['Electorate', electorateValue],
+    ['Land Owning Agency', landOwningAgencyValue],
+    ['Lot/DP', lotDpValue],
+    ['Site Area', areaValue],
+    ['Site Width', siteWidthValue],
+    ['Public Transport Accessibility', ptalValue],
     // Current Use
     [{ 
       text: 'Current Use\n\n',
@@ -209,9 +402,9 @@ export function addPropertySnapshotSlide(pptx, properties) {
         rowspan: 3,
         valign: 'middle'
       }
-    }, 'Primary Zoning', formatZoning(properties.site_suitability__principal_zone_identifier)],
-    ['FSR', properties.site_suitability__floorspace_ratio ? `${properties.site_suitability__floorspace_ratio}:1` : 'Not specified'],
-    ['HOB', properties.site_suitability__height_of_building ? `${properties.site_suitability__height_of_building}m` : 'Not specified']
+    }, 'Primary Zoning', zoningValue],
+    ['FSR', fsrValue],
+    ['HOB', hobValue]
   ];
 
   slide.addTable(tableData, {

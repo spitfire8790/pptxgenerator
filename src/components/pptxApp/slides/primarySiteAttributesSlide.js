@@ -188,10 +188,24 @@ const styles = {
   }
 };
 
-const calculateDevelopableArea = (geometry) => {
-  if (!geometry) return 0;
-  const areaInSqMeters = area(geometry);
-  return Math.round(areaInSqMeters);
+const calculateDevelopableArea = (developableAreas) => {
+  if (!developableAreas || !Array.isArray(developableAreas) || developableAreas.length === 0) {
+    return { total: 0, areas: [] };
+  }
+  
+  // Calculate area for each developable area
+  const areas = developableAreas.map((feature, index) => {
+    const areaInSqMeters = area(feature.geometry);
+    return {
+      label: String.fromCharCode(65 + index), // A=65, B=66, etc.
+      area: Math.round(areaInSqMeters)
+    };
+  });
+  
+  // Calculate total area
+  const total = areas.reduce((sum, item) => sum + item.area, 0);
+  
+  return { total, areas };
 };
 
 const icons = {
@@ -321,10 +335,10 @@ export async function addPrimarySiteAttributesSlide(pptx, properties) {
 
   // Add developable area section with score-based color
   const developableArea = properties.developableArea ? 
-    calculateDevelopableArea(properties.developableArea[0]?.geometry) : 0;
+    calculateDevelopableArea(properties.developableArea) : { total: 0, areas: [] };
   
   // Calculate and store the score
-  properties.scores.developableArea = scoringCriteria.developableArea.calculateScore(developableArea);
+  properties.scores.developableArea = scoringCriteria.developableArea.calculateScore(developableArea.total);
   const score = properties.scores.developableArea;
 
   slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
@@ -343,7 +357,10 @@ export async function addPrimarySiteAttributesSlide(pptx, properties) {
       options: { color: '002664', bold: true } 
     },
     { 
-      text: `is approx. ${developableArea.toLocaleString()} sqm.`,
+      text: developableArea.areas.length > 1 
+        ? developableArea.areas.map(item => `${item.label}: ${item.area.toLocaleString()} sqm`).join(', ') + 
+          ` = Total: ${developableArea.total.toLocaleString()} sqm`
+        : `is approx. ${developableArea.total.toLocaleString()} sqm.`,
       options: { color: '363636' } 
     },
     {

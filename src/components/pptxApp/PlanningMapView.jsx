@@ -7,11 +7,21 @@ const PlanningMapView = ({ feature, onScreenshotCapture, developableArea, showDe
     if (!feature) return;
     
     try {
+      console.log('Capturing planning screenshots on explicit request');
       const screenshots = {};
       const planningTypes = [SCREENSHOT_TYPES.ZONING, SCREENSHOT_TYPES.FSR, SCREENSHOT_TYPES.HOB];
 
       for (const type of planningTypes) {
-        const screenshot = await captureMapScreenshot(feature, type, true, developableArea, showDevelopableArea, true);
+        const screenshot = await captureMapScreenshot(
+          feature, 
+          type, 
+          true, 
+          developableArea, 
+          showDevelopableArea, 
+          true, // useDevelopableAreaForBounds
+          true, // showLabels
+          true  // showDevelopableAreaLabels - show labels for planning maps
+        );
         if (screenshot) {
           screenshots[`${type}Screenshot`] = screenshot;
         }
@@ -23,10 +33,12 @@ const PlanningMapView = ({ feature, onScreenshotCapture, developableArea, showDe
     }
   }, [feature, developableArea, showDevelopableArea, onScreenshotCapture]);
 
-  useEffect(() => {
-    captureScreenshots();
-  }, [feature, developableArea, showDevelopableArea, captureScreenshots]);
+  // Remove the automatic useEffect trigger
+  // useEffect(() => {
+  //   captureScreenshots();
+  // }, [feature, developableArea, showDevelopableArea, captureScreenshots]);
 
+  // Only expose the captureScreenshots method via ref
   React.useImperativeHandle(ref, () => ({
     captureScreenshots
   }));
