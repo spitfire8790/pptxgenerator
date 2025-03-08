@@ -17,7 +17,7 @@ import { addContextSlide } from './slides/contextSlide';
 import { addPermissibilitySlide } from './slides/permissibilitySlide';
 import { addDevelopmentSlide } from './slides/developmentSlide';
 import { addFeasibilitySlide } from './slides/feasibilitySlide';
-import { area } from '@turf/area';
+import area from '@turf/area';
 import { 
   captureMapScreenshot, 
   capturePrimarySiteAttributesMap, 
@@ -46,6 +46,8 @@ import SlidePreview from './SlidePreview';
 import PlanningMapView from './PlanningMapView';
 import PptxGenJS from 'pptxgenjs';
 import DevelopableAreaSelector, { DevelopableAreaOptions } from './DevelopableAreaSelector';
+import { checkUserClaims } from './utils/auth/tokenUtils';
+import { sendReportNotificationEmail, isEmailServiceAvailable, saveNotificationPreference, getNotificationPreference } from '../../lib/emailService';
 
 import { 
   Home,
@@ -69,7 +71,10 @@ import {
   Calculator,
   Settings2,
   Banknote,
-  X
+  X,
+  MessageSquare,
+  Mail,
+  BellRing
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import './Timer.css';
@@ -82,6 +87,7 @@ import IssuesList from './IssuesList';
 import FeasibilityManager from './components/FeasibilityManager';
 import Papa from 'papaparse';
 import PropertyListSelector from './PropertyListSelector';
+import Chat from './Chat';
 
 const slideOptions = [
   { id: 'cover', label: 'Cover Page', addSlide: addCoverSlide, icon: Home },
@@ -243,6 +249,9 @@ const ReportGenerator = ({
   const [generationLogs, setGenerationLogs] = useState([]);
   const [logs, setLogs] = useState([]);
   const logCounterRef = useRef(0);
+  const [enableEmailNotifications, setEnableEmailNotifications] = useState(false);
+  const [userInfo, setUserInfo] = useState(null);
+  const [emailServiceAvailable, setEmailServiceAvailable] = useState(true);
   const [feasibilitySettings, setFeasibilitySettings] = useState({
     lowMidDensity: {
       siteEfficiencyRatio: 0.80,
@@ -278,6 +287,7 @@ const ReportGenerator = ({
   const [salesData, setSalesData] = useState([]);
   const [showFeasibilitySettings, setShowFeasibilitySettings] = useState(false);
   const [selectedSiteFeatures, setSelectedSiteFeatures] = useState(selectedFeatures);
+  const [showChat, setShowChat] = useState(false);
   
   // Use the first selected feature as the primary for display
   const primaryFeature = selectedSiteFeatures.length > 0 ? selectedSiteFeatures[0] : null;
@@ -286,6 +296,184 @@ const ReportGenerator = ({
   useEffect(() => {
     setSelectedSiteFeatures(selectedFeatures);
   }, [selectedFeatures]);
+
+  // Fetch user info from GiraffeSDK when component mounts and check notification permission
+  useEffect(() => {
+    const getUserInfo = async () => {
+      try {
+        console.log('Attempting to retrieve user info...');
+        const info = await checkUserClaims();
+        console.log('User info returned from checkUserClaims:', info);
+        
+        if (info) {
+          console.log('Retrieved user info for notifications:', info);
+          setUserInfo(info);
+          
+          // Initialize email notification preference from localStorage
+          if (info.email) {
+            const preferenceEnabled = getNotificationPreference(info.email);
+            setEnableEmailNotifications(preferenceEnabled);
+            console.log(`Loaded email notification preference for ${info.email}: ${preferenceEnabled}`);
+          } else {
+            console.warn('User info retrieved but email is missing:', info);
+          }
+        } else {
+          console.warn('No user info returned from checkUserClaims');
+          
+          // Fallback for development/testing - create a mock user
+          const mockUser = {
+            email: 'test.user@example.com',
+            name: 'Test User'
+          };
+          console.log('Setting up mock user for testing:', mockUser);
+          setUserInfo(mockUser);
+        }
+      } catch (error) {
+        console.error('Error fetching user info for notifications:', error);
+        
+        // Fallback for development/testing if an error occurs
+        const mockUser = {
+          email: 'test.user@example.com',
+          name: 'Test User'
+        };
+        console.log('Setting up mock user after error:', mockUser);
+        setUserInfo(mockUser);
+      }
+    };
+    
+    // Check if email service is available
+    const checkEmailService = async () => {
+      try {
+        const available = await isEmailServiceAvailable();
+        console.log('Email service available:', available);
+        setEmailServiceAvailable(available);
+      } catch (error) {
+        console.error('Error checking email service:', error);
+        setEmailServiceAvailable(false);
+      }
+    };
+    
+    // Request notification permission if not already granted or denied
+    const checkNotificationPermission = () => {
+      if ('Notification' in window) {
+        console.log('Current notification permission:', Notification.permission);
+        if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+          // Show a notification about the feature
+          const notificationMessage = document.createElement('div');
+          notificationMessage.className = 'fixed bottom-4 right-4 bg-white p-4 rounded-xl shadow-lg border border-gray-300 z-50 flex items-start max-w-md';
+          notificationMessage.innerHTML = `
+            <div class="bg-blue-100 p-2 rounded-full mr-3">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="h-6 w-6 text-blue-600">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+            </div>
+            <div>
+              <h3 class="font-semibold text-gray-900">Enable Desktop Notifications</h3>
+              <p class="text-sm text-gray-600 mb-3">Allow notifications to be alerted when your report generation is complete.</p>
+              <div class="flex space-x-2">
+                <button id="enable-notifications" class="px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700">Enable</button>
+                <button id="dismiss-notification" class="px-3 py-1 bg-gray-200 text-gray-700 text-sm rounded-md hover:bg-gray-300">Maybe Later</button>
+              </div>
+            </div>`;
+          
+          document.body.appendChild(notificationMessage);
+          
+          // Add event listeners
+          document.getElementById('enable-notifications').addEventListener('click', () => {
+            Notification.requestPermission().then(permission => {
+              console.log('Notification permission:', permission);
+              document.body.removeChild(notificationMessage);
+            });
+          });
+          
+          document.getElementById('dismiss-notification').addEventListener('click', () => {
+            document.body.removeChild(notificationMessage);
+          });
+          
+          // Auto-remove after 10 seconds
+          setTimeout(() => {
+            if (document.body.contains(notificationMessage)) {
+              document.body.removeChild(notificationMessage);
+            }
+          }, 10000);
+        }
+      }
+    };
+    
+    getUserInfo();
+    checkEmailService();
+    
+    // Only check notification permission after a short delay to ensure
+    // the component is fully mounted and the user has had time to interact
+    setTimeout(checkNotificationPermission, 3000);
+  }, []);
+
+  // Function to send desktop notification
+  const sendDesktopNotification = (title, message) => {
+    try {
+      // Check if browser supports notifications
+      if (!('Notification' in window)) {
+        console.log('This browser does not support desktop notifications');
+        return;
+      }
+
+      // Check if permission is already granted
+      if (Notification.permission === 'granted') {
+        new Notification(title, { body: message });
+      } 
+      // If permission isn't denied, request it
+      else if (Notification.permission !== 'denied') {
+        Notification.requestPermission().then(permission => {
+          if (permission === 'granted') {
+            new Notification(title, { body: message });
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error sending desktop notification:', error);
+    }
+  };
+
+  // Function to send email notification
+  const sendEmailNotification = async (reportName, status) => {
+    console.log('sendEmailNotification called with:', { reportName, status });
+    console.log('Current userInfo:', userInfo);
+    console.log('Email notifications enabled:', enableEmailNotifications);
+    
+    if (!enableEmailNotifications) {
+      console.log('Email notifications are disabled - not sending email');
+      return;
+    }
+    
+    if (!userInfo?.email) {
+      console.warn('Cannot send email notification - no user email available');
+      return;
+    }
+    
+    try {
+      addLog('Sending email notification...', 'default');
+      console.log(`Preparing to send email to ${userInfo.email}`);
+      
+      // Use our email service to send the notification
+      const result = await sendReportNotificationEmail({
+        to: userInfo.email,
+        reportName: reportName || 'Property Analysis Report',
+        status: status || 'success',
+        userName: userInfo.name || 'User'
+      });
+      
+      console.log('Email service result:', result);
+      
+      if (result.success) {
+        addLog('Email notification sent successfully', 'success');
+      } else {
+        throw new Error(result.error || 'Unknown error sending email');
+      }
+    } catch (error) {
+      console.error('Error sending email notification:', error);
+      addLog('Failed to send email notification', 'error');
+    }
+  };
 
   // Handler for when sites are selected in the PropertyListSelector
   const handleSiteSelection = (features) => {
@@ -344,6 +532,202 @@ const ReportGenerator = ({
       console.log('Selected Features:', selectedFeatures);
       console.log('Addresses:', selectedFeatures.map(feature => feature.properties?.copiedFrom?.site__address));
       handleScreenshotCapture();
+    }
+  }, [selectedFeatures]);
+
+  useEffect(() => {
+    if (selectedFeatures.length > 0 && selectedFeatures[0].properties?.copiedFrom?.site_suitability__suburb) {
+      const fetchSalesData = async () => {
+        const suburb = selectedFeatures[0].properties.copiedFrom.site_suitability__suburb.toUpperCase();
+        console.log('Starting fetchSalesData with params:', {
+          originalSuburb: selectedFeatures[0].properties.copiedFrom.site_suitability__suburb,
+          uppercaseSuburb: suburb,
+          fullProperties: selectedFeatures[0].properties
+        });
+        
+        try {
+          console.log('Fetching CSV data for:', suburb);
+          const response = await fetch('/nsw_property_sales.csv');
+          const csvText = await response.text();
+          
+          Papa.parse(csvText, {
+            header: true,
+            complete: (results) => {
+              console.log('CSV parsing complete:', {
+                totalRows: results.data.length,
+                sampleRow: results.data[0],
+                headers: results.meta.fields
+              });
+
+              // First try exact suburb match
+              let filteredData = results.data
+                .filter(row => 
+                  row.suburb?.toUpperCase() === suburb && 
+                  row.price && row.bedrooms
+                );
+
+              // If no results, try searching for suburbs containing the original suburb name
+              if (filteredData.length === 0) {
+                console.log('No exact suburb matches found, searching for related suburbs containing:', suburb);
+                const baseSuburb = suburb.split(' ').pop(); // Get the base suburb name (e.g., 'KILLARA' from 'EAST KILLARA')
+                filteredData = results.data
+                  .filter(row => 
+                    row.suburb?.toUpperCase().includes(baseSuburb) && 
+                    row.price && row.bedrooms
+                  );
+                
+                console.log('Found related suburbs:', {
+                  baseSuburb,
+                  matchedSuburbs: [...new Set(filteredData.map(row => row.suburb))],
+                  matchCount: filteredData.length
+                });
+              }
+
+              // Process the filtered data
+              const processedData = filteredData
+                .map(row => ({
+                  price: parseFloat(row.price),
+                  bedrooms: parseInt(row.bedrooms),
+                  bathrooms: parseInt(row.bathrooms) || 0,
+                  parking: parseInt(row.parking) || 0,
+                  address: row.address || 'Address not provided',
+                  property_type: row.property_type || 'Apartment',
+                  sold_date: row.sold_date || 'Date not provided',
+                  suburb: row.suburb // Include suburb in the processed data
+                }))
+                .filter(item => 
+                  !isNaN(item.price) && 
+                  !isNaN(item.bedrooms) && 
+                  item.price > 0
+                )
+                .sort((a, b) => new Date(b.sold_date) - new Date(a.sold_date));
+
+              console.log('Processed sales data:', {
+                originalLength: results.data.length,
+                filteredLength: processedData.length,
+                sample: processedData.slice(0, 3),
+                suburb,
+                uniqueSuburbs: [...new Set(processedData.map(item => item.suburb))]
+              });
+
+              setSalesData(processedData);
+            },
+            error: (error) => {
+              console.error('CSV parsing error:', error);
+              setSalesData([]);
+            }
+          });
+        } catch (error) {
+          console.error('Error fetching CSV:', error);
+          setSalesData([]);
+        }
+      };
+
+      fetchSalesData();
+    } else {
+      console.log('No suburb data available:', {
+        properties: selectedFeatures.map(feature => feature.properties),
+        copiedFrom: selectedFeatures.map(feature => feature.properties?.copiedFrom),
+        suburb: selectedFeatures.map(feature => feature.properties?.copiedFrom?.site_suitability__suburb)
+      });
+    }
+  }, [selectedFeatures]);
+
+  useEffect(() => {
+    if (selectedFeatures.length > 0 && selectedFeatures[0].properties?.copiedFrom?.site_suitability__suburb) {
+      const fetchSalesData = async () => {
+        const suburb = selectedFeatures[0].properties.copiedFrom.site_suitability__suburb.toUpperCase();
+        console.log('Starting fetchSalesData with params:', {
+          originalSuburb: selectedFeatures[0].properties.copiedFrom.site_suitability__suburb,
+          uppercaseSuburb: suburb,
+          fullProperties: selectedFeatures[0].properties
+        });
+        
+        try {
+          console.log('Fetching CSV data for:', suburb);
+          const response = await fetch('/nsw_property_sales.csv');
+          const csvText = await response.text();
+          
+          Papa.parse(csvText, {
+            header: true,
+            complete: (results) => {
+              console.log('CSV parsing complete:', {
+                totalRows: results.data.length,
+                sampleRow: results.data[0],
+                headers: results.meta.fields
+              });
+
+              // First try exact suburb match
+              let filteredData = results.data
+                .filter(row => 
+                  row.suburb?.toUpperCase() === suburb && 
+                  row.price && row.bedrooms
+                );
+
+              // If no results, try searching for suburbs containing the original suburb name
+              if (filteredData.length === 0) {
+                console.log('No exact suburb matches found, searching for related suburbs containing:', suburb);
+                const baseSuburb = suburb.split(' ').pop(); // Get the base suburb name (e.g., 'KILLARA' from 'EAST KILLARA')
+                filteredData = results.data
+                  .filter(row => 
+                    row.suburb?.toUpperCase().includes(baseSuburb) && 
+                    row.price && row.bedrooms
+                  );
+                
+                console.log('Found related suburbs:', {
+                  baseSuburb,
+                  matchedSuburbs: [...new Set(filteredData.map(row => row.suburb))],
+                  matchCount: filteredData.length
+                });
+              }
+
+              // Process the filtered data
+              const processedData = filteredData
+                .map(row => ({
+                  price: parseFloat(row.price),
+                  bedrooms: parseInt(row.bedrooms),
+                  bathrooms: parseInt(row.bathrooms) || 0,
+                  parking: parseInt(row.parking) || 0,
+                  address: row.address || 'Address not provided',
+                  property_type: row.property_type || 'Apartment',
+                  sold_date: row.sold_date || 'Date not provided',
+                  suburb: row.suburb // Include suburb in the processed data
+                }))
+                .filter(item => 
+                  !isNaN(item.price) && 
+                  !isNaN(item.bedrooms) && 
+                  item.price > 0
+                )
+                .sort((a, b) => new Date(b.sold_date) - new Date(a.sold_date));
+
+              console.log('Processed sales data:', {
+                originalLength: results.data.length,
+                filteredLength: processedData.length,
+                sample: processedData.slice(0, 3),
+                suburb,
+                uniqueSuburbs: [...new Set(processedData.map(item => item.suburb))]
+              });
+
+              setSalesData(processedData);
+            },
+            error: (error) => {
+              console.error('CSV parsing error:', error);
+              setSalesData([]);
+            }
+          });
+        } catch (error) {
+          console.error('Error fetching CSV:', error);
+          setSalesData([]);
+        }
+      };
+
+      fetchSalesData();
+    } else {
+      console.log('No suburb data available:', {
+        properties: selectedFeatures.map(feature => feature.properties),
+        copiedFrom: selectedFeatures.map(feature => feature.properties?.copiedFrom),
+        suburb: selectedFeatures.map(feature => feature.properties?.copiedFrom?.site_suitability__suburb)
+      });
     }
   }, [selectedFeatures]);
 
@@ -1080,10 +1464,14 @@ const ReportGenerator = ({
       setCompletedSteps(prev => [...prev, 'finalising']);
       setStatus('success');
       triggerConfetti();
+      sendDesktopNotification('Report Generation Complete', 'Your report has been generated successfully!');
+      sendEmailNotification(pptx.title, 'success');
     } catch (error) {
       console.error('Error generating report:', error);
       setStatus('error');
       addLog(`Error generating report: ${error.message}`, 'error');
+      sendDesktopNotification('Report Generation Failed', 'An error occurred while generating your report.');
+      sendEmailNotification(pptx.title, 'error');
     } finally {
       setIsGenerating(false);
       setCurrentStep(null);
@@ -1281,7 +1669,7 @@ const ReportGenerator = ({
   return (
     <div className="h-full overflow-auto">
       <div className="p-4 relative z-50">
-        <div className="grid grid-cols-4 gap-4 mb-6 relative">
+        <div className="grid grid-cols-5 gap-4 mb-6 relative">
           <button
             className="px-4 py-2.5 rounded-xl text-gray-900 font-medium bg-white border-2 border-blue-600 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
             onClick={(e) => {
@@ -1345,6 +1733,22 @@ const ReportGenerator = ({
             <AlertCircle className="w-5 h-5 text-red-600" />
             Log Issue
           </button>
+
+          <button
+            onClick={(e) => {
+              console.log('Chat button clicked');
+              e.preventDefault();
+              e.stopPropagation();
+              setShowChat(prev => {
+                console.log('Setting showChat to:', !prev);
+                return !prev;
+              });
+            }}
+            className="px-4 py-2.5 rounded-xl text-gray-900 font-medium bg-white border-2 border-blue-600 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
+          >
+            <MessageSquare className="w-5 h-5 text-blue-600" />
+            Chat
+          </button>
         </div>
 
         <div className="mb-4">
@@ -1406,7 +1810,7 @@ const ReportGenerator = ({
 
           <div className="flex items-center justify-between mt-4 mb-2 pb-2 border-b border-gray-200">
             <div className="flex items-center gap-4">
-              <label className="flex items-center space-x-2">
+              <label className="inline-flex items-center cursor-pointer">
                 <input
                   type="checkbox"
                   checked={Object.values(selectedSlides).every(Boolean)}
@@ -1422,8 +1826,48 @@ const ReportGenerator = ({
                   className="w-4 h-4 text-blue-600 rounded"
                   disabled={isGenerating}
                 />
-                <span className="font-medium">{Object.values(selectedSlides).every(Boolean) ? 'Deselect All' : 'Select All'}</span>
+                <span className="font-medium ml-2">{Object.values(selectedSlides).every(Boolean) ? 'Deselect All' : 'Select All'}</span>
               </label>
+              <div className="flex items-center">
+                <div className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    id="enableEmailNotifications"
+                    checked={enableEmailNotifications}
+                    onChange={() => {
+                      const newValue = !enableEmailNotifications;
+                      setEnableEmailNotifications(newValue);
+                      if (userInfo?.email) {
+                        saveNotificationPreference(userInfo.email, newValue);
+                      }
+                    }}
+                    className="sr-only peer"
+                    disabled={!emailServiceAvailable || isGenerating}
+                  />
+                  <div className={`w-11 h-6 ${!emailServiceAvailable ? 'bg-gray-200' : 'bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[""] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600'}`}></div>
+                  <span className="ml-3 text-sm font-medium text-gray-900 flex items-center">
+                    <Mail className="h-4 w-4 mr-1" />
+                    {emailServiceAvailable === false ? (
+                      <span className="text-gray-500 flex items-center">
+                        Email notifications unavailable 
+                        <span className="ml-1 group relative">
+                          <HelpCircle className="h-4 w-4 text-gray-400" />
+                          <span className="hidden group-hover:block absolute left-0 bottom-6 bg-gray-800 text-white text-xs rounded p-2 w-48 z-10">
+                            Email service is not configured or unavailable.
+                          </span>
+                        </span>
+                      </span>
+                    ) : (
+                      <span>
+                        <span className="font-medium">Email notifications</span>
+                        {userInfo?.email && (
+                          <span className="ml-1 text-xs text-gray-500">({userInfo.email})</span>
+                        )}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              </div>
             </div>
 
             {isGenerating && (
@@ -1617,6 +2061,11 @@ const ReportGenerator = ({
           } : null}
         />
 
+        <Chat
+          isOpen={showChat}
+          onClose={() => setShowChat(false)}
+        />
+
         {/* How To Use Modal */}
         {showHowTo && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -1631,7 +2080,7 @@ const ReportGenerator = ({
                   <HelpCircle className="w-6 h-6 mr-2" />
                   <h2 className="text-xl font-semibold">How to Use the Report Generator</h2>
                 </div>
-                <button 
+                <button
                   onClick={() => setShowHowTo(false)}
                   className="p-2 hover:bg-gray-100 rounded-full transition-colors"
                 >
