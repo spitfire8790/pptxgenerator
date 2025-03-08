@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { giraffeState, rpc } from '@gi-nx/iframe-sdk';
 import { logAvailableLayers } from './utils/map/utils/layerDetails';
 
-const MapView = ({ onFeatureSelect, planningLayer, selectedFeatures = [], isMultiSelectMode = false }) => {
+const MapView = ({ onFeatureSelect, planningLayer, selectedFeatures = [], isMultiSelectMode = false, zoomOnSelection = false }) => {
   // Empty function to satisfy the reference in the cleanup
   const clearSelectedFeaturesHighlight = () => {
     // No-op function - highlighting not needed
@@ -83,16 +83,18 @@ const MapView = ({ onFeatureSelect, planningLayer, selectedFeatures = [], isMult
 
   // Update selected features visual indicators whenever selectedFeatures changes
   useEffect(() => {
-    // Only zoom to features when they change
+    // Only zoom to features when they change and zoomOnSelection is true
     if (selectedFeatures && selectedFeatures.length > 0) {
-      // Zoom to selected features bounds if features were selected programmatically
-      // (e.g., from the property list rather than clicked on the map)
-      zoomToSelectedFeatures(selectedFeatures);
-      
       // Display the selected features on the map
       displaySelectedFeaturesOnMap(selectedFeatures);
+      
+      // Zoom to selected features bounds if features were selected programmatically
+      // (e.g., from the property list rather than clicked on the map)
+      if (zoomOnSelection) {
+        zoomToSelectedFeatures(selectedFeatures);
+      }
     }
-  }, [selectedFeatures]);
+  }, [selectedFeatures, zoomOnSelection]);
 
   // Helper function to display selected features on the map
   const displaySelectedFeaturesOnMap = (features) => {

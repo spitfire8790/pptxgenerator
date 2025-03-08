@@ -10,13 +10,10 @@ export async function addServicingSlide(pptx, propertyData) {
 
     // Add title
     slide.addText([
-      { text: propertyData.site__address, options: { color: styles.title.color } },
+      { text: propertyData.formatted_address || propertyData.site__address, options: { color: styles.title.color } },
       { text: ' ', options: { breakLine: true } },
       { text: 'Servicing', options: { color: styles.subtitle.color } }
-    ], convertCmValues({
-      ...styles.title,
-      color: undefined
-    }));
+    ], convertCmValues(styles.title));
 
     // Add horizontal line under title
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.titleLine));

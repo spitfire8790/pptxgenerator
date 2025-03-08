@@ -14,6 +14,9 @@ function App() {
   
   // State to track if we're in multi-select mode
   const [isMultiSelectMode, setIsMultiSelectMode] = React.useState(false);
+  
+  // State to track if selection came from UI vs map click
+  const [selectionFromUI, setSelectionFromUI] = React.useState(false);
 
   // Callback function triggered when a feature is selected on the map
   // Transforms the raw feature data into the format we need
@@ -29,6 +32,9 @@ function App() {
       // Keep the geometry data for map operations (screenshots, bounds, etc.)
       geometry: feature.geometry
     };
+    
+    // Set selection flag to false since this was from a map click
+    setSelectionFromUI(false);
     
     if (isMultiSelectMode) {
       // Check if feature is already selected (to toggle)
@@ -74,6 +80,8 @@ function App() {
   
   // Handle selection from the property list - keep this function to be passed to ReportGenerator
   const handlePropertyListSelect = (features) => {
+    // Set selection flag to true since this came from the UI
+    setSelectionFromUI(true);
     setSelectedFeatures(features);
   };
 
@@ -105,11 +113,13 @@ function App() {
         - Takes up full container space
         - Handles all Giraffe SDK map interactions
         - Triggers handleFeatureSelect when user selects a property
+        - Only zooms to bounds when selection comes from UI
       */}
       <MapView 
         onFeatureSelect={handleFeatureSelect} 
         selectedFeatures={selectedFeatures} 
         isMultiSelectMode={isMultiSelectMode}
+        zoomOnSelection={selectionFromUI}
       />
       
       <Analytics 

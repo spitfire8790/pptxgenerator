@@ -319,10 +319,12 @@ const FeasibilityCalculation = ({
               <td className="py-2 px-4 border-t border-gray-200">{Math.round(calculationResults.gfa).toLocaleString()} m²</td>
               <td className="py-2 px-4 border-t border-gray-200 text-sm">
                 {!calculationResults.hob 
-                  ? `FSR ${calculationResults.fsr}:1 (${Math.round(calculationResults.siteArea).toLocaleString()} m² × ${calculationResults.fsr} = ${Math.round(calculationResults.gfaUnderFsr).toLocaleString()} m²)`
+                  ? `FSR ${calculationResults.fsr}:1 (${Math.round(calculationResults.siteArea).toLocaleString()} m² × ${calculationResults.fsr} = ${Math.round(calculationResults.gfa).toLocaleString()} m²)`
                   : `Minimum of two calculations:
 1) FSR approach: ${calculationResults.fsr}:1 (${Math.round(calculationResults.siteArea).toLocaleString()} m² × ${calculationResults.fsr} = ${Math.round(calculationResults.gfaUnderFsr).toLocaleString()} m²)
-2) HOB approach: ${calculationResults.hob}m (${Math.floor(calculationResults.hob / settings[density].floorToFloorHeight)} storeys × ${formatPercentage(settings[density].siteEfficiencyRatio)} building footprint × ${formatPercentage(settings[density].gbaToGfaRatio)} efficiency = ${Math.round(calculationResults.gfaUnderHob).toLocaleString()} m²)`
+2) HOB approach: ${calculationResults.hob}m (${density === 'lowMidDensity' ? `max 3 storeys @ ${Math.min(3, Math.floor(calculationResults.hob / settings[density].floorToFloorHeight))}` : `${Math.floor(calculationResults.hob / settings[density].floorToFloorHeight)}`} storeys × ${formatPercentage(settings[density].siteEfficiencyRatio)} building footprint × ${formatPercentage(settings[density].gbaToGfaRatio)} efficiency = ${Math.round(calculationResults.gfaUnderHob).toLocaleString()} m²)
+
+Final GFA = ${Math.round(calculationResults.gfa).toLocaleString()} m² (${calculationResults.gfaUnderFsr <= calculationResults.gfaUnderHob ? 'FSR is more restrictive' : 'Height limit is more restrictive'})`
                 }
               </td>
             </tr>
@@ -565,4 +567,4 @@ const FeasibilityCalculation = ({
   );
 };
 
-export default FeasibilityCalculation; 
+export default FeasibilityCalculation;

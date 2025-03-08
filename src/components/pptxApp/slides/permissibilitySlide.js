@@ -8,13 +8,73 @@ export async function addPermissibilitySlide(pptx, properties) {
     copiedFrom: properties.copiedFrom
   });
 
+  // Check if we have multiple properties
+  const isMultipleProperties = properties.isMultipleProperties;
+  const allProperties = properties.allProperties || [];
+  
+  // Get all unique zone identifiers across all properties
+  let uniqueZones = [];
+  
+  if (isMultipleProperties && allProperties.length > 0) {
+    // Extract all zone identifiers from all properties
+    // This handles the case where different features have different zones
+    const allZones = allProperties
+      .map(prop => prop.copiedFrom?.site_suitability__principal_zone_identifier || prop.site_suitability__principal_zone_identifier)
+      .filter(Boolean);
+    
+    // Create a set of unique zone identifiers to avoid duplicates
+    uniqueZones = [...new Set(allZones)];
+    console.log('Found unique zones:', uniqueZones);
+  } else {
+    // Single property case - just use the principal zone
+    const zoneIdentifier = properties.site_suitability__principal_zone_identifier;
+    if (zoneIdentifier) {
+      uniqueZones = [zoneIdentifier];
+    }
+  }
+  
+  // If no zones found, create an error slide
+  if (uniqueZones.length === 0) {
+    const errorSlide = pptx.addSlide();
+    errorSlide.addText('Error: No zone information available', {
+      x: '10%',
+      y: '45%',
+      w: '80%',
+      h: '10%',
+      fontSize: 14,
+      color: 'FF0000',
+      align: 'center'
+    });
+    return errorSlide;
+  }
+  
+  // Create a slide for each unique zone
+  // This allows us to show permissibility information for each zone separately
+  const slides = [];
+  
+  for (let i = 0; i < uniqueZones.length; i++) {
+    const zoneIdentifier = uniqueZones[i];
+    console.log(`Creating permissibility slide for zone: ${zoneIdentifier}`);
+    
+    // Create a slide for this zone
+    // Pass the index and total count for page numbering and slide titles
+    const slide = await createZoneSlide(pptx, properties, zoneIdentifier, i, uniqueZones.length);
+    slides.push(slide);
+  }
+  
+  return slides;
+}
+
+// Helper function to create a slide for a specific zone
+// This allows us to reuse the existing slide creation logic for each zone
+async function createZoneSlide(pptx, properties, zoneIdentifier, index, totalZones) {
   let slide;
   try {
-    console.log('Starting to add permissibility slide...');
+    console.log(`Starting to add permissibility slide for zone: ${zoneIdentifier}`);
     slide = pptx.addSlide();
 
     // Get zone code from the zone identifier - take only the code part before the first space
-    const zoneCode = properties.site_suitability__principal_zone_identifier?.split(' ')?.[0]?.trim();
+    const zoneCode = zoneIdentifier?.split(' ')?.[0]?.trim();
     // Just use the LGA name as the API supports partial matches
     const lgaName = properties.site_suitability__LGA;
     
@@ -436,7 +496,7 @@ export async function addPermissibilitySlide(pptx, properties) {
           {
             text: [
               { 
-                text: ensureString(properties.site_suitability__principal_zone_identifier || 'Not available'), 
+                text: ensureString(zoneIdentifier || 'Not available'), 
                 options: { color: '363636' } 
               },
               { 
@@ -658,9 +718,9 @@ export async function addPermissibilitySlide(pptx, properties) {
             
             // Add title to the new slide
             lmrSlide.addText([
-              { text: properties.site__address, options: { color: styles.title.color } },
+              { text: properties.formatted_address || properties.site__address, options: { color: styles.title.color } },
               { text: ' ', options: { breakLine: true } },
-              { text: 'LMR Development Options', options: { color: styles.subtitle.color } }
+              { text: `LMR Development Options${totalZones > 1 ? ` - Zone ${index + 1} of ${totalZones}: ${zoneIdentifier}` : ''}`, options: { color: styles.subtitle.color } }
             ], convertCmValues({
               ...styles.title,
               color: undefined
@@ -697,7 +757,11 @@ export async function addPermissibilitySlide(pptx, properties) {
 
             // Add footer text
             lmrSlide.addText('Property and Development NSW', convertCmValues(styles.footer));
-            lmrSlide.addText('17', convertCmValues(styles.pageNumber));
+            
+            // Calculate page number for LMR slide
+            const basePageNumber = 16;
+            const pageOffset = index * 2; // Each zone adds 2 pages (permissibility + LMR)
+            lmrSlide.addText(`${basePageNumber + pageOffset}`, convertCmValues(styles.pageNumber));
             
             // Format the permissible options for the table
             const lmrOptionsTableTitle = [
@@ -785,7 +849,7 @@ export async function addPermissibilitySlide(pptx, properties) {
                 .map(([key, value]) => {
                   // Special handling for Residential Flat Buildings based on zone
                   if (option.type === 'Residential Flat Buildings') {
-                    const zoneCode = properties.site_suitability__principal_zone_identifier?.split(' ')?.[0]?.trim() || '';
+                    const zoneCode = zoneIdentifier?.split(' ')?.[0]?.trim() || '';
                     
                     if (zoneCode === 'R1' || zoneCode === 'R2') {
                       if (key === 'area') return 'Min. Area: 500m²';
@@ -849,7 +913,7 @@ export async function addPermissibilitySlide(pptx, properties) {
                 
                 // Special handling for Residential Flat Buildings
                 if (option.type === 'Residential Flat Buildings') {
-                  const zoneCode = properties.site_suitability__principal_zone_identifier?.split(' ')?.[0]?.trim() || '';
+                  const zoneCode = zoneIdentifier?.split(' ')?.[0]?.trim() || '';
                   
                   if (zoneCode === 'R1' || zoneCode === 'R2') {
                     const maxFSR = 0.8;
@@ -950,7 +1014,7 @@ export async function addPermissibilitySlide(pptx, properties) {
                 
                 // Special handling for Residential Flat Buildings
                 if (option.type === 'Residential Flat Buildings') {
-                  const zoneCode = properties.site_suitability__principal_zone_identifier?.split(' ')?.[0]?.trim() || '';
+                  const zoneCode = zoneIdentifier?.split(' ')?.[0]?.trim() || '';
                   
                   if (zoneCode === 'R1' || zoneCode === 'R2') {
                     const maxHOB = 9.5;
@@ -1086,7 +1150,7 @@ export async function addPermissibilitySlide(pptx, properties) {
               ]);
               
               // Get zone code
-              const zoneCode = properties.site_suitability__principal_zone_identifier?.split(' ')?.[0]?.trim() || '';
+              const zoneCode = zoneIdentifier?.split(' ')?.[0]?.trim() || '';
               
               if (zoneCode === 'R1' || zoneCode === 'R2') {
                 lmrOptionsRows.push([
@@ -1154,9 +1218,9 @@ export async function addPermissibilitySlide(pptx, properties) {
 
       // Add title
       slide.addText([
-        { text: properties.site__address, options: { color: styles.title.color } },
+        { text: properties.formatted_address || properties.site__address, options: { color: styles.title.color } },
         { text: ' ', options: { breakLine: true } },
-        { text: 'Permissible Uses', options: { color: styles.subtitle.color } }
+        { text: `Permissible Uses${totalZones > 1 ? ` - Zone ${index + 1} of ${totalZones}: ${zoneIdentifier}` : ''}`, options: { color: styles.subtitle.color } }
       ], convertCmValues({
         ...styles.title,
         color: undefined
@@ -1179,7 +1243,11 @@ export async function addPermissibilitySlide(pptx, properties) {
 
       // Add footer text
       slide.addText('Property and Development NSW', convertCmValues(styles.footer));
-      slide.addText(properties.isInLMRArea ? '16' : '15', convertCmValues(styles.pageNumber));
+      
+      // Calculate page number based on index and whether LMR slide is included
+      const basePageNumber = 15;
+      const pageOffset = index * (properties.isInLMRArea ? 2 : 1); // Each zone adds 1 or 2 pages
+      slide.addText(`${basePageNumber + pageOffset}`, convertCmValues(styles.pageNumber));
 
       return slide;
     } catch (error) {

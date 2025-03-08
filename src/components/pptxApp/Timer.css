@@ -72,4 +72,28 @@
 
 .slide-icon:hover {
   transform: scale(1.05);
+}
+
+/* News ticker animation */
+@keyframes scroll {
+  0% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+.news-ticker-container {
+  position: relative;
+  width: 100%;
+}
+
+.news-ticker-content {
+  display: inline-block;
+  animation: scroll 20s linear infinite;
+}
+
+.animate-scroll {
+  animation: scroll 20s linear infinite;
 } 

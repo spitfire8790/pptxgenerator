@@ -313,15 +313,12 @@ const addLegend = (slide, pptx) => {
 export async function addPrimarySiteAttributesSlide(pptx, properties) {
   const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
 
-  // Add title with line break
+  // Add title
   slide.addText([
-    { text: properties.site__address, options: { color: styles.title.color } },
+    { text: properties.formatted_address || properties.site__address, options: { color: styles.title.color } },
     { text: ' ', options: { breakLine: true } },
     { text: 'Primary Site Attributes', options: { color: styles.subtitle.color } }
-  ], convertCmValues({
-    ...styles.title,
-    color: undefined
-  }));
+  ], convertCmValues(styles.title));
   
   // Add horizontal line under title
   slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.titleLine));

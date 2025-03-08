@@ -103,40 +103,89 @@ export async function addAccessSlide(pptx, propertyData) {
       throw new Error('No valid geometry data found in property data');
     }
     
-    // Calculate scores and descriptions first
+    // Create an object to store all screenshots
+    const screenshots = {};
+    
+    // Run all map operations in parallel
+    console.log('Generating access maps in parallel...');
+    
+    // First get the roads map and features
+    const roadsResult = await captureRoadsMap(
+      featureToUse, 
+      formattedDevelopableArea, 
+      true, // Always show developable areas for roads map
+      false
+    );
+
+    // Store the road features in propertyData
+    if (roadsResult?.roadFeatures) {
+      console.log('Road features extracted from map:', roadsResult.roadFeatures);
+      propertyData.roadFeatures = roadsResult.roadFeatures;
+    } else {
+      console.warn('No road features found in roadsResult:', roadsResult);
+      // Try to get road features from the feature properties if available
+      if (featureToUse.properties?.roadFeatures) {
+        console.log('Using road features from feature properties');
+        propertyData.roadFeatures = featureToUse.properties.roadFeatures;
+      } else {
+        console.warn('No road features found in feature properties either');
+        propertyData.roadFeatures = []; // Initialize with empty array to avoid undefined
+      }
+    }
+
+    // Log the road features before scoring
+    console.log('Road features before scoring:', propertyData.roadFeatures);
+
+    // Now calculate the roads score with the loaded features
     const roadsScoreResult = scoringCriteria.roads.calculateScore(
       propertyData.roadFeatures, 
       propertyData.developableArea,
       propertyData.isMultipleProperties ? propertyData.allProperties : null
     );
     const roadsDescription = scoringCriteria.roads.getScoreDescription(roadsScoreResult);
+
+    // Get the remaining maps in parallel
+    const [udpScreenshot, ptalScreenshot] = await Promise.all([
+      // Get UDP precincts map with LMR layers - don't show developable areas
+      captureUDPPrecinctMap(
+        featureToUse, 
+        formattedDevelopableArea, 
+        false, // Don't show developable areas
+        false
+      ),
+      
+      // Get PTAL map showing all features but not developable areas
+      capturePTALMap(
+        featureToUse, 
+        formattedDevelopableArea, 
+        false, // Don't show developable areas
+        false
+      )
+    ]);
+
+    // Store the map screenshots
+    screenshots.roadsScreenshot = roadsResult?.dataURL;
+    screenshots.udpScreenshot = udpScreenshot?.dataURL || udpScreenshot;
+    screenshots.ptalScreenshot = ptalScreenshot?.dataURL || ptalScreenshot;
     
-    // Get roads map showing all features and developable areas
-    const roadsScreenshot = await captureRoadsMap(
-      featureToUse, 
-      formattedDevelopableArea, 
-      true, // Always show developable areas for roads map
-      false
-    );
+    // Ensure we have valid image data for each map
+    const roadsImageData = roadsResult?.dataURL || roadsResult;
+    const udpImageData = udpScreenshot?.dataURL || udpScreenshot;
+    const ptalImageData = ptalScreenshot?.dataURL || ptalScreenshot;
     
-    // Get UDP precincts map with LMR layers - don't show developable areas
-    const udpMapFeature = featureToUse;
-    const udpScreenshot = await captureUDPPrecinctMap(
-      udpMapFeature, 
-      formattedDevelopableArea, 
-      false, // Don't show developable areas
-      false
-    );
+    // Log image data types for debugging
+    console.log('Roads image data type:', typeof roadsImageData);
+    console.log('UDP image data type:', typeof udpImageData);
+    console.log('PTAL image data type:', typeof ptalImageData);
     
     // Get the LMR overlap information from the updated feature after map capture
-    const lmrOverlap = udpMapFeature.properties?.lmrOverlap || { 
+    const lmrOverlap = featureToUse.properties?.lmrOverlap || { 
       hasOverlap: false, 
-      primaryOverlap: null,
-      pixelCounts: {}
+      primaryOverlap: null
     };
     
     // Get developable area LMR overlap information
-    const developableAreaLmrOverlap = udpMapFeature.properties?.developableAreaLmrOverlap || [];
+    const developableAreaLmrOverlap = featureToUse.properties?.developableAreaLmrOverlap || [];
     
     console.log('LMR overlap data for scoring:', lmrOverlap);
     console.log('Developable area LMR overlap for scoring:', developableAreaLmrOverlap);
@@ -157,18 +206,24 @@ export async function addAccessSlide(pptx, propertyData) {
     );
     const udpDescription = scoringCriteria.udpPrecincts.getScoreDescription(udpScoreResult);
 
-    // Get PTAL map showing all features but not developable areas
-    const ptalMapFeature = featureToUse;
-    const ptalScreenshot = await capturePTALMap(
-      ptalMapFeature, 
-      formattedDevelopableArea, 
-      false, // Don't show developable areas
-      false
-    );
-    
+    // Ensure UDP description is properly formatted and reflects actual status
+    if (udpDescription.includes("Undefined") || !udpDescription.trim()) {
+      const formattedDistance = udpScoreResult.minDistance >= 1000 
+        ? `${(udpScoreResult.minDistance / 1000).toFixed(1)} kilometres` 
+        : `${Math.round(udpScoreResult.minDistance)} metres`;
+      
+      if (udpScoreResult.score === 1) {
+        udpScoreResult.description = `All developable areas are greater than 1.6 kilometres from a UDP precinct. Additionally, the site is not in a TOD area or LMR area.`;
+      } else if (udpScoreResult.lmrOverlap?.hasOverlap) {
+        udpScoreResult.description = `The site is in proximity to a ${udpScoreResult.lmrOverlap.primaryOverlap || 'strategic center'}.`;
+      } else {
+        udpScoreResult.description = `The closest developable area is within ${formattedDistance} of a strategic center.`;
+      }
+    }
+
     // Get PTAL values from the updated feature after map capture
-    const ptalValues = ptalMapFeature.properties?.ptalValues || [];
-    const featurePTALs = ptalMapFeature.properties?.featurePTALs || [];
+    const ptalValues = featureToUse.properties?.ptalValues || [];
+    const featurePTALs = featureToUse.properties?.featurePTALs || [];
     
     // Calculate PTAL score based on the best PTAL for different features
     const ptalScoreResult = scoringCriteria.ptal.calculateScore(ptalValues, featurePTALs);
@@ -232,9 +287,9 @@ export async function addAccessSlide(pptx, propertyData) {
     }));
 
     // Add roads map
-    if (roadsScreenshot) {
+    if (roadsImageData) {
       slide.addImage({
-        data: roadsScreenshot,
+        data: roadsImageData,
         ...convertCmValues({
           x: '5%',
           y: '24%',
@@ -339,9 +394,9 @@ export async function addAccessSlide(pptx, propertyData) {
     }));
 
     // Add UDP precincts map
-    if (udpScreenshot) {
+    if (udpImageData) {
       slide.addImage({
-        data: udpScreenshot,
+        data: udpImageData,
         ...convertCmValues({
           x: '36%',
           y: '24%',
@@ -446,9 +501,9 @@ export async function addAccessSlide(pptx, propertyData) {
     }));
 
     // Add PTAL map
-    if (ptalScreenshot) {
+    if (ptalImageData) {
       slide.addImage({
-        data: ptalScreenshot,
+        data: ptalImageData,
         ...convertCmValues({
           x: '67%',
           y: '24%',
@@ -457,51 +512,8 @@ export async function addAccessSlide(pptx, propertyData) {
           sizing: { type: 'contain', align: 'center', valign: 'middle' }
         })
       });
-
-      // Add PTAL legend background
-      slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
-        x: '87%',
-        y: '64%',
-        w: '7%',
-        h: '10%',
-        fill: 'FFFFFF',
-        line: { color: '363636', width: 0.5 }
-      }));
-
-      // Add PTAL legend items
-      const ptalLegendItems = [
-        { label: 'Very High', color: '1d9604' },
-        { label: 'High', color: 'a8ff7f' },
-        { label: 'Medium-High', color: '0e9aff' },
-        { label: 'Medium', color: 'f2ff00' },
-        { label: 'Low-Medium', color: 'ff7f0e' },
-        { label: 'Low', color: 'ff0000' }
-      ];
-
-      ptalLegendItems.forEach((item, index) => {
-        // Add colored square
-        slide.addShape(pptx.shapes.RECTANGLE, convertCmValues({
-          x: '87.5%',
-          y: `${64.5 + (index * 1.5)}%`,
-          w: '0.56%',
-          h: '1%',
-          fill: item.color,
-          line: { color: '363636', width: 0.5 }
-        }));
-
-        // Add label
-        slide.addText(item.label, convertCmValues({
-          x: '88%',
-          y: `${64.5 + (index * 1.5)}%`,
-          w: '6.5%',
-          h: '1%',
-          fontSize: 4,
-          color: '363636',
-          fontFace: 'Public Sans',
-          align: 'left',
-          valign: 'middle'
-        }));
-      });
+      
+      // Legend removed as it's already captured in the screenshot
     }
 
     // PTAL description box

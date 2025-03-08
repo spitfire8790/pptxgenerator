@@ -389,13 +389,10 @@ export async function addPlanningSlide(pptx, properties) {
     // Add ONLY title (address and 'Planning')
     console.log('Adding title...');
     slide.addText([
-      { text: properties.site__address, options: { color: styles.title.color } },
+      { text: properties.formatted_address || properties.site__address, options: { color: styles.title.color } },
       { text: ' ', options: { breakLine: true } },
       { text: 'Planning', options: { color: styles.subtitle.color } }
-    ], convertCmValues({
-      ...styles.title,
-      color: undefined
-    }));
+    ], convertCmValues(styles.title));
 
       // Add horizontal line under title
       console.log('Adding title line...');

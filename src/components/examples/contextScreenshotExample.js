@@ -84,200 +84,7 @@ function drawMapPin(ctx, x, y, color = '#FF0000', size = 40) {
   ctx.restore();
 }
 
-// Add function to draw feature boundaries (single or multiple)
-function drawFeatureBoundaries(ctx, feature, centerX, centerY, size, canvasWidth, options = {}) {
-  const defaultOptions = {
-    strokeStyle: '#FF0000',
-    lineWidth: 6,
-    showLabels: false // Default to false for contextScreenshot.js
-  };
-  
-  const mergedOptions = { ...defaultOptions, ...options };
-  
-  console.log('Drawing feature boundaries with:', {
-    featureType: feature?.type,
-    isArray: Array.isArray(feature),
-    hasFeatures: feature?.features?.length,
-    coordinates: Array.isArray(feature) ? 'Array of coordinates' : (feature?.geometry?.coordinates ? 'Has coordinates' : 'No coordinates')
-  });
-  
-  // Handle different types of feature input
-  if (feature?.type === 'FeatureCollection' && feature.features) {
-    // It's a FeatureCollection - draw each feature
-    console.log(`Drawing ${feature.features.length} features from FeatureCollection`);
-    feature.features.forEach((featureItem, index) => {
-      if (featureItem.geometry?.coordinates?.[0]) {
-        console.log(`Drawing feature ${index} boundary`);
-        drawBoundary(ctx, featureItem.geometry.coordinates[0], centerX, centerY, size, canvasWidth, {
-          strokeStyle: mergedOptions.strokeStyle,
-          lineWidth: mergedOptions.lineWidth
-        });
-      }
-    });
-  } else if (feature?.geometry?.coordinates?.[0]) {
-    // It's a single GeoJSON feature
-    console.log('Drawing single GeoJSON feature boundary');
-    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, canvasWidth, {
-      strokeStyle: mergedOptions.strokeStyle,
-      lineWidth: mergedOptions.lineWidth
-    });
-  } else if (Array.isArray(feature)) {
-    // It's an array of coordinates or array of features
-    if (feature.length > 0 && Array.isArray(feature[0]) && feature[0].length === 2 && typeof feature[0][0] === 'number') {
-      // It's a single polygon's coordinates
-      console.log('Drawing boundary from array of coordinates');
-      drawBoundary(ctx, feature, centerX, centerY, size, canvasWidth, {
-        strokeStyle: mergedOptions.strokeStyle,
-        lineWidth: mergedOptions.lineWidth
-      });
-    } else {
-      // It's an array of separate features or polygons
-      console.log(`Drawing ${feature.length} boundaries from array of features/polygons`);
-      feature.forEach((item, index) => {
-        if (Array.isArray(item)) {
-          console.log(`Drawing feature ${index} from coordinate array`);
-          drawBoundary(ctx, item, centerX, centerY, size, canvasWidth, {
-            strokeStyle: mergedOptions.strokeStyle,
-            lineWidth: mergedOptions.lineWidth
-          });
-        } else if (item?.geometry?.coordinates?.[0]) {
-          console.log(`Drawing feature ${index} from GeoJSON feature`);
-          drawBoundary(ctx, item.geometry.coordinates[0], centerX, centerY, size, canvasWidth, {
-            strokeStyle: mergedOptions.strokeStyle,
-            lineWidth: mergedOptions.lineWidth
-          });
-        }
-      });
-    }
-  } else {
-    console.warn('No valid coordinates found for boundary drawing:', feature);
-  }
-}
-
-// Function to draw developable area boundaries (single or multiple)
-function drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, canvasWidth, options = {}) {
-  const defaultOptions = {
-    strokeStyle: '#02d1b8',
-    lineWidth: 12,
-    dashArray: [20, 10],
-    showLabels: false
-  };
-  
-  const mergedOptions = { ...defaultOptions, ...options };
-  
-  console.log('Drawing developable area boundaries with:', {
-    type: developableArea?.type,
-    hasFeatures: developableArea?.features?.length,
-    isArray: Array.isArray(developableArea)
-  });
-  
-  // Handle different types of developable area input
-  if (developableArea?.type === 'FeatureCollection' && developableArea.features) {
-    // It's a FeatureCollection
-    console.log(`Drawing ${developableArea.features.length} developable areas from FeatureCollection`);
-    developableArea.features.forEach((devAreaFeature, index) => {
-      if (devAreaFeature.geometry?.coordinates?.[0]) {
-        console.log(`Drawing developable area ${index}`);
-        drawBoundary(ctx, devAreaFeature.geometry.coordinates[0], centerX, centerY, size, canvasWidth, {
-          strokeStyle: mergedOptions.strokeStyle,
-          lineWidth: mergedOptions.lineWidth,
-          dashArray: mergedOptions.dashArray
-        });
-      }
-    });
-  } else if (developableArea?.features && Array.isArray(developableArea.features)) {
-    // It's an object with features array but not a proper FeatureCollection
-    console.log(`Drawing ${developableArea.features.length} developable areas from features array`);
-    developableArea.features.forEach((devAreaFeature, index) => {
-      if (devAreaFeature.geometry?.coordinates?.[0]) {
-        console.log(`Drawing developable area ${index}`);
-        drawBoundary(ctx, devAreaFeature.geometry.coordinates[0], centerX, centerY, size, canvasWidth, {
-          strokeStyle: mergedOptions.strokeStyle,
-          lineWidth: mergedOptions.lineWidth,
-          dashArray: mergedOptions.dashArray
-        });
-      }
-    });
-  } else if (developableArea?.geometry?.coordinates?.[0]) {
-    // It's a single GeoJSON feature
-    console.log('Drawing single developable area from GeoJSON feature');
-    drawBoundary(ctx, developableArea.geometry.coordinates[0], centerX, centerY, size, canvasWidth, {
-      strokeStyle: mergedOptions.strokeStyle,
-      lineWidth: mergedOptions.lineWidth,
-      dashArray: mergedOptions.dashArray
-    });
-  } else if (Array.isArray(developableArea)) {
-    // It's an array of features or coordinates
-    console.log(`Drawing developable areas from array of length ${developableArea.length}`);
-    developableArea.forEach((item, index) => {
-      if (item?.geometry?.coordinates?.[0]) {
-        console.log(`Drawing developable area ${index} from GeoJSON feature`);
-        drawBoundary(ctx, item.geometry.coordinates[0], centerX, centerY, size, canvasWidth, {
-          strokeStyle: mergedOptions.strokeStyle,
-          lineWidth: mergedOptions.lineWidth,
-          dashArray: mergedOptions.dashArray
-        });
-      } else if (Array.isArray(item)) {
-        console.log(`Drawing developable area ${index} from coordinate array`);
-        drawBoundary(ctx, item, centerX, centerY, size, canvasWidth, {
-          strokeStyle: mergedOptions.strokeStyle,
-          lineWidth: mergedOptions.lineWidth,
-          dashArray: mergedOptions.dashArray
-        });
-      }
-    });
-  } else {
-    console.warn('No valid developable area coordinates found for drawing:', developableArea);
-  }
-}
-
-// Helper function to draw a pin for a developable area
-function drawDevelopableAreaPin(ctx, devAreaFeature, centerX, centerY, size, canvasWidth) {
-  if (!devAreaFeature?.geometry?.coordinates?.[0]) {
-    console.warn('No valid coordinates found for developable area pin');
-    return;
-  }
-  
-  console.log('Calculating developable area centroid...');
-  try {
-    // First transform the coordinates from Web Mercator to GDA94
-    const coordinates = devAreaFeature.geometry.coordinates[0].map(coord => {
-      return proj4('EPSG:3857', GDA94, coord);
-    });
-    
-    // Create polygon with GDA94 coordinates
-    const polygon = turf.polygon([coordinates]);
-    const centroid = turf.centroid(polygon);
-    
-    // Transform centroid back to Web Mercator
-    const [mercX, mercY] = proj4(GDA94, 'EPSG:3857', centroid.geometry.coordinates);
-    
-    // Convert Web Mercator coordinates to pixel coordinates
-    const pixelX = Math.round(((mercX - (centerX - size/2)) / size) * canvasWidth);
-    const pixelY = Math.round(canvasWidth - ((mercY - (centerY - size/2)) / size) * canvasWidth);
-    
-    // Only draw if the coordinates are within the canvas
-    if (pixelX >= 0 && pixelX <= canvasWidth && pixelY >= 0 && pixelY <= canvasWidth) {
-      // Clear a small area around the pin to ensure visibility
-      ctx.save();
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.beginPath();
-      ctx.arc(pixelX, pixelY - 100, 100, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-      
-      // Draw the pin with shadow and white outline
-      drawMapPin(ctx, pixelX, pixelY, '#FF0000', 120);
-      console.log('Drew developable area pin at:', { pixelX, pixelY });
-    } else {
-      console.warn('Pin coordinates outside canvas bounds:', { pixelX, pixelY });
-    }
-  } catch (error) {
-    console.error('Error drawing developable area pin:', error);
-  }
-}
-
-export async function captureGPRMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
+export async function captureGPRMap(feature, developableArea = null) {
   if (!feature) {
     console.log('No feature provided to captureGPRMap');
     return null;
@@ -286,37 +93,13 @@ export async function captureGPRMap(feature, developableArea = null, showDevelop
 
   try {
     // Convert array of coordinates to GeoJSON feature if necessary
-    let geoJSONFeature;
-    
-    if (Array.isArray(feature)) {
-      // Check if this is a simple array of coordinates or an array of coordinate arrays (multiple features)
-      if (feature.length > 0 && Array.isArray(feature[0]) && feature[0].length === 2 && typeof feature[0][0] === 'number') {
-        // This is a single polygon's coordinates array
-        geoJSONFeature = {
-          type: 'Feature',
-          geometry: {
-            type: 'Polygon',
-            coordinates: [feature]
-          }
-        };
-      } else {
-        // This is likely an array of separate feature coordinates
-        // Create a FeatureCollection with multiple features
-        geoJSONFeature = {
-          type: 'FeatureCollection',
-          features: feature.map(coords => ({
-            type: 'Feature',
-            geometry: {
-              type: 'Polygon',
-              coordinates: [coords]
-            }
-          }))
-        };
+    const geoJSONFeature = Array.isArray(feature) ? {
+      type: 'Feature',
+      geometry: {
+        type: 'Polygon',
+        coordinates: [feature]
       }
-    } else {
-      // Use the feature as is
-      geoJSONFeature = feature;
-    }
+    } : feature;
 
     const config = {
       width: 2048,
@@ -325,7 +108,7 @@ export async function captureGPRMap(feature, developableArea = null, showDevelop
     };
     
     console.log('Calculating bounds...');
-    const { centerX, centerY, size } = calculateBounds(geoJSONFeature, config.padding, developableArea, useDevelopableAreaForBounds);
+    const { centerX, centerY, size } = calculateBounds(geoJSONFeature, config.padding, developableArea);
     console.log('Calculated bounds:', { centerX, centerY, size });
     
     let gprFeatures = [];
@@ -466,23 +249,110 @@ export async function captureGPRMap(feature, developableArea = null, showDevelop
       });
     }
 
-    // Draw boundaries - updated to use drawFeatureBoundaries
-    console.log('Drawing feature boundaries...');
-    drawFeatureBoundaries(ctx, geoJSONFeature, centerX, centerY, size, config.width, {
-      strokeStyle: '#FF0000',
-      lineWidth: 6,
-      showLabels: false // No labels for GPR map
-    });
+    // Draw boundaries
+    console.log('Drawing main feature boundary...');
+    if (geoJSONFeature?.geometry?.coordinates?.[0]) {
+      drawBoundary(ctx, geoJSONFeature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+        strokeStyle: '#FF0000',
+        lineWidth: 6
+      });
+    } else {
+      console.warn('No valid coordinates found for boundary drawing');
+    }
 
-    // Draw developable areas - updated to use drawDevelopableAreaBoundaries
-    if (showDevelopableArea && developableArea) {
-      console.log('Drawing developable area boundaries...');
-      drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width, {
+    if (developableArea?.features?.[0]?.geometry?.coordinates?.[0]) {
+      console.log('Drawing developable area boundary...');
+      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
         strokeStyle: '#02d1b8',
         lineWidth: 12,
-        dashArray: [20, 10],
-        showLabels: false // No labels for developable areas
+        dashArray: [20, 10]
       });
+    }
+
+    // Add GPR legend
+    try {
+      console.log('Loading GPR legend...');
+      const legendImage = await loadImage('./public/legends/gpr-legend.png');
+      
+      // Calculate position for bottom right corner with padding
+      const padding = 20;
+      const legendWidth = 600; // Doubled size for larger legend
+      const aspectRatio = legendImage.height / legendImage.width;
+      const legendHeight = legendWidth * aspectRatio;
+      
+      // Draw the legend with white background
+      ctx.save();
+      // Draw white background
+      ctx.fillStyle = 'white';
+      ctx.fillRect(
+        config.width - legendWidth - padding,
+        config.height - legendHeight - padding,
+        legendWidth,
+        legendHeight
+      );
+      // Draw the legend image
+      ctx.drawImage(
+        legendImage,
+        config.width - legendWidth - padding,
+        config.height - legendHeight - padding,
+        legendWidth,
+        legendHeight
+      );
+      ctx.restore();
+      console.log('GPR legend added successfully');
+    } catch (error) {
+      console.error('Failed to add GPR legend:', error);
+    }
+
+    // Calculate centroid of developable area and draw pin - moved to end and fixed CRS
+    if (developableArea?.features?.[0]?.geometry?.coordinates?.[0]) {
+      console.log('Calculating developable area centroid...');
+      // First transform the coordinates from Web Mercator to GDA94
+      const coordinates = developableArea.features[0].geometry.coordinates[0].map(coord => {
+        return proj4('EPSG:3857', GDA94, coord);
+      });
+      
+      // Create polygon with GDA94 coordinates
+      const polygon = turf.polygon([coordinates]);
+      const centroid = turf.centroid(polygon);
+      
+      // Transform centroid back to Web Mercator
+      const [mercX, mercY] = proj4(GDA94, 'EPSG:3857', centroid.geometry.coordinates);
+      
+      console.log('Coordinate debug:', {
+        originalCoords: developableArea.features[0].geometry.coordinates[0][0],
+        gda94Coords: coordinates[0],
+        centroidGDA94: centroid.geometry.coordinates,
+        centroidMercator: [mercX, mercY],
+        mapCenter: [centerX, centerY],
+        mapSize: size
+      });
+
+      // Convert Web Mercator coordinates to pixel coordinates
+      const pixelX = Math.round(((mercX - (centerX - size/2)) / size) * config.width),
+            pixelY = Math.round(config.height - ((mercY - (centerY - size/2)) / size) * config.height)
+      
+      console.log('Drawing map pin at:', { 
+        pixelX, 
+        pixelY,
+        canvasSize: { width: config.width, height: config.height }
+      });
+
+      // Only draw if the coordinates are within the canvas
+      if (pixelX >= 0 && pixelX <= config.width && pixelY >= 0 && pixelY <= config.height) {
+        // Clear a small area around the pin to ensure visibility
+        ctx.save();
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.beginPath();
+        ctx.arc(pixelX, pixelY - 100, 100, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        
+        // Draw the pin with shadow and white outline
+        drawMapPin(ctx, pixelX, pixelY, '#FF0000', 120);
+      } else {
+        console.warn('Pin coordinates outside canvas bounds:', { pixelX, pixelY });
+      }
     }
 
     console.log('Converting canvas to image...');
@@ -514,7 +384,7 @@ export async function captureGPRMap(feature, developableArea = null, showDevelop
   }
 }
 
-export async function captureServicesAndAmenitiesMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
+export async function captureServicesAndAmenitiesMap(feature, developableArea = null) {
   if (!feature) {
     console.log('No feature provided to captureServicesAndAmenitiesMap');
     return null;
@@ -523,37 +393,13 @@ export async function captureServicesAndAmenitiesMap(feature, developableArea = 
 
   try {
     // Convert array of coordinates to GeoJSON feature if necessary
-    let geoJSONFeature;
-    
-    if (Array.isArray(feature)) {
-      // Check if this is a simple array of coordinates or an array of coordinate arrays (multiple features)
-      if (feature.length > 0 && Array.isArray(feature[0]) && feature[0].length === 2 && typeof feature[0][0] === 'number') {
-        // This is a single polygon's coordinates array
-        geoJSONFeature = {
-          type: 'Feature',
-          geometry: {
-            type: 'Polygon',
-            coordinates: [feature]
-          }
-        };
-      } else {
-        // This is likely an array of separate feature coordinates
-        // Create a FeatureCollection with multiple features
-        geoJSONFeature = {
-          type: 'FeatureCollection',
-          features: feature.map(coords => ({
-            type: 'Feature',
-            geometry: {
-              type: 'Polygon',
-              coordinates: [coords]
-            }
-          }))
-        };
+    const geoJSONFeature = Array.isArray(feature) ? {
+      type: 'Feature',
+      geometry: {
+        type: 'Polygon',
+        coordinates: [feature]
       }
-    } else {
-      // Use the feature as is
-      geoJSONFeature = feature;
-    }
+    } : feature;
 
     const config = {
       width: 2048,
@@ -562,7 +408,7 @@ export async function captureServicesAndAmenitiesMap(feature, developableArea = 
     };
     
     console.log('Calculating bounds...');
-    const { centerX, centerY, size } = calculateBounds(geoJSONFeature, config.padding, developableArea, useDevelopableAreaForBounds);
+    const { centerX, centerY, size } = calculateBounds(geoJSONFeature, config.padding, developableArea);
     console.log('Calculated bounds:', { centerX, centerY, size });
     
     let poiFeatures = [];
@@ -802,23 +648,73 @@ export async function captureServicesAndAmenitiesMap(feature, developableArea = 
       console.error('Failed to load POI layer:', error);
     }
 
-    // Draw boundaries - updated to use drawFeatureBoundaries
-    console.log('Drawing feature boundaries...');
-    drawFeatureBoundaries(ctx, geoJSONFeature, centerX, centerY, size, config.width, {
-      strokeStyle: '#FF0000',
-      lineWidth: 6,
-      showLabels: false // No labels for services map
-    });
+    // Draw boundaries
+    console.log('Drawing main feature boundary...');
+    if (geoJSONFeature?.geometry?.coordinates?.[0]) {
+      drawBoundary(ctx, geoJSONFeature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+        strokeStyle: '#FF0000',
+        lineWidth: 6
+      });
+    }
 
-    // Draw developable areas - updated to use drawDevelopableAreaBoundaries
-    if (showDevelopableArea && developableArea) {
-      console.log('Drawing developable area boundaries...');
-      drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width, {
+    if (developableArea?.features?.[0]?.geometry?.coordinates?.[0]) {
+      console.log('Drawing developable area boundary...');
+      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
         strokeStyle: '#02d1b8',
         lineWidth: 12,
-        dashArray: [20, 10],
-        showLabels: false // No labels for developable areas
+        dashArray: [20, 10]
       });
+    }
+
+    // Calculate centroid of developable area and draw pin - moved to end and fixed CRS
+    if (developableArea?.features?.[0]?.geometry?.coordinates?.[0]) {
+      console.log('Calculating developable area centroid...');
+      // First transform the coordinates from Web Mercator to GDA94
+      const coordinates = developableArea.features[0].geometry.coordinates[0].map(coord => {
+        return proj4('EPSG:3857', GDA94, coord);
+      });
+      
+      // Create polygon with GDA94 coordinates
+      const polygon = turf.polygon([coordinates]);
+      const centroid = turf.centroid(polygon);
+      
+      // Transform centroid back to Web Mercator
+      const [mercX, mercY] = proj4(GDA94, 'EPSG:3857', centroid.geometry.coordinates);
+      
+      console.log('Coordinate debug:', {
+        originalCoords: developableArea.features[0].geometry.coordinates[0][0],
+        gda94Coords: coordinates[0],
+        centroidGDA94: centroid.geometry.coordinates,
+        centroidMercator: [mercX, mercY],
+        mapCenter: [centerX, centerY],
+        mapSize: size
+      });
+
+      // Convert Web Mercator coordinates to pixel coordinates
+      const pixelX = Math.round(((mercX - (centerX - size/2)) / size) * config.width),
+            pixelY = Math.round(config.height - ((mercY - (centerY - size/2)) / size) * config.height)
+      
+      console.log('Drawing map pin at:', { 
+        pixelX, 
+        pixelY,
+        canvasSize: { width: config.width, height: config.height }
+      });
+
+      // Only draw if the coordinates are within the canvas
+      if (pixelX >= 0 && pixelX <= config.width && pixelY >= 0 && pixelY <= config.height) {
+        // Clear a small area around the pin to ensure visibility
+        ctx.save();
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.beginPath();
+        ctx.arc(pixelX, pixelY - 100, 100, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        
+        // Draw the pin with shadow and white outline
+        drawMapPin(ctx, pixelX, pixelY, '#FF0000', 120);
+      } else {
+        console.warn('Pin coordinates outside canvas bounds:', { pixelX, pixelY });
+      }
     }
 
     console.log('Converting canvas to image...');

@@ -78,8 +78,9 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
       label: 'Construction Cost per m² GFA', 
       unit: '$/m²', 
       icon: HardHat, 
-      isCalculated: true,
-      tooltip: density => `Based on ${constructionData?.certificateCounts?.[density] || 0} approved DAs`
+      isEditable: true,
+      hasRevert: true,
+      tooltip: density => `Default based on ${constructionData?.certificateCounts?.[density] || 0} approved DAs`
     },
 
     // Dwelling Metrics section
@@ -89,8 +90,9 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
       label: 'Median Dwelling Size', 
       unit: 'm²', 
       icon: Maximize2, 
-      isCalculated: true,
-      tooltip: density => `Based on properties with <4 bedrooms from ${constructionData?.certificateCounts?.[density] || 0} approved DAs`
+      isEditable: true,
+      hasRevert: true,
+      tooltip: density => `Default based on 2 bedroom dwellings from ${constructionData?.certificateCounts?.[density] || 0} approved DAs`
     },
     { 
       id: 'dwellingPrice', 
@@ -99,7 +101,7 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
       icon: Building, 
       isEditable: true,
       hasRevert: true,
-      tooltip: 'Revert to median price from sales data',
+      tooltip: 'Default based on median 2 bedroom dwelling sale price only. Click to revert.',
       showSalesButton: true
     },
 
@@ -333,23 +335,23 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
       dwellingSize = constructionData?.dwellingSizes?.[density] || 0;
     }
 
-    // Filter sales data by property type based on density
-    const LOW_MID_DENSITY_TYPES = ['duplex/semi-detached', 'duplex-semi-detached', 'house', 'terrace', 'townhouse', 'villa'];
-    const HIGH_DENSITY_TYPES = ['apartment', 'studio', 'unit'];
+  // Filter sales data by property type based on density
+  const LOW_MID_DENSITY_TYPES = ['duplex/semi-detached', 'duplex-semi-detached', 'house', 'terrace', 'townhouse', 'villa'];
+  const HIGH_DENSITY_TYPES = ['apartment', 'studio', 'unit'];
 
-    const relevantSales = salesData?.filter(sale => {
-      const propertyType = sale.property_type?.toLowerCase().trim();
-      const propertyTypes = density === 'lowMidDensity' ? LOW_MID_DENSITY_TYPES : HIGH_DENSITY_TYPES;
-      
-      // Check if property type matches
-      const typeMatches = propertyTypes.some(type => propertyType?.includes(type));
-      
-      // Exclude properties with more than 4 bedrooms
-      const bedroomCount = sale.bedrooms ? parseInt(sale.bedrooms, 10) : null;
-      const validBedrooms = bedroomCount === null || bedroomCount <= 4;
-      
-      return typeMatches && validBedrooms;
-    }) || [];
+  const relevantSales = salesData?.filter(sale => {
+    const propertyType = sale.property_type?.toLowerCase().trim();
+    const propertyTypes = density === 'lowMidDensity' ? LOW_MID_DENSITY_TYPES : HIGH_DENSITY_TYPES;
+    
+    // Check if property type matches
+    const typeMatches = propertyTypes.some(type => propertyType?.includes(type));
+    
+    // Specifically filter for 2 bedroom dwellings
+    const bedroomCount = sale.bedrooms ? parseInt(sale.bedrooms, 10) : null;
+    const isTwoBedroom = bedroomCount === 2;
+    
+    return typeMatches && isTwoBedroom;
+  }) || [];
 
     // Get median price from filtered sales data
     const medianPrice = relevantSales.length > 0 
@@ -408,9 +410,9 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
       onSettingChange('siteEfficiencyRatio', 0.6, 'lowMidDensity');
     }
     
-    if (settings.highDensity.siteEfficiencyRatio !== 0.4) {
-      onSettingChange('siteEfficiencyRatio', 0.4, 'highDensity');
-    }
+  if (settings.highDensity.siteEfficiencyRatio !== 0.5) {
+    onSettingChange('siteEfficiencyRatio', 0.5, 'highDensity');
+  }
 
     // Set floor to floor height to 3.1m for both density types
     if (settings.lowMidDensity.floorToFloorHeight !== 3.1) {
@@ -510,9 +512,12 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
     
     if (setting === 'daApplicationFees' || 
         setting === 'dwellingPrice' || 
-        setting === 'constructionCostM2' ||
         setting === 'pricePerM2') {
       return value.toLocaleString('en-AU');
+    }
+    if (setting === 'constructionCostM2' || 
+        setting === 'dwellingSize') {
+      return Math.round(value).toLocaleString('en-AU');
     }
     if (setting === 'developmentContribution') {
       return (value * 100).toFixed(0);
@@ -662,7 +667,7 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
                 <div className="flex items-center">
                   <Landmark className="mr-2" size={16} />
                   <span className="font-medium">Zone:</span>
-                  <span className="ml-2">{selectedFeature?.properties?.copiedFrom?.site_suitability__zone || 'R2'}</span>
+                  <span className="ml-2">{selectedFeature?.properties?.copiedFrom?.site_suitability__principal_zone_identifier?.split('-')?.[0]?.trim() || 'N/A'}</span>
                 </div>
                 <div className="flex items-center">
                   <Building2 className="mr-2" size={16} />
@@ -990,4 +995,4 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
   );
 };
 
-export default FeasibilitySettings; 
+export default FeasibilitySettings;

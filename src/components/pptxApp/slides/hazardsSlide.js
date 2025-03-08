@@ -129,13 +129,10 @@ export async function addHazardsSlide(pptx, properties) {
   try {
     // Add title
     slide.addText([
-      { text: properties.site__address, options: { color: styles.title.color } },
+      { text: properties.formatted_address || properties.site__address, options: { color: styles.title.color } },
       { text: ' ', options: { breakLine: true } },
       { text: 'Natural Hazards', options: { color: styles.subtitle.color } }
-    ], convertCmValues({
-      ...styles.title,
-      color: undefined
-    }));
+    ], convertCmValues(styles.title));
     
     // Add horizontal line under title
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.titleLine));
@@ -248,7 +245,9 @@ export async function addHazardsSlide(pptx, properties) {
     if (properties.developableArea && properties.site_suitability__floodFeatures) {
       try {
         console.log('=== Starting Flood Score Calculation ===');
-        console.log('Developable area geometry:', JSON.stringify(properties.developableArea[0].geometry));
+        // Ensure developableArea is treated as an array
+        const developableAreas = Array.isArray(properties.developableArea) ? properties.developableArea : [properties.developableArea];
+        console.log('Number of developable areas:', developableAreas.length);
         console.log(`Processing ${properties.site_suitability__floodFeatures.features?.length || 0} flood features...`);
         
         if (!properties.site_suitability__floodFeatures.features || properties.site_suitability__floodFeatures.features.length === 0) {
@@ -269,7 +268,7 @@ export async function addHazardsSlide(pptx, properties) {
             }
           });
 
-          const result = scoringCriteria.flood.calculateScore(properties.site_suitability__floodFeatures, properties.developableArea);
+          const result = scoringCriteria.flood.calculateScore(properties.site_suitability__floodFeatures, developableAreas);
           console.log('\nScore Calculation Result:');
           console.log('- Score:', result.score);
           console.log('- Distance to nearest flood:', result.minDistance ? `${result.minDistance.toFixed(2)}m` : 'N/A');
@@ -441,7 +440,9 @@ export async function addHazardsSlide(pptx, properties) {
     if (properties.developableArea && properties.site_suitability__bushfireFeatures) {
       try {
         console.log('=== Starting Bushfire Score Calculation ===');
-        console.log('Developable area geometry:', JSON.stringify(properties.developableArea[0].geometry));
+        // Ensure developableArea is treated as an array
+        const developableAreas = Array.isArray(properties.developableArea) ? properties.developableArea : [properties.developableArea];
+        console.log('Number of developable areas:', developableAreas.length);
         console.log(`Processing bushfire features...`);
         
         if (!properties.site_suitability__bushfireFeatures.features || properties.site_suitability__bushfireFeatures.features.length === 0) {
@@ -449,7 +450,7 @@ export async function addHazardsSlide(pptx, properties) {
           // bushfireScore = 3;
           // bushfireText already set above
         } else {
-          const result = scoringCriteria.bushfire.calculateScore(properties.site_suitability__bushfireFeatures, properties.developableArea);
+          const result = scoringCriteria.bushfire.calculateScore(properties.site_suitability__bushfireFeatures, developableAreas);
           console.log('\nScore Calculation Result:');
           console.log('- Score:', result.score);
           console.log('- Distance to nearest bushfire area:', result.minDistance ? `${result.minDistance.toFixed(2)}m` : 'N/A');

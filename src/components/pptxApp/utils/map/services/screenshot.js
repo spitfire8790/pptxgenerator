@@ -96,7 +96,7 @@ export async function captureMapScreenshot(
         if (cadastreProxyUrl) {
           const cadastreLayer = await loadImage(cadastreProxyUrl);
           // Draw cadastre with reduced opacity to not overwhelm other layers
-          drawImage(ctx, cadastreLayer, canvas.width, canvas.height, 0.6);
+          drawImage(ctx, cadastreLayer, canvas.width, canvas.height, 0.4);
         }
       } catch (error) {
         console.warn('Failed to load cadastre layer:', error);
@@ -123,46 +123,68 @@ export async function captureMapScreenshot(
 }
 
 export function calculateBounds(feature, padding, developableArea = null, useDevelopableAreaForBounds = false) {
-  let coordinates = [];
+  let allCoordinates = [];
   
   // Handle feature coordinates based on type
-  if (feature.type === 'FeatureCollection' && feature.features) {
+  if (feature.type === 'FeatureCollection' && feature.features && feature.features.length > 0) {
     // For feature collections, collect coordinates from all features
     feature.features.forEach(featureItem => {
-      if (featureItem.geometry?.coordinates?.[0]) {
-        coordinates.push(...featureItem.geometry.coordinates[0]);
+      if (featureItem.geometry?.type === 'Polygon' && featureItem.geometry?.coordinates?.[0]) {
+        allCoordinates.push(...featureItem.geometry.coordinates[0]);
+      } else if (featureItem.geometry?.type === 'MultiPolygon' && featureItem.geometry?.coordinates) {
+        featureItem.geometry.coordinates.forEach(polygon => {
+          if (polygon[0]) {
+            allCoordinates.push(...polygon[0]);
+          }
+        });
       }
     });
-  } else if (feature.geometry?.coordinates?.[0]) {
-    // For single features
-    coordinates = feature.geometry.coordinates[0];
+  } else if (feature.geometry?.type === 'Polygon' && feature.geometry?.coordinates?.[0]) {
+    // For single Polygon features
+    allCoordinates = [...feature.geometry.coordinates[0]];
+  } else if (feature.geometry?.type === 'MultiPolygon' && feature.geometry?.coordinates) {
+    // For single MultiPolygon features
+    feature.geometry.coordinates.forEach(polygon => {
+      if (polygon[0]) {
+        allCoordinates.push(...polygon[0]);
+      }
+    });
   } else {
     console.warn('Invalid feature geometry for bounds calculation', feature);
   }
   
-  // Determine which coordinates to use based on the useDevelopableAreaForBounds flag
-  if (useDevelopableAreaForBounds && developableArea?.features?.length > 0) {
-    // Use all developable areas for bounds calculation
-    coordinates = developableArea.features.flatMap(feature => feature.geometry.coordinates[0]);
-  } else if (!useDevelopableAreaForBounds && developableArea?.features?.length > 0) {
-    // Use both property and all developable areas for bounds calculation
-    if (feature.type === 'FeatureCollection') {
-      // We already have the feature collection coordinates
-    } else if (feature.geometry?.coordinates?.[0]) {
-      coordinates = [
-        ...coordinates,
-        ...developableArea.features.flatMap(feature => feature.geometry.coordinates[0])
-      ];
+  // Add developable area coordinates if needed
+  if (developableArea?.features?.length > 0) {
+    const devAreaCoords = [];
+    developableArea.features.forEach(devFeature => {
+      if (devFeature.geometry?.type === 'Polygon' && devFeature.geometry?.coordinates?.[0]) {
+        devAreaCoords.push(...devFeature.geometry.coordinates[0]);
+      } else if (devFeature.geometry?.type === 'MultiPolygon' && devFeature.geometry?.coordinates) {
+        devFeature.geometry.coordinates.forEach(polygon => {
+          if (polygon[0]) {
+            devAreaCoords.push(...polygon[0]);
+          }
+        });
+      }
+    });
+    
+    // Determine which coordinates to use based on the useDevelopableAreaForBounds flag
+    if (useDevelopableAreaForBounds) {
+      // Use only developable areas for bounds calculation
+      allCoordinates = devAreaCoords;
+    } else {
+      // Use both property and all developable areas for bounds calculation
+      allCoordinates = [...allCoordinates, ...devAreaCoords];
     }
   }
 
-  if (!coordinates || coordinates.length === 0) {
+  if (!allCoordinates || allCoordinates.length === 0) {
     console.error('No valid coordinates found for bounds calculation');
     // Provide default bounds
-    return { centerX: 0, centerY: 0, size: 1000 };
+    return { centerX: 151.2093, centerY: -33.8688, size: 1000 }; // Default to Sydney CBD
   }
 
-  const bounds = coordinates.reduce((acc, coord) => ({
+  const bounds = allCoordinates.reduce((acc, coord) => ({
     minX: Math.min(acc.minX, coord[0]),
     minY: Math.min(acc.minY, coord[1]),
     maxX: Math.max(acc.maxX, coord[0]),
@@ -1853,18 +1875,19 @@ export async function captureRoadsMap(feature, developableArea = null, showDevel
     const config = {
       width: 2048,
       height: 2048,
-      padding: 0.2
+      padding: 0.2  
     };
     
     // Calculate bounds considering all features and all developable areas
     const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
+    console.log('Roads map bounds calculated:', { centerX, centerY, size });
     
     // Get road features first
     console.log('Fetching road features...');
     const roadFeatures = await getRoadFeatures(centerX, centerY, size);
     console.log('Retrieved road features:', roadFeatures);
     
-    // Store the features in all feature objects if it's a collection
+    // Store the features in feature properties - handle both collection and single feature
     if (feature.type === 'FeatureCollection') {
       feature.features.forEach(f => {
         if (!f.properties) {
@@ -1907,10 +1930,20 @@ export async function captureRoadsMap(feature, developableArea = null, showDevel
       });
 
       const url = `${aerialConfig.url}?${params.toString()}`;
-      const baseMap = await loadImage(url);
-      drawImage(ctx, baseMap, canvas.width, canvas.height, 0.3);
+      try {
+        const baseMap = await loadImage(url);
+        drawImage(ctx, baseMap, canvas.width, canvas.height, 0.3);  
+      } catch (error) {
+        console.error('Failed to load aerial layer:', error);
+        // Continue with a white background
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
     } catch (error) {
       console.error('Failed to load aerial layer:', error);
+      // Ensure we have a white background
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
 
     try {
@@ -1920,7 +1953,7 @@ export async function captureRoadsMap(feature, developableArea = null, showDevel
         url: 'https://portal.data.nsw.gov.au/arcgis/rest/services/RoadSegment/MapServer',
         layerId: 0,
         size: 2048,
-        padding: 0.2
+        padding: 0.2  
       };
 
       // Convert coordinates to Web Mercator (3857) for better compatibility
@@ -1945,15 +1978,19 @@ export async function captureRoadsMap(feature, developableArea = null, showDevel
         const proxyUrl = await proxyRequest(url);
         if (proxyUrl) {
           console.log('Loading roads image from proxy URL...');
-          const roadsLayer = await loadImage(proxyUrl);
-          console.log('Roads layer loaded successfully');
-          // Increase opacity for better visibility
-          drawImage(ctx, roadsLayer, canvas.width, canvas.height, 1);
+          try {
+            const roadsLayer = await loadImage(proxyUrl);
+            console.log('Roads layer loaded successfully');
+            // Ensure full opacity for better visibility
+            drawImage(ctx, roadsLayer, canvas.width, canvas.height, 1);
+          } catch (imgError) {
+            console.warn('Failed to load roads layer image:', imgError);
+          }
         } else {
           console.warn('Failed to get proxy URL for roads layer');
         }
-      } catch (error) {
-        console.warn('Failed to load roads layer:', error);
+      } catch (proxyError) {
+        console.warn('Failed to proxy roads layer request:', proxyError);
       }
     } catch (error) {
       console.warn('Failed to load roads layer:', error);
@@ -1966,7 +2003,7 @@ export async function captureRoadsMap(feature, developableArea = null, showDevel
         url: 'https://maps.six.nsw.gov.au/arcgis/rest/services/sixmaps/LPI_RasterLabels_1/MapServer',
         layerId: 0,
         size: 2048,
-        padding: 0.2
+        padding: 0.2  
       };
 
       // Use Web Mercator coordinates for labels layer
@@ -1982,21 +2019,30 @@ export async function captureRoadsMap(feature, developableArea = null, showDevel
         bboxSR: 3857,
         imageSR: 3857,
         layers: 'show:0',
-        dpi: 192  // Increased from 96 to make labels bigger
+        dpi: 300  
       });
 
       const url = `${labelsConfig.url}/export?${params.toString()}`;
       console.log('Requesting road labels through proxy...', url);
       
-      const proxyUrl = await proxyRequest(url);
-      if (!proxyUrl) {
-        throw new Error('Failed to get proxy URL for road labels');
+      try {
+        // Add a longer timeout (3 minutes) for the road labels request
+        const proxyUrl = await proxyRequest(url, { timeout: 180000 });
+        if (proxyUrl) {
+          console.log('Loading road labels from proxy URL...');
+          try {
+            const labelsLayer = await loadImage(proxyUrl);
+            console.log('Road labels loaded successfully');
+            drawImage(ctx, labelsLayer, canvas.width, canvas.height, 1.0);
+          } catch (imgError) {
+            console.warn('Failed to load road labels image:', imgError);
+          }
+        } else {
+          console.warn('Failed to get proxy URL for road labels');
+        }
+      } catch (proxyError) {
+        console.warn('Failed to proxy road labels request:', proxyError);
       }
-      
-      console.log('Loading road labels from proxy URL...');
-      const labelsLayer = await loadImage(proxyUrl);
-      console.log('Road labels loaded successfully');
-      drawImage(ctx, labelsLayer, canvas.width, canvas.height, 1.0);
     } catch (error) {
       console.warn('Failed to load road labels:', error);
     }
@@ -2008,22 +2054,16 @@ export async function captureRoadsMap(feature, developableArea = null, showDevel
       drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width, false);
     }
 
-    // Draw all features
-    if (feature.type === 'FeatureCollection') {
-      console.log('Drawing multiple features:', feature.features.length);
-      feature.features.forEach((f, index) => {
-        drawFeatureBoundaries(ctx, f, centerX, centerY, size, config.width, {
-          showLabels: false, // Never show labels for features
-          strokeStyle: '#FF0000',
-          lineWidth: 6
-        });
-      });
-    } else {
-      // Single feature case
-      console.log('Drawing single feature');
-      drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, {
-        showLabels: false
-      });
+    // Draw boundaries with increased visibility
+    drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, {
+      showLabels: false,
+      strokeStyle: 'rgba(255, 0, 0, 0.8)',  // Red boundary for better visibility
+      lineWidth: 3  // Thicker line
+    });
+
+    if (developableArea?.features?.length > 0 && showDevelopableArea) {
+      // Draw developable areas without labels
+      drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width, false);
     }
 
     // Add legend with adjusted spacing and formatting
@@ -2066,7 +2106,7 @@ export async function captureRoadsMap(feature, developableArea = null, showDevel
 
     // Draw legend items
     ctx.textBaseline = 'middle';
-    ctx.font = '18px Public Sans'; // Reduced font size for items
+    ctx.font = '20px Public Sans'; 
 
     legendItems.forEach((item, index) => {
       const y = legendY + padding + 50 + (index * lineHeight); // Adjusted starting position
@@ -2096,7 +2136,11 @@ export async function captureRoadsMap(feature, developableArea = null, showDevel
       ctx.fillText(item.label, legendX + padding + swatchLength + swatchPadding, y);
     });
 
-    return canvas.toDataURL('image/png', 1.0);
+    // Return both the screenshot and the road features
+    return {
+      dataURL: canvas.toDataURL('image/png', 1.0),
+      roadFeatures: roadFeatures // Return the roadFeatures variable directly
+    };
   } catch (error) {
     console.error('Failed to capture roads map:', error);
     return null;
@@ -2248,7 +2292,7 @@ export async function captureFloodMap(feature, developableArea = null, showDevel
     }
 
     // Draw boundaries
-    drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, { showLabels });
+    drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, { showLabels: false });
 
     if (developableArea?.features?.length > 0 && showDevelopableArea) {
       // Use the new helper function to draw developable areas with labels
@@ -2378,7 +2422,7 @@ export async function captureBushfireMap(feature, developableArea = null, showDe
     }
 
     // Draw boundaries
-    drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, { showLabels });
+    drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, { showLabels: false });
 
     if (developableArea?.features?.length > 0 && showDevelopableArea) {
       // Use the new helper function to draw developable areas with labels
@@ -2430,9 +2474,6 @@ export async function captureBushfireMap(feature, developableArea = null, showDe
       ctx.fillStyle = '#363636';
       ctx.fillText(item.label, legendX + padding + 35, y);
     });
-
-    // Draw legend
-    drawBushfireLegend(ctx, canvas.width, canvas.height);
 
     // Return both the screenshot and properties with the features
     const screenshot = canvas.toDataURL('image/png', 1.0);
@@ -2524,186 +2565,1090 @@ function drawBushfireLegend(ctx, canvasWidth, canvasHeight) {
   ctx.fillText('Bushfire Prone Land', legendX + 50, legendY + 48);
 }
 
-// Helper function to check if a property overlaps with LMR areas by directly querying the LMR layers
-export async function checkLMROverlap(feature, centerX, centerY, size) {
-  console.log('Checking LMR overlap for feature using direct query...');
+/**
+ * Checks if a feature overlaps with LMR areas by directly querying the mapservers
+ * @param {Object} feature - The GeoJSON feature to check
+ * @returns {Promise<Object>} - Overlap information
+ */
+export async function checkLMROverlap(feature) {
+  console.log('Checking LMR overlap for feature using direct mapserver query...');
+  
+  if (!feature || !feature.geometry) {
+    console.warn('Invalid feature for LMR overlap check:', feature);
+    return { hasOverlap: false, overlaps: {}, primaryOverlap: null };
+  }
   
   try {
-    // Create a temporary canvas for checking overlaps
-    const canvas = createCanvas(2048, 2048);
-    const ctx = canvas.getContext('2d');
-    
-    // Define the LMR layers to check
+    // Define the LMR layers to check with their respective mapserver details
     const lmrLayers = [
-      { id: 4, name: 'Indicative LMR Housing Area' },
-      { id: 2, name: 'TOD Accelerated Rezoning Area' },
-      { id: 3, name: 'TOD Area' }
+      { 
+        id: 4, 
+        name: 'Indicative LMR Housing Area',
+        url: 'https://spatialportalarcgis.dpie.nsw.gov.au/sarcgis/rest/services/LMR/LMR/MapServer'
+      },
+      { 
+        id: 2, 
+        name: 'TOD Accelerated Rezoning Area',
+        url: 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/SEPP_Housing_2021/MapServer'
+      },
+      { 
+        id: 3, 
+        name: 'TOD Area',
+        url: 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/SEPP_Housing_2021/MapServer'
+      }
     ];
     
-    // Define the LMR area colors to check for
-    const lmrColors = {
-      'Indicative LMR Housing Area': [239, 216, 175], // rgb(239, 216, 175)
-      'TOD Accelerated Rezoning Area': [182, 154, 177], // rgb(182, 154, 177)
-      'TOD Area': [208, 181, 204] // rgb(208, 181, 204)
-    };
-    
-    // Convert feature coordinates to canvas coordinates
-    const coordinates = feature.geometry.coordinates[0];
-    const canvasCoords = coordinates.map(coord => {
-      const x = ((coord[0] - (centerX - size/2)) / size) * canvas.width;
-      const y = canvas.height - ((coord[1] - (centerY - size/2)) / size) * canvas.height;
-      return [x, y];
-    });
-    
-    // Draw the property boundary as a filled shape
-    ctx.beginPath();
-    canvasCoords.forEach((coord, i) => {
-      if (i === 0) ctx.moveTo(coord[0], coord[1]);
-      else ctx.lineTo(coord[0], coord[1]);
-    });
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(255, 255, 255, 1)';
-    ctx.fill();
-    
-    // Get the bounding box of the property
-    const bounds = canvasCoords.reduce((acc, coord) => ({
-      minX: Math.min(acc.minX, coord[0]),
-      minY: Math.min(acc.minY, coord[1]),
-      maxX: Math.max(acc.maxX, coord[0]),
-      maxY: Math.max(acc.maxY, coord[1])
-    }), {
-      minX: Infinity,
-      minY: Infinity,
-      maxX: -Infinity,
-      maxY: -Infinity
-    });
-    
-    // Add a small buffer to ensure we check pixels that might be on the edge
-    const buffer = 5;
-    const minX = Math.max(0, Math.floor(bounds.minX) - buffer);
-    const minY = Math.max(0, Math.floor(bounds.minY) - buffer);
-    const maxX = Math.min(canvas.width, Math.ceil(bounds.maxX) + buffer);
-    const maxY = Math.min(canvas.height, Math.ceil(bounds.maxY) + buffer);
-    
-    // Load and draw the LMR layer
-    const { bbox } = calculateMercatorParams(centerX, centerY, size);
-    const lmrConfig = {
-      url: 'https://spatialportalarcgis.dpie.nsw.gov.au/sarcgis/rest/services/LMR/LMR/MapServer',
-      size: canvas.width,
-      padding: 0.2
-    };
-    
-    const lmrParams = new URLSearchParams({
-      f: 'image',
-      format: 'png32',
-      transparent: 'true',
-      size: `${lmrConfig.size},${lmrConfig.size}`,
-      bbox: bbox,
-      bboxSR: 3857,
-      imageSR: 3857,
-      layers: 'show:0,1,2,3,4',
-      dpi: 300
-    });
-
-    const lmrUrl = `${lmrConfig.url}/export?${lmrParams.toString()}`;
-    const lmrProxyUrl = await proxyRequest(lmrUrl);
-    
-    if (!lmrProxyUrl) {
-      throw new Error('Failed to get proxy URL for LMR layer');
+    // Convert feature to ESRI JSON format for the query
+    const esriGeometry = featureToEsriGeometry(feature);
+    if (!esriGeometry) {
+      console.warn('Failed to convert feature to ESRI geometry');
+      return { hasOverlap: false, overlaps: {}, primaryOverlap: null };
     }
     
-    const lmrLayer = await loadImage(lmrProxyUrl);
-    ctx.drawImage(lmrLayer, 0, 0, canvas.width, canvas.height);
+    // Track overlap results for each layer
+    const results = {
+      hasOverlap: false,
+      overlaps: {},
+      primaryOverlap: null,
+      featureCounts: {}
+    };
     
-    // Get the image data from the canvas
-    const imageData = ctx.getImageData(minX, minY, maxX - minX, maxY - minY);
-    
-    // Check for overlaps
-    const overlaps = {};
-    const pixelCounts = {};
-    
-    // Initialize pixel counts
-    Object.keys(lmrColors).forEach(key => {
-      overlaps[key] = false;
-      pixelCounts[key] = 0;
+    // Initialize overlap status for each layer
+    lmrLayers.forEach(layer => {
+      results.overlaps[layer.name] = false;
+      results.featureCounts[layer.name] = 0;
     });
     
-    // Sample pixels at regular intervals to improve performance
-    const sampleRate = 2; // Check every 2nd pixel
-    const significantPixelThreshold = 50; // Require more pixels to confirm overlap
-    
-    // Check each pixel
-    for (let y = 0; y < maxY - minY; y += sampleRate) {
-      for (let x = 0; x < maxX - minX; x += sampleRate) {
-        const i = (y * (maxX - minX) + x) * 4;
+    // Query each LMR layer for intersection
+    const queryPromises = lmrLayers.map(async layer => {
+      try {
+        console.log(`Querying ${layer.name} (Layer ID: ${layer.id}) for overlap...`);
         
-        // Check if this pixel matches any of the LMR colors
-        Object.entries(lmrColors).forEach(([key, color]) => {
-          // Use stricter color matching to avoid false positives
-          const colorMatch = 
-            Math.abs(imageData.data[i] - color[0]) < 20 && 
-            Math.abs(imageData.data[i + 1] - color[1]) < 20 && 
-            Math.abs(imageData.data[i + 2] - color[2]) < 20 && 
-            imageData.data[i + 3] > 100; // Higher alpha threshold
-          
-          if (colorMatch) {
-            pixelCounts[key]++;
-          }
+        const queryParams = new URLSearchParams({
+          f: 'json',
+          where: '1=1',
+          geometry: JSON.stringify(esriGeometry),
+          geometryType: 'esriGeometryPolygon',
+          inSR: 4326,  // WGS84
+          outSR: 4283, // GDA94 - as per the user's note
+          spatialRel: 'esriSpatialRelIntersects',
+          outFields: '*',
+          returnCountOnly: true
         });
+        
+        const queryUrl = `${layer.url}/${layer.id}/query?${queryParams.toString()}`;
+        console.log('Query URL:', queryUrl);
+        
+        const response = await proxyRequest(queryUrl, { timeout: 120000 });
+        console.log(`${layer.name} overlap response:`, response);
+        
+        if (response && response.count !== undefined) {
+          const hasLayerOverlap = response.count > 0;
+          results.overlaps[layer.name] = hasLayerOverlap;
+          results.featureCounts[layer.name] = response.count;
+          
+          if (hasLayerOverlap) {
+            results.hasOverlap = true;
+          }
+        }
+      } catch (layerError) {
+        console.warn(`Error querying ${layer.name}:`, layerError);
+        // Don't fail the whole process if one layer query fails
       }
-    }
-    
-    // Determine which areas have significant overlap
-    Object.entries(pixelCounts).forEach(([key, count]) => {
-      // Set overlap to true only if we have a significant number of matching pixels
-      overlaps[key] = count > significantPixelThreshold;
     });
     
-    console.log('LMR overlap check results:', overlaps);
-    console.log('LMR pixel counts:', pixelCounts);
+    // Wait for all queries to complete
+    await Promise.all(queryPromises);
     
-    // Determine which area has the most overlap
-    let maxPixels = 0;
-    let primaryOverlap = null;
+    // Determine which area has the most overlap (by feature count)
+    let maxCount = 0;
     
-    Object.entries(pixelCounts).forEach(([key, count]) => {
-      if (count > maxPixels && count > significantPixelThreshold) {
-        maxPixels = count;
-        primaryOverlap = key;
+    Object.entries(results.featureCounts).forEach(([name, count]) => {
+      if (count > maxCount) {
+        maxCount = count;
+        results.primaryOverlap = name;
       }
     });
     
-    // Return the results
-    return {
-      hasOverlap: Object.values(overlaps).some(v => v),
-      overlaps,
-      primaryOverlap,
-      pixelCounts
-    };
+    console.log('LMR overlap results:', results);
+    return results;
   } catch (error) {
     console.error('Error checking LMR overlap:', error);
     return {
       hasOverlap: false,
       overlaps: {},
       primaryOverlap: null,
-      pixelCounts: {}
+      featureCounts: {}
     };
   }
 }
 
+/**
+ * Helper function to convert a GeoJSON feature to ESRI JSON format
+ * @param {Object} feature - GeoJSON feature
+ * @returns {Object} - ESRI JSON geometry
+ */
+function featureToEsriGeometry(feature) {
+  try {
+    if (!feature || !feature.geometry) {
+      return null;
+    }
+    
+    let rings = [];
+    
+    // Extract coordinates based on geometry type
+    if (feature.geometry.type === 'Polygon' && feature.geometry.coordinates?.[0]) {
+      // For Polygon geometry
+      rings = feature.geometry.coordinates.map(ring => [...ring]);
+    } else if (feature.geometry.type === 'MultiPolygon' && feature.geometry.coordinates?.[0]?.[0]) {
+      // For MultiPolygon geometry, flatten all rings
+      feature.geometry.coordinates.forEach(polygon => {
+        polygon.forEach(ring => {
+          rings.push([...ring]);
+        });
+      });
+    } else {
+      console.warn('Unsupported geometry type for ESRI conversion:', feature.geometry.type);
+      return null;
+    }
+    
+    // Check if we have valid rings
+    if (rings.length === 0) {
+      console.warn('No valid rings found in the feature geometry');
+      return null;
+    }
+    
+    // Create ESRI JSON format geometry
+    return {
+      rings: rings,
+      spatialReference: { wkid: 4326 }  // WGS84
+    };
+  } catch (error) {
+    console.error('Error converting feature to ESRI geometry:', error);
+    return null;
+  }
+}
+
+/**
+ * Helper function to check if a feature overlaps with ArcGIS features
+ * Updated to use spatial queries instead of simple presence checks
+ * @param {Object} feature - The GeoJSON feature to check for overlap
+ * @param {Array} arcgisFeatures - The ArcGIS features (for backward compatibility)
+ * @param {Object} options - Optional params like layerUrl and layerId for direct query
+ * @returns {Boolean} - Whether the feature overlaps with any of the ArcGIS features
+ */
+async function checkFeatureOverlap(feature, arcgisFeatures, options = {}) {
+  // First, check if we have the feature and arcgisFeatures as a fallback
+  if (!feature) {
+    console.warn('Invalid feature for overlap check');
+    return false;
+  }
+  
+  // If we have direct query options, use them
+  if (options.layerUrl && options.layerId !== undefined) {
+    try {
+      // Convert feature to ESRI JSON format
+      const esriGeometry = featureToEsriGeometry(feature);
+      if (!esriGeometry) {
+        console.warn('Failed to convert feature to ESRI geometry');
+        return false;
+      }
+      
+      // Build query parameters for spatial intersection
+      const queryParams = new URLSearchParams({
+        f: 'json',
+        where: '1=1',
+        geometry: JSON.stringify(esriGeometry),
+        geometryType: 'esriGeometryPolygon',
+        inSR: 4326,  // WGS84
+        outSR: 4283, // GDA94
+        spatialRel: 'esriSpatialRelIntersects',
+        returnCountOnly: true
+      });
+      
+      const queryUrl = `${options.layerUrl}/${options.layerId}/query?${queryParams.toString()}`;
+      console.log(`Checking feature overlap with layer ${options.layerId}...`);
+      
+      const response = await proxyRequest(queryUrl, { timeout: 60000 });
+      console.log(`Layer ${options.layerId} overlap response:`, response);
+      
+      return response && response.count > 0;
+    } catch (error) {
+      console.warn(`Error checking direct feature overlap for layer ${options.layerId}:`, error);
+      // Fall back to the backup method if direct query fails
+    }
+  }
+  
+  // Fallback to the old method if direct query is not possible or fails
+  if (!arcgisFeatures || arcgisFeatures.length === 0) return false;
+  
+  console.log('Using fallback overlap detection method - presence check only');
+  return arcgisFeatures.length > 0;
+}
+
+/**
+ * Helper function to check if a feature is within any isochrone
+ * Updated to use spatial queries instead of simple presence checks
+ * @param {Object} feature - The GeoJSON feature to check for overlap
+ * @param {Array} isochrones - The isochrone features (for backward compatibility)
+ * @param {Object} options - Optional params like layerUrl and layerId for direct query
+ * @returns {Boolean} - Whether the feature is within any isochrone
+ */
+async function checkIschroneOverlap(feature, isochrones, options = {}) {
+  // Reuse the checkFeatureOverlap function with isochrone-specific defaults
+  return await checkFeatureOverlap(feature, isochrones, {
+    layerUrl: options.layerUrl || 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/SEPP_Housing_2021/MapServer',
+    layerId: options.layerId || 6,
+    ...options
+  });
+}
+
 export async function captureUDPPrecinctMap(feature, developableArea = null, showDevelopableArea = false, useDevelopableAreaForBounds = false) {
+  console.log('Capturing UDP Precinct Map...');
+  
+  try {
+    // Create a canvas for the map
+    const config = {
+      width: 2048,
+      height: 2048
+    };
+    
+    const canvas = createCanvas(config.width, config.height);
+    const ctx = canvas.getContext('2d');
+    
+    // Fill the canvas with a white background
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, config.width, config.height);
+    
+    // Calculate the bounds of the feature with increased padding
+    const { centerX, centerY, size } = calculateBounds(feature, 4.0, developableArea, useDevelopableAreaForBounds);
+    
+    // Calculate the bbox in Web Mercator (EPSG:3857) coordinates for querying
+    const { bbox: mercatorBbox, centerMercX, centerMercY, sizeInMeters } = calculateMercatorParams(centerX, centerY, size);
+    console.log('Mercator bbox for UDP query:', mercatorBbox);
+    
+    // Also calculate GDA94 bbox for services that require it
+    const gda94Bbox = `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`;
+    console.log('GDA94 bbox for UDP query:', gda94Bbox);
+    
+    // FIRST: Load aerial base layer with improved opacity
+    try {
+      console.log('Loading aerial base layer...');
+      const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];
+      
+      const aerialParams = new URLSearchParams({
+        SERVICE: 'WMS',
+        VERSION: '1.3.0',
+        REQUEST: 'GetMap',
+        BBOX: mercatorBbox,
+        CRS: 'EPSG:3857',
+        WIDTH: config.width,
+        HEIGHT: config.height,
+        LAYERS: aerialConfig.layers,
+        STYLES: '',
+        FORMAT: 'image/png',
+        DPI: 300,
+        MAP_RESOLUTION: 300,
+        FORMAT_OPTIONS: 'dpi:300'
+      });
+
+      const aerialUrl = `${aerialConfig.url}?${aerialParams.toString()}`;
+      try {
+        const baseMap = await loadImage(aerialUrl);
+        drawImage(ctx, baseMap, canvas.width, canvas.height, 0.4);
+        console.log('Aerial base layer loaded successfully');
+      } catch (aerialError) {
+        console.error('Failed to load aerial layer:', aerialError);
+        // Continue with white background
+      }
+    } catch (error) {
+      console.error('Failed to setup aerial layer:', error);
+    }
+    
+    // Layer configuration - keep all existing layer configs
+    const layerConfig = {
+      todAreas: {
+        url: 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/SEPP_Housing_2021/MapServer',
+        layerId: 3,
+        color: 'rgba(0, 77, 168, 0.5)',
+        strokeColor: 'rgba(0, 77, 168, 0.8)',
+        label: 'TOD Area'
+      },
+      todAcceleratedAreas: {
+        url: 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/SEPP_Housing_2021/MapServer',
+        layerId: 2,
+        color: 'rgba(128, 0, 128, 0.5)',
+        strokeColor: 'rgba(128, 0, 128, 0.8)',
+        label: 'TOD Accelerated Rezoning Area'
+      },
+      townCentres: {
+        url: 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/SEPP_Housing_2021/MapServer',
+        layerId: 6,
+        color: 'transparent',
+        strokeColor: 'rgba(0, 0, 255, 0.8)',
+        label: 'Town Centre'
+      },
+      railLines: {
+        url: 'https://portal.spatial.nsw.gov.au/server/rest/services/NSW_Transport_Theme/MapServer',
+        layerId: 7,
+        color: 'transparent',
+        strokeColor: 'rgba(128, 0, 0, 0.8)',
+        lineWidth: 3,
+        label: 'Rail Line'
+      },
+      trainStations: {
+        url: 'https://portal.spatial.nsw.gov.au/server/rest/services/NSW_FOI_Transport_Facilities/MapServer',
+        layerId: 1,
+        iconPath: 'public/images/railIcon.png',
+        labelField: 'generalname',
+        label: 'Train Station'
+      }
+    };
+    
+    // Arrays to store the features for overlap checking
+    let todAreas = [];
+    let todAcceleratedAreas = [];
+    let isochrones = [];
+    let railLines = [];
+    let trainStations = [];
+    
+    // IMPORTANT: First fetch and render all rail lines - they're important background features
+    try {
+      console.log('Loading Rail Lines using export image...');
+      
+      const railLinesParams = new URLSearchParams({
+        f: 'image',
+        format: 'png32',
+        transparent: 'true',
+        size: `${config.width},${config.height}`,
+        bbox: mercatorBbox,
+        bboxSR: 3857,
+        imageSR: 3857,
+        layers: `show:${layerConfig.railLines.layerId}`,
+        dpi: 96
+      });
+      
+      const railLinesUrl = `${layerConfig.railLines.url}/export?${railLinesParams.toString()}`;
+      console.log('Rail Lines export URL:', railLinesUrl);
+      
+      const railLinesProxyUrl = await proxyRequest(railLinesUrl, { timeout: 180000 });
+      
+      if (railLinesProxyUrl) {
+        try {
+          console.log('Loading rail lines from proxy URL...');
+          const railLinesLayer = await loadImage(railLinesProxyUrl);
+          console.log('Rail lines layer loaded successfully');
+          // Ensure full opacity and visibility for rail lines
+          drawImage(ctx, railLinesLayer, canvas.width, canvas.height, 1.0);
+        } catch (imgError) {
+          console.warn('Failed to load rail lines image:', imgError);
+        }
+      } else {
+        console.warn('Failed to get proxy URL for rail lines layer');
+      }
+      
+      // Also get the feature data for scoring
+      const railLinesQueryUrl = `${layerConfig.railLines.url}/${layerConfig.railLines.layerId}/query`;
+      const railLinesQueryParams = new URLSearchParams({
+        f: 'json',
+        where: '1=1',  // Return all features
+        outFields: '*',
+        returnGeometry: 'true',
+        outSR: '3857',  // Web Mercator
+        spatialRel: 'esriSpatialRelIntersects',
+        geometry: mercatorBbox,
+        geometryType: 'esriGeometryEnvelope',
+        geometryPrecision: 3
+      });
+      
+      // Construct the URL correctly
+      const railLinesQueryFullUrl = `${railLinesQueryUrl}?${railLinesQueryParams.toString()}`;
+      
+      const railLinesQueryProxyUrl = await proxyRequest(railLinesQueryFullUrl, { timeout: 180000 });
+      
+      if (railLinesQueryProxyUrl) {
+        try {
+          const response = await fetch(railLinesQueryProxyUrl);
+          const text = await response.text();
+          try {
+            if (!text.trim().startsWith('<!DOCTYPE') && !text.trim().startsWith('<html')) {
+              const railLinesData = JSON.parse(text);
+              console.log('Rail Lines features loaded successfully:', railLinesData);
+              
+              if (railLinesData.features && railLinesData.features.length > 0) {
+                railLines = railLinesData.features;
+              }
+            }
+          } catch (jsonError) {
+            console.warn('Failed to parse Rail Lines JSON:', jsonError);
+          }
+        } catch (dataError) {
+          console.warn('Failed to process Rail Lines data:', dataError);
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load Rail Lines:', error);
+    }
+    
+    // Get TOD Areas using export image
+    try {
+      console.log('Loading TOD Areas using export image...');
+      
+      const todExportParams = new URLSearchParams({
+        f: 'image',
+        format: 'png32',
+        transparent: 'true',
+        size: `${config.width},${config.height}`,
+        bbox: gda94Bbox, // Using GDA94 for these services
+        bboxSR: 4283,    // GDA94
+        imageSR: 3857,   
+        layers: `show:${layerConfig.todAreas.layerId}`,
+        dpi: 300
+      });
+      
+      const todExportUrl = `${layerConfig.todAreas.url}/export?${todExportParams.toString()}`;
+      console.log('TOD Areas export URL:', todExportUrl);
+      
+      const todExportProxyUrl = await proxyRequest(todExportUrl, { timeout: 180000 });
+      
+      if (todExportProxyUrl) {
+        try {
+          console.log('Loading TOD areas from proxy URL...');
+          const todLayer = await loadImage(todExportProxyUrl);
+          console.log('TOD areas layer loaded successfully');
+          drawImage(ctx, todLayer, canvas.width, canvas.height, 0.8);
+        } catch (imgError) {
+          console.warn('Failed to load TOD areas image:', imgError);
+        }
+      } else {
+        console.warn('Failed to get proxy URL for TOD areas layer');
+      }
+      
+      // Also get the feature data for scoring
+      const todQueryUrl = `${layerConfig.todAreas.url}/${layerConfig.todAreas.layerId}/query`;
+      const todParams = new URLSearchParams({
+        f: 'json',
+        where: '1=1',  // Return all features
+        outFields: '*',
+        returnGeometry: 'true',
+        outSR: '4283',  // GDA94
+        spatialRel: 'esriSpatialRelIntersects',
+        geometry: gda94Bbox,
+        geometryType: 'esriGeometryEnvelope'
+      });
+      
+      const todQueryFullUrl = `${todQueryUrl}?${todParams.toString()}`;
+      
+      const todQueryProxyUrl = await proxyRequest(todQueryFullUrl, { timeout: 180000 });
+      
+      if (todQueryProxyUrl) {
+        try {
+          const response = await fetch(todQueryProxyUrl);
+          const text = await response.text();
+          try {
+            if (!text.trim().startsWith('<!DOCTYPE') && !text.trim().startsWith('<html')) {
+              const todData = JSON.parse(text);
+              console.log('TOD Areas features loaded successfully:', todData);
+              
+              if (todData.features && todData.features.length > 0) {
+                todAreas = todData.features;
+              }
+            }
+          } catch (jsonError) {
+            console.warn('Failed to parse TOD Areas JSON:', jsonError);
+          }
+        } catch (dataError) {
+          console.warn('Failed to process TOD Areas data:', dataError);
+        }
+      }
+    } catch (queryError) {
+      console.warn('Failed to query TOD Areas:', queryError);
+    }
+    
+    // Get TOD Accelerated Areas using export image
+    try {
+      console.log('Loading TOD Accelerated Areas using export image...');
+      
+      const todAccExportParams = new URLSearchParams({
+        f: 'image',
+        format: 'png32',
+        transparent: 'true',
+        size: `${config.width},${config.height}`,
+        bbox: gda94Bbox, // Using GDA94 for these services
+        bboxSR: 4283,    // GDA94
+        imageSR: 3857,   // GDA94
+        layers: `show:${layerConfig.todAcceleratedAreas.layerId}`,
+        dpi: 300
+      });
+      
+      const todAccExportUrl = `${layerConfig.todAcceleratedAreas.url}/export?${todAccExportParams.toString()}`;
+      console.log('TOD Accelerated Areas export URL:', todAccExportUrl);
+      
+      const todAccExportProxyUrl = await proxyRequest(todAccExportUrl, { timeout: 120000 });
+      
+      if (todAccExportProxyUrl) {
+        try {
+          console.log('Loading TOD accelerated areas from proxy URL...');
+          const todAccLayer = await loadImage(todAccExportProxyUrl);
+          console.log('TOD accelerated areas layer loaded successfully');
+          drawImage(ctx, todAccLayer, canvas.width, canvas.height, 0.8);
+        } catch (imgError) {
+          console.warn('Failed to load TOD accelerated areas image:', imgError);
+        }
+      } else {
+        console.warn('Failed to get proxy URL for TOD accelerated areas layer');
+      }
+      
+      // Also get the feature data for scoring
+      const todAccQueryUrl = `${layerConfig.todAcceleratedAreas.url}/${layerConfig.todAcceleratedAreas.layerId}/query`;
+      const todAccParams = new URLSearchParams({
+        f: 'json',
+        where: '1=1',  // Return all features
+        outFields: '*',
+        returnGeometry: 'true',
+        outSR: '4283',  // GDA94
+        spatialRel: 'esriSpatialRelIntersects',
+        geometry: gda94Bbox,
+        geometryType: 'esriGeometryEnvelope'
+      });
+      
+      const todAccQueryFullUrl = `${todAccQueryUrl}?${todAccParams.toString()}`;
+      
+      const todAccQueryProxyUrl = await proxyRequest(todAccQueryFullUrl, { timeout: 120000 });
+      
+      if (todAccQueryProxyUrl) {
+        try {
+          const response = await fetch(todAccQueryProxyUrl);
+          const text = await response.text();
+          try {
+            if (!text.trim().startsWith('<!DOCTYPE') && !text.trim().startsWith('<html')) {
+              const todAccData = JSON.parse(text);
+              console.log('TOD Accelerated Areas features loaded successfully:', todAccData);
+              
+              if (todAccData.features && todAccData.features.length > 0) {
+                todAcceleratedAreas = todAccData.features;
+              }
+            }
+          } catch (jsonError) {
+            console.warn('Failed to parse TOD Accelerated Areas JSON:', jsonError);
+          }
+        } catch (dataError) {
+          console.warn('Failed to process TOD Accelerated Areas data:', dataError);
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load TOD Accelerated Areas:', error);
+    }
+    
+    // Get Town Centres (isochrones) using export image
+    try {
+      console.log('Loading Town Centres using export image...');
+      
+      const townCentresExportParams = new URLSearchParams({
+        f: 'image',
+        format: 'png32',
+        transparent: 'true',
+        size: `${config.width},${config.height}`,
+        bbox: gda94Bbox, // Using GDA94 for these services
+        bboxSR: 4283,    // GDA94
+        imageSR: 4283,   // GDA94
+        layers: `show:${layerConfig.townCentres.layerId}`,
+        dpi: 300
+      });
+      
+      const townCentresExportUrl = `${layerConfig.townCentres.url}/export?${townCentresExportParams.toString()}`;
+      console.log('Town Centres export URL:', townCentresExportUrl);
+      
+      const townCentresExportProxyUrl = await proxyRequest(townCentresExportUrl, { timeout: 120000 });
+      
+      if (townCentresExportProxyUrl) {
+        try {
+          console.log('Loading town centres from proxy URL...');
+          const townCentresLayer = await loadImage(townCentresExportProxyUrl);
+          console.log('Town centres layer loaded successfully');
+          drawImage(ctx, townCentresLayer, canvas.width, canvas.height, 1.0);
+        } catch (imgError) {
+          console.warn('Failed to load town centres image:', imgError);
+        }
+      } else {
+        console.warn('Failed to get proxy URL for town centres layer');
+      }
+      
+      // Also get the feature data for scoring
+      const townCentresQueryUrl = `${layerConfig.townCentres.url}/${layerConfig.townCentres.layerId}/query`;
+      const townCentresParams = new URLSearchParams({
+        f: 'json',
+        where: '1=1',  // Return all features
+        outFields: '*',
+        returnGeometry: 'true',
+        outSR: '4283',  // GDA94
+        spatialRel: 'esriSpatialRelIntersects',
+        geometry: gda94Bbox,
+        geometryType: 'esriGeometryEnvelope'
+      });
+      
+      const townCentresQueryFullUrl = `${townCentresQueryUrl}?${townCentresParams.toString()}`;
+      
+      const townCentresQueryProxyUrl = await proxyRequest(townCentresQueryFullUrl, { timeout: 120000 });
+      
+      if (townCentresQueryProxyUrl) {
+        try {
+          const response = await fetch(townCentresQueryProxyUrl);
+          const text = await response.text();
+          try {
+            if (!text.trim().startsWith('<!DOCTYPE') && !text.trim().startsWith('<html')) {
+              const townCentresData = JSON.parse(text);
+              console.log('Town Centres features loaded successfully:', townCentresData);
+              
+              if (townCentresData.features && townCentresData.features.length > 0) {
+                isochrones = townCentresData.features;
+              }
+            }
+          } catch (jsonError) {
+            console.warn('Failed to parse Town Centres JSON:', jsonError);
+          }
+        } catch (dataError) {
+          console.warn('Failed to process Town Centres data:', dataError);
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load Town Centres:', error);
+    }
+    
+    // Get train stations using export image
+    try {
+      console.log('Loading Train Stations using export image...');
+      
+      const trainStationsParams = new URLSearchParams({
+        f: 'image',
+        format: 'png32',
+        transparent: 'true',
+        size: `${config.width},${config.height}`,
+        bbox: mercatorBbox,
+        bboxSR: 3857,
+        imageSR: 3857,
+        layers: `show:${layerConfig.trainStations.layerId}`,
+        dpi: 300
+      });
+      
+      const trainStationsUrl = `${layerConfig.trainStations.url}/export?${trainStationsParams.toString()}`;
+      console.log('Train Stations export URL:', trainStationsUrl);
+      
+      const trainStationsProxyUrl = await proxyRequest(trainStationsUrl, { timeout: 120000 });
+      
+      if (trainStationsProxyUrl) {
+        try {
+          console.log('Loading train stations from proxy URL...');
+          const trainStationsLayer = await loadImage(trainStationsProxyUrl);
+          console.log('Train stations layer loaded successfully');
+          drawImage(ctx, trainStationsLayer, canvas.width, canvas.height, 1.0);
+        } catch (imgError) {
+          console.warn('Failed to load train stations image:', imgError);
+        }
+      } else {
+        console.warn('Failed to get proxy URL for train stations layer');
+      }
+      
+      // Also get the feature data for scoring
+      const trainStationsQueryUrl = `${layerConfig.trainStations.url}/${layerConfig.trainStations.layerId}/query`;
+      const trainStationsQueryParams = new URLSearchParams({
+        f: 'json',
+        where: '1=1',  // Return all features
+        outFields: '*',
+        returnGeometry: 'true',
+        outSR: '3857',  // Web Mercator
+        spatialRel: 'esriSpatialRelIntersects',
+        geometry: mercatorBbox,
+        geometryType: 'esriGeometryEnvelope'
+      });
+      
+      const trainStationsQueryFullUrl = `${trainStationsQueryUrl}?${trainStationsQueryParams.toString()}`;
+      
+      const trainStationsQueryProxyUrl = await proxyRequest(trainStationsQueryFullUrl, { timeout: 120000 });
+      
+      if (trainStationsQueryProxyUrl) {
+        try {
+          const response = await fetch(trainStationsQueryProxyUrl);
+          const text = await response.text();
+          try {
+            if (!text.trim().startsWith('<!DOCTYPE') && !text.trim().startsWith('<html')) {
+              const trainStationsData = JSON.parse(text);
+              console.log('Train Stations features loaded successfully:', trainStationsData);
+              
+              if (trainStationsData.features && trainStationsData.features.length > 0) {
+                trainStations = trainStationsData.features;
+              }
+            }
+          } catch (jsonError) {
+            console.warn('Failed to parse Train Stations JSON:', jsonError);
+          }
+        } catch (dataError) {
+          console.warn('Failed to process Train Stations data:', dataError);
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load Train Stations:', error);
+    }
+    
+    // Draw developable area if provided and requested
+    if (developableArea && showDevelopableArea) {
+      drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width);
+    }
+    
+    // Draw the feature boundary
+    if (feature.type === 'FeatureCollection') {
+      feature.features.forEach(f => {
+        drawFeatureBoundaries(ctx, f, centerX, centerY, size, config.width, {
+          strokeStyle: 'rgba(255, 0, 0, 0.8)',
+          lineWidth: 3
+        });
+      });
+    } else {
+      drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, {
+        strokeStyle: 'rgba(255, 0, 0, 0.8)',
+        lineWidth: 3
+      });
+    }
+    
+    // Check if features overlap with TOD areas, TOD Accelerated areas, or isochrones
+    // This is for scoring purposes
+    if (feature.type === 'FeatureCollection') {
+      // Process each feature in the collection
+      const lmrOverlapPromises = feature.features.map(async (f, index) => {
+        try {
+          if (!f.properties) f.properties = {};
+          
+          // Use LMR overlap check for comprehensive overlap information
+          console.log(`Checking LMR overlaps for feature ${index}...`);
+          const lmrOverlapResults = await checkLMROverlap(f);
+          
+          // Update the feature properties with the results
+          f.properties.inTOD = lmrOverlapResults.overlaps['TOD Area'] || false;
+          f.properties.inTODAccelerated = lmrOverlapResults.overlaps['TOD Accelerated Rezoning Area'] || false;
+          f.properties.inLMRHousingArea = lmrOverlapResults.overlaps['Indicative LMR Housing Area'] || false;
+          
+          // Store the LMR overlap information
+          f.properties.lmrOverlap = {
+            hasOverlap: lmrOverlapResults.hasOverlap,
+            primaryOverlap: lmrOverlapResults.primaryOverlap,
+            overlaps: lmrOverlapResults.overlaps
+          };
+          
+          // Store train station information - using direct query if we have this data
+          // This is a lightweight approach as the full LMR check already does most of the heavy lifting
+          if (trainStations.length > 0) {
+            f.properties.nearbyTrainStations = trainStations
+              .map(station => ({
+                name: station.attributes[layerConfig.trainStations.labelField] || 'Unknown Station',
+                x: station.geometry.x,
+                y: station.geometry.y
+              }));
+          } else {
+            // If we don't have train stations data from earlier loading, 
+            // we could query it directly here if needed
+            f.properties.nearbyTrainStations = [];
+          }
+            
+          return f;
+        } catch (error) {
+          console.error(`Error processing feature ${index} overlaps:`, error);
+          return f; // Return the original feature if there's an error
+        }
+      });
+      
+      // Wait for all overlap checks to complete
+      await Promise.all(lmrOverlapPromises);
+      
+    } else {
+      // Single feature case
+      if (!feature.properties) feature.properties = {};
+      
+      // Use LMR overlap check for comprehensive overlap information
+      console.log('Checking LMR overlaps for single feature...');
+      const lmrOverlapResults = await checkLMROverlap(feature);
+      
+      // Update the feature properties with the results
+      feature.properties.inTOD = lmrOverlapResults.overlaps['TOD Area'] || false;
+      feature.properties.inTODAccelerated = lmrOverlapResults.overlaps['TOD Accelerated Rezoning Area'] || false;
+      feature.properties.inLMRHousingArea = lmrOverlapResults.overlaps['Indicative LMR Housing Area'] || false;
+      
+      // Store the LMR overlap information
+      feature.properties.lmrOverlap = {
+        hasOverlap: lmrOverlapResults.hasOverlap,
+        primaryOverlap: lmrOverlapResults.primaryOverlap,
+        overlaps: lmrOverlapResults.overlaps
+      };
+      
+      // Store train station information - using direct query if we have this data
+      if (trainStations.length > 0) {
+        feature.properties.nearbyTrainStations = trainStations
+          .map(station => ({
+            name: station.attributes[layerConfig.trainStations.labelField] || 'Unknown Station',
+            x: station.geometry.x,
+            y: station.geometry.y
+          }));
+      } else {
+        // If we don't have train stations data from earlier loading, 
+        // we could query it directly here if needed
+        feature.properties.nearbyTrainStations = [];
+      }
+    }
+    
+    // Add a legend with better styling
+    ctx.font = '24px Arial';
+    ctx.fillStyle = 'black';
+    
+    // Create a semi-transparent background for the legend
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.fillRect(40, 40, 400, 220); // Increased height for additional items
+    ctx.strokeStyle = 'black';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(40, 40, 400, 220);
+    
+    // Title for legend
+    ctx.font = 'bold 26px Public Sans';
+    ctx.fillStyle = '#002664';
+    ctx.fillText('Proximity to Strategic Centre', 60, 75);
+    
+    // TOD Areas
+    ctx.font = '20px Public Sans';
+    ctx.fillStyle = layerConfig.todAreas.color;
+    ctx.fillRect(60, 90, 30, 30);
+    ctx.strokeStyle = layerConfig.todAreas.strokeColor;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(60, 90, 30, 30);
+    ctx.fillStyle = 'black';
+    ctx.fillText(layerConfig.todAreas.label, 110, 110);
+    
+    // TOD Accelerated Areas
+    ctx.fillStyle = layerConfig.todAcceleratedAreas.color;
+    ctx.fillRect(60, 130, 30, 30);
+    ctx.strokeStyle = layerConfig.todAcceleratedAreas.strokeColor;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(60, 130, 30, 30);
+    ctx.fillStyle = 'black';
+    ctx.fillText(layerConfig.todAcceleratedAreas.label, 110, 150);
+    
+    // Town Centres
+    ctx.strokeStyle = layerConfig.townCentres.strokeColor;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(60, 170, 30, 30);
+    ctx.fillStyle = 'blue';
+    ctx.beginPath();
+    ctx.arc(75, 185, 8, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.fillStyle = 'black';
+    ctx.fillText(layerConfig.townCentres.label, 110, 190);
+    
+    // Rail Lines
+    ctx.beginPath();
+    ctx.moveTo(60, 225);
+    ctx.lineTo(90, 225);
+    ctx.strokeStyle = layerConfig.railLines.strokeColor;
+    ctx.lineWidth = layerConfig.railLines.lineWidth || 3;
+    ctx.stroke();
+    ctx.fillStyle = 'black';
+    ctx.fillText(layerConfig.railLines.label, 110, 230);
+    
+    // Collect all the UDP data for scoring
+    const udpData = {
+      todAreas,
+      todAcceleratedAreas,
+      isochrones,
+      railLines,
+      trainStations,
+      lmrOverlap: feature.properties?.lmrOverlap || null,
+      nearbyTrainStations: feature.properties?.nearbyTrainStations || []
+    };
+    
+    // Return both the image and the data for property scoring
+    try {
+      const dataURL = canvas.toDataURL('image/png');
+      return {
+        dataURL: dataURL,
+        udpFeatures: udpData
+      };
+    } catch (canvasError) {
+      console.error('Error converting canvas to data URL:', canvasError);
+      return null;
+    }
+  } catch (error) {
+    console.error('Error capturing UDP Precinct Map:', error);
+    return null;
+  }
+}
+
+export async function captureTECMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false, showLabels = false, showDevelopableArealabels = false) {
+  if (!feature) {
+    console.log('No feature provided for TEC map capture');
+    return null;
+  }
+  console.log('Starting TEC map capture...', { feature, developableArea });
+
+  try {
+    const config = LAYER_CONFIGS[SCREENSHOT_TYPES.TEC];
+    
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
+    console.log('Calculated bounds:', { centerX, centerY, size });
+    
+    // Calculate bbox early for both Mercator and GDA94
+    const { bbox: mercatorBbox } = calculateMercatorParams(centerX, centerY, size);
+    const gda94Bbox = `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`;
+    console.log('Calculated bboxes:', { mercatorBbox, gda94Bbox });
+    
+    // Create base canvas
+    const canvas = createCanvas(config.width || config.size, config.height || config.size);
+    const ctx = canvas.getContext('2d', { alpha: true });
+    
+    try {
+      // 1. Aerial imagery (base)
+      console.log('Loading aerial base layer...');
+      const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];
+      
+      const params = new URLSearchParams({
+        SERVICE: 'WMS',
+        VERSION: '1.3.0',
+        REQUEST: 'GetMap',
+        BBOX: mercatorBbox,
+        CRS: 'EPSG:3857',
+        WIDTH: config.width || config.size,
+        HEIGHT: config.height || config.size,
+        LAYERS: aerialConfig.layers,
+        STYLES: '',
+        FORMAT: 'image/png',
+        DPI: config.dpi,
+        MAP_RESOLUTION: config.dpi,
+        FORMAT_OPTIONS: `dpi:${config.dpi}`
+      });
+
+      const url = `${aerialConfig.url}?${params.toString()}`;
+      const baseMap = await loadImage(url);
+      drawImage(ctx, baseMap, canvas.width, canvas.height, 0.7);
+    } catch (error) {
+      console.error('Failed to load aerial layer:', error);
+    }
+
+    let tecFeatures = [];
+    let tecFeatureCollection = null;
+
+    try {
+      // 2. TEC layer
+      console.log('Loading TEC layer...');
+      
+      // First get the features using proxy
+      const queryParams = new URLSearchParams({
+        where: '1=1',
+        geometry: gda94Bbox,
+        geometryType: 'esriGeometryEnvelope',
+        inSR: config.spatialReference,
+        spatialRel: 'esriSpatialRelIntersects',
+        outFields: '*',
+        returnGeometry: true,
+        f: 'geojson'
+      });
+
+      const queryUrl = `${config.url}/${config.layerId}/query?${queryParams.toString()}`;
+      console.log('Querying TEC features through proxy:', queryUrl);
+      
+      try {
+        const tecResponse = await proxyRequest(queryUrl);
+        console.log('TEC Response:', tecResponse);
+        
+        if (tecResponse?.features?.length > 0) {
+          tecFeatures = tecResponse.features;
+          tecFeatureCollection = tecResponse;
+          // Store both the features and response
+          if (!feature.properties) {
+            feature.properties = {};
+          }
+          feature.properties.site_suitability__tecFeatures = tecResponse;
+          feature.properties.tecFeatures = tecFeatures;
+          console.log('Stored TEC features:', tecFeatures.length);
+        } else {
+          console.log('No TEC features found in response');
+          if (!feature.properties) {
+            feature.properties = {};
+          }
+          tecFeatureCollection = { type: 'FeatureCollection', features: [] };
+          feature.properties.site_suitability__tecFeatures = tecFeatureCollection;
+          feature.properties.tecFeatures = [];
+        }
+      } catch (error) {
+        console.error('Error querying TEC features:', error);
+      }
+
+      // Then get the image using proxy
+      const imageParams = new URLSearchParams({
+        f: 'image',
+        format: config.format,
+        transparent: config.transparent.toString(),
+        size: `${config.size},${config.size}`,
+        bbox: gda94Bbox,
+        bboxSR: config.spatialReference,
+        imageSR: config.spatialReference,
+        layers: `show:${config.layerId}`,
+        dpi: config.dpi
+      });
+
+      const imageUrl = `${config.url}/export?${imageParams.toString()}`;
+      console.log('Requesting TEC layer image through proxy:', imageUrl);
+      
+      try {
+        const proxyUrl = await proxyRequest(imageUrl);
+        if (!proxyUrl) {
+          throw new Error('Failed to get proxy URL for TEC layer');
+        }
+
+        console.log('Loading TEC image from proxy URL...');
+        const tecLayer = await loadImage(proxyUrl);
+        console.log('TEC layer loaded successfully');
+        drawImage(ctx, tecLayer, canvas.width, canvas.height, 0.7);
+      } catch (error) {
+        console.error('Error loading TEC layer image:', error);
+      }
+    } catch (error) {
+      console.warn('Failed to process TEC layer:', error);
+    }
+
+    // Draw boundaries
+    console.log('Drawing boundaries...');
+    drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width || config.size, { showLabels: false });
+    console.log('Drew site boundary');
+
+    // Draw developable area if provided
+    if (developableArea?.features?.length > 0 && showDevelopableArea) {
+      console.log('Drawing developable area boundary');
+      // Draw each developable area feature
+      drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width || config.size, showDevelopableArealabels);
+      console.log('Drew developable area boundaries');
+    }
+
+    const screenshot = canvas.toDataURL('image/png', 1.0);
+    
+    // Return both the screenshot and the TEC features
+    return {
+      dataURL: screenshot,
+      tecFeatures: tecFeatureCollection
+    };
+  } catch (error) {
+    console.error('Failed to capture TEC map:', error);
+    return null;
+  }
+}
+
+export async function captureBiodiversityMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false, showLabels = false, showDevelopableArealabels = false) {
   if (!feature) return null;
-  console.log('Starting UDP precinct map capture...');
+  console.log('Starting biodiversity map capture...', { feature, developableArea });
 
   try {
     const config = {
       width: 2048,
       height: 2048,
-      padding: 6
+      padding: 0.3
     };
     
-    // Always use feature geometry for UDP precinct map, ignoring useDevelopableAreaForBounds parameter
-    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, false);
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
+    console.log('Calculated bounds:', { centerX, centerY, size });
     
     // Create base canvas
     const canvas = createCanvas(config.width, config.height);
@@ -2733,256 +3678,303 @@ export async function captureUDPPrecinctMap(feature, developableArea = null, sho
 
       const url = `${aerialConfig.url}?${params.toString()}`;
       const baseMap = await loadImage(url);
-      drawImage(ctx, baseMap, canvas.width, canvas.height, 0.5);
+      drawImage(ctx, baseMap, canvas.width, canvas.height, 0.7);
+      console.log('Aerial base layer loaded successfully');
     } catch (error) {
       console.error('Failed to load aerial layer:', error);
     }
 
+    let biodiversityFeatureCollection = null;
+    
     try {
-      // 1.5. LMR layers from ArcGIS REST service
-      console.log('Loading LMR layers...');
-      const lmrConfig = {
-        url: 'https://spatialportalarcgis.dpie.nsw.gov.au/sarcgis/rest/services/LMR/LMR/MapServer',
-        size: config.width,
-        padding: config.padding
+      // 2. Biodiversity Values layer
+      console.log('Loading biodiversity layer...');
+      const biodiversityConfig = {
+        url: 'https://www.lmbc.nsw.gov.au/arcgis/rest/services/BV/BiodiversityValues/MapServer',
+        layerId: 0,
+        size: 2048,
+        padding: 0.3
       };
-      
-      // Create GDA94 bbox for the LMR service
-      const gda94Bbox = `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`;
-      
-      const lmrParams = new URLSearchParams({
-        f: 'image',
-        format: 'png32',
-        transparent: 'true',
-        size: `${lmrConfig.size},${lmrConfig.size}`,
-        bbox: gda94Bbox,
-        bboxSR: 4283, // GDA94
-        imageSR: 3857, // 
-        layers: 'show:0,1,2,3,4', // Show all LMR layers
-        dpi: 300
+
+      // First get the features for overlap calculation
+      const { bbox: mercatorBbox } = calculateMercatorParams(centerX, centerY, size);
+      const queryParams = new URLSearchParams({
+        where: '1=1',
+        geometry: mercatorBbox,
+        geometryType: 'esriGeometryEnvelope',
+        inSR: 3857,
+        spatialRel: 'esriSpatialRelIntersects',
+        outFields: '*',
+        returnGeometry: true,
+        f: 'geojson'
       });
 
-      const lmrUrl = `${lmrConfig.url}/export?${lmrParams.toString()}`;
-      console.log('Requesting LMR layers through proxy...', lmrUrl);
+      const queryUrl = `${biodiversityConfig.url}/${biodiversityConfig.layerId}/query?${queryParams.toString()}`;
+      console.log('Querying biodiversity features from:', queryUrl);
+      const bioResponse = await proxyRequest(queryUrl);
+      console.log('Biodiversity Response:', bioResponse);
       
-      const lmrProxyUrl = await proxyRequest(lmrUrl);
-      if (lmrProxyUrl) {
-        console.log('Loading LMR image from proxy URL...');
-        const lmrLayer = await loadImage(lmrProxyUrl);
-        console.log('LMR layers loaded successfully');
-        drawImage(ctx, lmrLayer, canvas.width, canvas.height, 1); // Adjust opacity as needed
-        
-        // Check if the property overlaps with any LMR areas
-        const lmrOverlap = await checkLMROverlap(feature, centerX, centerY, size);
-        console.log('LMR overlap results:', lmrOverlap);
-        
-        // Store the LMR overlap results in the feature properties for scoring
+      if (bioResponse?.features?.length > 0) {
         if (!feature.properties) {
           feature.properties = {};
         }
-        feature.properties.lmrOverlap = lmrOverlap;
-
-        // Additionally check if any developable areas are within LMR/TOD areas
-        if (developableArea?.features?.length > 0) {
-          console.log('Checking if developable areas are within LMR/TOD areas...');
-          
-          // Store developable area overlap info for scoring (but don't display them on map)
-          const devAreaLmrResults = [];
-          
-          for (let i = 0; i < developableArea.features.length; i++) {
-            const devArea = developableArea.features[i];
-            const devAreaOverlap = await checkLMROverlap(devArea, centerX, centerY, size);
-            devAreaLmrResults.push(devAreaOverlap);
-            console.log(`Developable area ${i+1} LMR overlap:`, devAreaOverlap);
-          }
-          
-          // Store results in feature properties for scoring
-          feature.properties.developableAreaLmrOverlap = devAreaLmrResults;
-        }
+        biodiversityFeatureCollection = bioResponse;
+        feature.properties.site_suitability__biodiversityFeatures = bioResponse;
+        console.log('Stored biodiversity features:', bioResponse.features.length);
       } else {
-        console.warn('Failed to get proxy URL for LMR layers');
-      }
-    } catch (error) {
-      console.warn('Failed to load LMR layers:', error);
-    }
-
-    try {
-      // 2. UDP Precincts layer
-      console.log('Loading UDP precincts...');
-      const udpResponse = await fetch('/UDP_Precincts.geojson');
-      const udpData = await udpResponse.json();
-      
-      if (udpData.features?.length > 0) {
-        console.log(`Drawing ${udpData.features.length} UDP precinct features...`);
-        
-        // Store the features in the feature object for scoring
-        if (feature.properties) {
-          feature.properties.udpPrecincts = udpData.features;
-        } else {
-          feature.properties = { udpPrecincts: udpData.features };
+        if (!feature.properties) {
+          feature.properties = {};
         }
-
-        // Set font for labels before drawing features
-        ctx.font = 'bold 24px Public Sans';
-
-        udpData.features.forEach((precinctFeature, index) => {
-          console.log(`Drawing UDP precinct feature ${index + 1}...`);
-          if (precinctFeature.geometry?.coordinates) {
-            // For MultiPolygon, draw each polygon
-            if (precinctFeature.geometry.type === 'MultiPolygon') {
-              precinctFeature.geometry.coordinates.forEach(polygonCoords => {
-                polygonCoords.forEach(coords => {
-                  drawBoundary(ctx, coords, centerX, centerY, size, config.width, {
-                    fill: true,
-                    strokeStyle: 'rgba(4, 170, 229, 0.8)',
-                    fillStyle: 'rgba(4, 170, 229, 0.5)',
-                    lineWidth: 2
-                  });
-                });
-              });
-            } else if (precinctFeature.geometry.type === 'Polygon') {
-              // For single Polygon
-              precinctFeature.geometry.coordinates.forEach(coords => {
-                drawBoundary(ctx, coords, centerX, centerY, size, config.width, {
-                  fill: true,
-                  strokeStyle: 'rgba(4, 170, 229, 0.8)',
-                  fillStyle: 'rgba(4, 170, 229, 0.5)',
-                  lineWidth: 2
-                });
-              });
-            }
-
-            // Calculate centroid for label placement
-            let bounds = {
-              minX: Infinity,
-              minY: Infinity,
-              maxX: -Infinity,
-              maxY: -Infinity
-            };
-
-            const updateBounds = (coords) => {
-              coords.forEach(coord => {
-                bounds.minX = Math.min(bounds.minX, coord[0]);
-                bounds.minY = Math.min(bounds.minY, coord[1]);
-                bounds.maxX = Math.max(bounds.maxX, coord[0]);
-                bounds.maxY = Math.max(bounds.maxY, coord[1]);
-              });
-            };
-
-            if (precinctFeature.geometry.type === 'MultiPolygon') {
-              precinctFeature.geometry.coordinates.forEach(polygonCoords => {
-                polygonCoords.forEach(coords => {
-                  updateBounds(coords);
-                });
-              });
-            } else {
-              precinctFeature.geometry.coordinates.forEach(coords => {
-                updateBounds(coords);
-              });
-            }
-
-            // Calculate centroid from bounds
-            const centroidX = (bounds.minX + bounds.maxX) / 2;
-            const centroidY = (bounds.minY + bounds.maxY) / 2;
-
-            // Convert centroid to canvas coordinates
-            const canvasX = ((centroidX - (centerX - size/2)) / size) * config.width;
-            const canvasY = config.height - ((centroidY - (centerY - size/2)) / size) * config.height;
-
-            // Draw label if precinct name exists
-            if (precinctFeature.properties?.precinct_name) {
-              console.log(`Drawing label for ${precinctFeature.properties.Precinct_Name} at (${canvasX}, ${canvasY})`);
-              drawRoundedTextBox(ctx, precinctFeature.properties.Precinct_Name, canvasX, canvasY);
-            }
-          }
-        });
+        biodiversityFeatureCollection = { type: 'FeatureCollection', features: [] };
+        feature.properties.site_suitability__biodiversityFeatures = biodiversityFeatureCollection;
       }
+
+      // Then get the image
+      const params = new URLSearchParams({
+        f: 'image',
+        format: 'png32',
+        transparent: 'true',
+        size: `${biodiversityConfig.size},${biodiversityConfig.size}`,
+        bbox: mercatorBbox,
+        bboxSR: 3857,
+        imageSR: 3857,
+        layers: `show:${biodiversityConfig.layerId}`,
+        dpi: 96
+      });
+
+      const url = `${biodiversityConfig.url}/export?${params.toString()}`;
+      console.log('Requesting biodiversity layer through proxy...', url);
+      
+      const proxyUrl = await proxyRequest(url);
+      if (!proxyUrl) {
+        throw new Error('Failed to get proxy URL for biodiversity layer');
+      }
+      
+      console.log('Loading biodiversity image from proxy URL...');
+      const biodiversityLayer = await loadImage(proxyUrl);
+      console.log('Biodiversity layer loaded successfully');
+      drawImage(ctx, biodiversityLayer, canvas.width, canvas.height, 0.8);
     } catch (error) {
-      console.error('Failed to load UDP precincts:', error);
+      console.warn('Failed to load biodiversity layer:', error);
+      console.error('Error details:', error);
     }
 
-    // Draw all features, but not developable areas
-    if (feature.type === 'FeatureCollection') {
-      console.log('Drawing multiple features:', feature.features.length);
-      feature.features.forEach((f, index) => {
-        drawFeatureBoundaries(ctx, f, centerX, centerY, size, config.width, {
-          showLabels: true, // Always show labels for multiple features
-          strokeStyle: '#FF0000',
-          lineWidth: 6
-        });
-      });
-    } else {
-      // Single feature case
-      console.log('Drawing single feature');
-      drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, {
-        showLabels: false
-      });
+    // Draw boundaries
+    drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, { showLabels: false });
+    console.log('Added site boundary');
+
+    // Draw developable area with more prominent styling
+    if (developableArea?.features?.length > 0 && showDevelopableArea) {
+      // Draw each developable area feature
+      drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width, showDevelopableArealabels);
+      console.log('Added developable area boundaries');
     }
 
-    // Add legend
-    const legendHeight = 350; // Increased height to accommodate more items
-    const legendWidth = 400;
-    const padding = 20;
-    const legendX = canvas.width - legendWidth - padding;
-    const legendY = canvas.height - legendHeight - padding;
-
-    // Draw legend background with border
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-    ctx.strokeStyle = '#002664';
-    ctx.lineWidth = 2;
-    ctx.fillRect(legendX, legendY, legendWidth, legendHeight);
-    ctx.strokeRect(legendX, legendY, legendWidth, legendHeight);
-
-    // Legend title
-    ctx.font = 'bold 28px Public Sans';
-    ctx.fillStyle = '#002664';
-    ctx.textBaseline = 'top';
-    ctx.fillText('Planning Precincts', legendX + padding, legendY + padding);
-
-    // Legend items - include both UDP and LMR layers
-    const legendItems = [
-      { color: 'rgba(4, 170, 229, 0.5)', label: 'UDP Growth Precinct' },
-      { color: 'rgb(118, 117, 114)', label: 'LMR Station', type: 'point' },
-      { color: 'rgb(209, 225, 240)', label: 'LMR Centre', type: 'point' },
-      { color: 'rgb(182, 154, 177)', label: 'TOD Accelerated Rezoning Area', type: 'area' },
-      { color: 'rgb(208, 181, 204)', label: 'TOD Area', type: 'area' },
-      { color: 'rgb(239, 216, 175)', label: 'Indicative LMR Housing Area', type: 'area' }
-    ];
-
-    ctx.textBaseline = 'middle';
-    ctx.font = '22px Public Sans';
-
-    legendItems.forEach((item, index) => {
-      const y = legendY + padding + 60 + (index * 45);
-      
-      if (item.type === 'point') {
-        // Draw circle for point features
-        ctx.beginPath();
-        ctx.arc(legendX + padding + 10, y, 10, 0, 2 * Math.PI);
-        ctx.fillStyle = item.color;
-        ctx.fill();
-        ctx.strokeStyle = '#363636';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      } else {
-        // Draw color box for area features
-        ctx.fillStyle = item.color;
-        ctx.fillRect(legendX + padding, y - 10, 20, 20);
-        ctx.strokeStyle = '#363636';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(legendX + padding, y - 10, 20, 20);
-      }
-      
-      // Draw label
-      ctx.fillStyle = '#363636';
-      ctx.fillText(item.label, legendX + padding + 35, y);
-    });
-
-    return canvas.toDataURL('image/png', 1.0);
+    const screenshot = canvas.toDataURL('image/png', 1.0);
+    
+    // Return both the screenshot and the biodiversity features
+    return {
+      dataURL: screenshot,
+      biodiversityFeatures: biodiversityFeatureCollection
+    };
   } catch (error) {
-    console.error('Failed to capture UDP precinct map:', error);
+    console.error('Failed to capture biodiversity map:', error);
     return null;
   }
+}
+
+// Helper functions for tile calculations
+function long2tile(lon, zoom) {
+  const n = Math.pow(2, zoom);
+  return Math.floor(((lon + 180) / 360) * n);
+}
+
+function lat2tile(lat, zoom) {
+  const n = Math.pow(2, zoom);
+  const latRad = lat * Math.PI / 180;
+  return Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
+}
+
+// Convert Web Mercator to WGS84
+function mercatorToWGS84(x, y) {
+  const lon = (x / 20037508.34) * 180;
+  const lat = (Math.atan(Math.exp(y / 20037508.34 * Math.PI)) * 360 / Math.PI) - 90;
+  return [lon, lat];
+}
+
+
+
+export async function captureHistoricalImagery(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false, showLabels = false, showDevelopableArealabels = false) {
+  if (!feature) return null;
+  console.log('Starting historical imagery capture...');
+
+  try {
+    const config = {
+      width: 2048,
+      height: 2048,
+      padding: 0.4
+    };
+
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
+    const { bbox } = calculateMercatorParams(centerX, centerY, size);
+
+    // Try each layer in order from oldest to newest
+    const layersToTry = [...HISTORICAL_LAYERS].reverse();
+    for (const layerInfo of layersToTry) {
+      try {
+        console.log(`Trying Metromap layer from ${layerInfo.year} (${layerInfo.region}): ${layerInfo.layer}`);
+        
+        const canvas = createCanvas(config.width, config.height);
+        const ctx = canvas.getContext('2d', { alpha: true });
+        
+        // Fill with white background
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, config.width, config.height);
+
+        const params = new URLSearchParams({
+          ...METROMAP_CONFIG.defaultParams,
+          BBOX: bbox,
+          WIDTH: config.width,
+          HEIGHT: config.height,
+          LAYERS: layerInfo.layer
+        });
+
+        const url = `${METROMAP_CONFIG.baseUrl}?${params.toString()}`;
+        console.log(`Requesting Metromap imagery for ${layerInfo.year} (${layerInfo.region})`);
+        
+        const image = await loadImage(url);
+        
+        // Create a temporary canvas to check image content
+        const tempCanvas = createCanvas(config.width, config.height);
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(image, 0, 0, config.width, config.height);
+        
+        // Check if image has content
+        const imageData = tempCtx.getImageData(0, 0, config.width, config.height).data;
+        let hasContent = false;
+        
+        for (let i = 0; i < imageData.length; i += 4) {
+          if (imageData[i + 3] > 0) {
+            hasContent = true;
+            break;
+          }
+        }
+        
+        if (!hasContent) {
+          console.log(`Layer ${layerInfo.layer} returned empty/transparent image, trying next layer...`);
+          continue;
+        }
+
+        // If we get here, we found a valid layer with content
+        console.log(`Found valid historical imagery from ${layerInfo.year} (${layerInfo.region})`);
+        
+        // Draw the image
+        drawImage(ctx, image, canvas.width, canvas.height, 1.0);
+
+        // Draw boundaries
+        drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, { showLabels });
+
+        if (developableArea?.features?.length > 0 && showDevelopableArea) {
+          drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width, showDevelopableArealabels);
+        }
+
+        // Add source attribution
+        ctx.font = 'bold 24px Arial';
+        ctx.fillStyle = '#002664';
+        const sourceText = `Source: Metromap ${layerInfo.region} (${layerInfo.year})`;
+        const textWidth = ctx.measureText(sourceText).width;
+        const padding = 20;
+        
+        // Draw semi-transparent background for text
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.fillRect(
+          canvas.width - textWidth - padding * 2,
+          canvas.height - 40 - padding,
+          textWidth + padding * 2,
+          40
+        );
+        
+        // Draw text
+        ctx.fillStyle = '#002664';
+        ctx.fillText(sourceText, canvas.width - textWidth - padding, canvas.height - padding - 10);
+
+        // Return single image result
+        return [{
+          image: canvas.toDataURL('image/png', 1.0),
+          year: layerInfo.year,
+          type: 'metromap',
+          layer: layerInfo.layer,
+          region: layerInfo.region,
+          source: 'Metromap'
+        }];
+      } catch (error) {
+        console.warn(`Failed to load ${layerInfo.year} ${layerInfo.region} layer:`, error.message);
+        continue;
+      }
+    }
+
+    console.log('No valid historical imagery found');
+    return null;
+  } catch (error) {
+    console.error('Failed to capture historical imagery:', error);
+    return null;
+  }
+}
+
+// Helper function to draw developable area boundaries with labels
+function drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, canvasWidth, showLabels = true) {
+  if (!developableArea?.features?.length) return;
+  
+  const hasMultipleAreas = developableArea.features.length > 1;
+  
+  // Draw all developable area features
+  developableArea.features.forEach((feature, index) => {
+    if (feature.geometry?.coordinates?.[0]) {
+      // Draw boundary for all features
+      drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, canvasWidth, {
+        strokeStyle: '#00FFFF',
+        lineWidth: 12,
+        dashArray: [20, 10]
+      });
+      
+      // Add label on centroid ONLY if there are multiple areas AND showLabels is true
+      if (hasMultipleAreas && showLabels) {
+        const label = String.fromCharCode(65 + index); // A=65, B=66, etc.
+        try {
+          const polygon = turf.polygon([feature.geometry.coordinates[0]]);
+          const centroid = turf.centroid(polygon);
+          
+          if (centroid && centroid.geometry && centroid.geometry.coordinates) {
+            const [lon, lat] = centroid.geometry.coordinates;
+            const [mercX, mercY] = convertToWebMercator(lon, lat);
+            const { centerMercX, centerMercY, sizeInMeters } = calculateMercatorParams(centerX, centerY, size);
+            
+            // Transform to canvas coordinates
+            const x = ((mercX - (centerMercX - sizeInMeters/2)) / sizeInMeters) * canvasWidth;
+            const y = ((centerMercY + sizeInMeters/2 - mercY) / sizeInMeters) * canvasWidth;
+            
+            // Draw white circle with teal stroke
+            ctx.beginPath();
+            ctx.arc(x, y, 40, 0, Math.PI * 2);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fill();
+            ctx.strokeStyle = '#00FFFF';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            // Draw label text
+            ctx.fillStyle = '#00FFFF';
+            ctx.font = 'bold 48px "Public Sans"';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label, x, y);
+          }
+        } catch (error) {
+          console.warn('Error adding developable area centroid label:', error);
+        }
+      }
+    }
+  });
 }
 
 export async function capturePTALMap(feature, developableArea = null, showDevelopableArea = false, useDevelopableAreaForBounds = false) {
@@ -2991,9 +3983,8 @@ export async function capturePTALMap(feature, developableArea = null, showDevelo
     return null;
   }
   console.log('Starting PTAL map capture with feature:', {
-    featureId: feature.id,
-    featureType: feature.geometry?.type,
-    coordinates: feature.geometry?.coordinates?.length,
+    featureType: feature.type,
+    hasMultipleFeatures: feature.type === 'FeatureCollection' && feature.features?.length > 1,
     developableArea: developableArea ? 'provided' : 'not provided'
   });
 
@@ -3015,6 +4006,10 @@ export async function capturePTALMap(feature, developableArea = null, showDevelo
     const canvas = createCanvas(config.width, config.height);
     const ctx = canvas.getContext('2d', { alpha: true });
     console.log('Created canvas with dimensions:', { width: canvas.width, height: canvas.height });
+    
+    // Start with a white background to prevent transparency issues
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Prepare parameters for both layers
     const { bbox } = calculateMercatorParams(centerX, centerY, size);
@@ -3038,202 +4033,287 @@ export async function capturePTALMap(feature, developableArea = null, showDevelo
     });
     console.log('Prepared aerial parameters:', Object.fromEntries(aerialParams.entries()));
 
+    // Load aerial base layer first, then proceed with PTAL data
+    try {
+      console.log('Loading aerial base layer...');
+      const baseMap = await loadImage(`${LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL].url}?${aerialParams.toString()}`);
+      
+      // Draw base map
+      drawImage(ctx, baseMap, canvas.width, canvas.height, 0.5);
+      console.log('Drew base map');
+    } catch (aerialError) {
+      console.error('Failed to load aerial base layer:', aerialError);
+      // Continue with white background
+    }
+
     // Prepare PTAL layer parameters
     const ptalConfig = {
       layerId: 28919
     };
     console.log('Using PTAL config:', ptalConfig);
 
-    // Get the PTAL layer data from Giraffe
-    console.log('Fetching project layers from Giraffe...');
-    const projectLayers = await giraffeState.get('projectLayers');
-    console.log('Retrieved project layers count:', projectLayers?.length);
-    
-    const ptalLayer = projectLayers?.find(layer => layer.layer === ptalConfig.layerId);
-    console.log('Found PTAL layer:', {
-      found: !!ptalLayer,
-      id: ptalLayer?.layer,
-      name: ptalLayer?.layer_full?.name,
-      defaultGroup: ptalLayer?.layer_full?.default_group,
-      vectorSource: ptalLayer?.layer_full?.vector_source ? 'present' : 'missing'
-    });
-    
-    if (!ptalLayer) {
-      console.error('PTAL layer not found in project layers');
-      return null;
-    }
-
-    // Color mapping for PTAL values
-    const ptalColors = {
-      '1 - Low': '#ff000080',
-      '2 - Low-Medium': '#ff7f0e80',
-      '3 - Medium': '#f2ff0080',
-      '4 - Medium-High': '#0e9aff80',
-      '5 - High': '#a8ff7f80',
-      '6 - Very High': '#1d960480'
-    };
-
-    // Extract the actual service URL and token from the vector tiles URL
-    const vectorTileUrl = ptalLayer.layer_full?.vector_source?.tiles?.[0];
-    console.log('Vector tile URL:', vectorTileUrl);
-    
-    if (!vectorTileUrl) {
-      console.error('No vector tile URL found in PTAL layer');
-      return null;
-    }
-
-    const decodedUrl = decodeURIComponent(vectorTileUrl.split('/featureServer/{z}/{x}/{y}/')?.[1] || '');
-    console.log('Decoded URL:', decodedUrl);
-    
-    // Extract the base URL from the decoded URL - it's everything before the query parameters
-    const urlMatch = decodedUrl.match(/(https:\/\/[^?]+)/);
-    if (!urlMatch) {
-      console.error('Could not extract base URL from decoded URL');
-      return null;
-    }
-    const baseUrl = urlMatch[1];
-    console.log('Using exact URL from vector tiles:', baseUrl);
-    
-    const extractedToken = decodedUrl.split('token=')?.[1]?.split('&')?.[0];
-    console.log('Extracted token:', extractedToken ? `${extractedToken.substring(0, 10)}...` : 'null');
-
-    if (!extractedToken) {
-      console.error('Could not extract token from vector tile URL');
-      return null;
-    }
-
-    const ptalParams = new URLSearchParams({
-      where: '1=1',
-      geometry: bbox,
-      geometryType: 'esriGeometryEnvelope',
-      inSR: 3857,
-      spatialRel: 'esriSpatialRelIntersects',
-      outFields: '*',
-      returnGeometry: true,
-      f: 'geojson',
-      token: extractedToken
-    });
-    console.log('Prepared PTAL parameters:', {
-      ...Object.fromEntries(ptalParams.entries()),
-      token: '***redacted***'
-    });
-
-    // Log the full URLs we're about to request
-    console.log('Preparing to request:', {
-      aerialUrl: `${LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL].url}?${aerialParams.toString()}`,
-      ptalUrl: `${baseUrl}/query?${ptalParams.toString().replace(extractedToken, '***redacted***')}`
-    });
-
-    // Load both layers in parallel
-    console.log('Loading aerial and PTAL layers in parallel...');
-    const [baseMap, ptalResponse] = await Promise.all([
-      // Load aerial base layer
-      loadImage(`${LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL].url}?${aerialParams.toString()}`),
-      // Load PTAL data
-      proxyRequest(`${baseUrl}/query?${ptalParams.toString()}`)
-    ]);
-    console.log('Loaded both layers:', {
-      baseMapLoaded: !!baseMap,
-      ptalResponseFeatures: ptalResponse?.features?.length
-    });
-
-    // Draw base map
-    drawImage(ctx, baseMap, canvas.width, canvas.height, 0.5);
-    console.log('Drew base map');
-
-    // Process PTAL data if available
-    if (ptalResponse?.features?.length > 0) {
-      console.log(`Processing ${ptalResponse.features.length} PTAL features...`);
-      ptalFeatures = ptalResponse.features;
-
-      // Find best PTAL value for each feature if it's a collection
-      if (feature.type === 'FeatureCollection' && feature.features) {
-        console.log('Finding best PTAL values for each feature in collection...');
-        const featureBestPTALs = [];
-        
-        // Process each feature
-        feature.features.forEach((f, featureIndex) => {
-          const featurePolygon = turf.polygon(f.geometry.coordinates);
-          const intersectingPtalFeatures = ptalFeatures.filter(ptalFeature => {
-            try {
-              const ptalPolygon = turf.polygon(ptalFeature.geometry.coordinates);
-              return turf.booleanIntersects(featurePolygon, ptalPolygon);
-            } catch (error) {
-              console.error('Error checking PTAL intersection:', error);
-              return false;
-            }
-          });
-          
-          const ptalValues = intersectingPtalFeatures.map(f => 
-            f.properties.legend || f.properties.ptal_desc || f.properties.ptal
-          );
-          
-          console.log(`Feature ${featureIndex+1} has PTAL values:`, ptalValues);
-          featureBestPTALs.push({
-            featureIndex,
-            ptalValues
-          });
-          
-          // Store PTAL values in the feature for scoring
-          if (!f.properties) f.properties = {};
-          f.properties.ptalValues = ptalValues;
-        });
-        
-        // Store overall collection of PTAL values in the feature's properties
-        if (!feature.properties) feature.properties = {};
-        feature.properties.featurePTALs = featureBestPTALs;
-        feature.properties.allPtalValues = ptalFeatures.map(f => 
-          f.properties.legend || f.properties.ptal_desc || f.properties.ptal
-        );
-      } else {
-        // Original approach for single feature
-        // Store all PTAL values in the feature object for scoring (not just intersecting ones)
-        const ptalValues = ptalFeatures.map(f => 
-          f.properties.legend || f.properties.ptal_desc || f.properties.ptal
-        );
-        if (feature.properties) {
-          feature.properties.ptalValues = ptalValues;
-        } else {
-          feature.properties = { ptalValues };
-        }
-        console.log('Stored PTAL values:', ptalValues);
-      }
-
-      // Draw ALL PTAL features
-      console.log('Drawing all PTAL features...');
-      ptalFeatures.forEach((ptalFeature, index) => {
-        const ptalValue = ptalFeature.properties.legend || ptalFeature.properties.ptal_desc || ptalFeature.properties.ptal;
-        const color = ptalColors[ptalValue] || '#808080';
-        console.log(`Drawing PTAL feature ${index + 1}/${ptalFeatures.length}:`, {
-          value: ptalValue,
-          color
-        });
-
-        drawBoundary(ctx, ptalFeature.geometry.coordinates[0], centerX, centerY, size, config.width, {
-          fill: true,
-          strokeStyle: '#000000',
-          fillStyle: color,
-          lineWidth: 2
-        });
+    try {
+      // Get the PTAL layer data from Giraffe
+      console.log('Fetching project layers from Giraffe...');
+      const projectLayers = await giraffeState.get('projectLayers');
+      console.log('Retrieved project layers count:', projectLayers?.length);
+      
+      const ptalLayer = projectLayers?.find(layer => layer.layer === ptalConfig.layerId);
+      console.log('Found PTAL layer:', {
+        found: !!ptalLayer,
+        id: ptalLayer?.layer,
+        name: ptalLayer?.layer_full?.name,
+        defaultGroup: ptalLayer?.layer_full?.default_group,
+        vectorSource: ptalLayer?.layer_full?.vector_source ? 'present' : 'missing'
       });
-    } else {
-      console.log('No PTAL features found in response');
+      
+      if (!ptalLayer) {
+        console.error('PTAL layer not found in project layers');
+        // Continue without PTAL layer - just draw the features
+      } else {
+        // Color mapping for PTAL values
+        const ptalColors = {
+          '1 - Low': '#ff000080',
+          '2 - Low-Medium': '#ff7f0e80',
+          '3 - Medium': '#f2ff0080',
+          '4 - Medium-High': '#0e9aff80',
+          '5 - High': '#a8ff7f80',
+          '6 - Very High': '#1d960480'
+        };
+
+        // Extract the actual service URL and token from the vector tiles URL
+        const vectorTileUrl = ptalLayer.layer_full?.vector_source?.tiles?.[0];
+        console.log('Vector tile URL:', vectorTileUrl);
+        
+        if (!vectorTileUrl) {
+          console.error('No vector tile URL found in PTAL layer');
+        } else {
+          const decodedUrl = decodeURIComponent(vectorTileUrl.split('/featureServer/{z}/{x}/{y}/')?.[1] || '');
+          console.log('Decoded URL:', decodedUrl);
+          
+          // Extract the base URL from the decoded URL - it's everything before the query parameters
+          const urlMatch = decodedUrl.match(/(https:\/\/[^?]+)/);
+          if (!urlMatch) {
+            console.error('Could not extract base URL from decoded URL');
+          } else {
+            const baseUrl = urlMatch[1];
+            console.log('Using exact URL from vector tiles:', baseUrl);
+            
+            const extractedToken = decodedUrl.split('token=')?.[1]?.split('&')?.[0];
+            console.log('Extracted token:', extractedToken ? `${extractedToken.substring(0, 10)}...` : 'null');
+
+            if (!extractedToken) {
+              console.error('Could not extract token from vector tile URL');
+            } else {
+              const ptalParams = new URLSearchParams({
+                where: '1=1',
+                geometry: bbox,
+                geometryType: 'esriGeometryEnvelope',
+                inSR: 3857,
+                spatialRel: 'esriSpatialRelIntersects',
+                outFields: '*',
+                returnGeometry: true,
+                f: 'geojson',
+                token: extractedToken
+              });
+              console.log('Prepared PTAL parameters:', {
+                ...Object.fromEntries(ptalParams.entries()),
+                token: '***redacted***'
+              });
+
+              // Log the full URL we're about to request
+              console.log('Preparing to request:', {
+                ptalUrl: `${baseUrl}/query?${ptalParams.toString().replace(extractedToken, '***redacted***')}`
+              });
+
+              try {
+                // Load PTAL data
+                const ptalResponse = await proxyRequest(`${baseUrl}/query?${ptalParams.toString()}`);
+                
+                // Process PTAL data if available
+                if (ptalResponse?.features?.length > 0) {
+                  console.log(`Processing ${ptalResponse.features.length} PTAL features...`);
+                  ptalFeatures = ptalResponse.features;
+
+                  // Find PTAL values for each feature if it's a collection
+                  if (feature.type === 'FeatureCollection' && feature.features?.length > 0) {
+                    console.log('Finding PTAL values for each feature in collection...');
+                    const featureBestPTALs = [];
+                    
+                    // Process each feature
+                    for (let featureIndex = 0; featureIndex < feature.features.length; featureIndex++) {
+                      const f = feature.features[featureIndex];
+                      try {
+                        // Skip features without valid geometry
+                        if (!f.geometry?.coordinates) {
+                          console.warn(`Feature ${featureIndex} has no valid coordinates`);
+                          continue; 
+                        }
+                        
+                        const featurePolygon = turf.polygon(f.geometry.coordinates);
+                        const intersectingPtalFeatures = [];
+                        
+                        // Check each PTAL feature for intersection
+                        for (const ptalFeature of ptalFeatures) {
+                          try {
+                            if (!ptalFeature.geometry?.coordinates) continue;
+                            const ptalPolygon = turf.polygon(ptalFeature.geometry.coordinates);
+                            if (turf.booleanIntersects(featurePolygon, ptalPolygon)) {
+                              intersectingPtalFeatures.push(ptalFeature);
+                            }
+                          } catch (intersectionError) {
+                            console.warn('Error checking PTAL intersection:', intersectionError);
+                          }
+                        }
+                        
+                        const ptalValues = intersectingPtalFeatures.map(f => 
+                          f.properties.legend || f.properties.ptal_desc || f.properties.ptal
+                        );
+                        
+                        console.log(`Feature ${featureIndex+1} has PTAL values:`, ptalValues);
+                        featureBestPTALs.push({
+                          featureIndex,
+                          ptalValues
+                        });
+                        
+                        // Store PTAL values in the feature for scoring
+                        if (!f.properties) f.properties = {};
+                        f.properties.ptalValues = ptalValues;
+                      } catch (featureError) {
+                        console.warn(`Error processing feature ${featureIndex}:`, featureError);
+                      }
+                    }
+                    
+                    // Store overall collection of PTAL values in the feature's properties
+                    if (!feature.properties) feature.properties = {};
+                    feature.properties.featurePTALs = featureBestPTALs;
+                    feature.properties.allPtalValues = ptalFeatures.map(f => 
+                      f.properties.legend || f.properties.ptal_desc || f.properties.ptal
+                    );
+                  } else {
+                    // Original approach for single feature
+                    try {
+                      // Store all PTAL values in the feature object for scoring (not just intersecting ones)
+                      const ptalValues = ptalFeatures.map(f => 
+                        f.properties.legend || f.properties.ptal_desc || f.properties.ptal
+                      );
+                      if (!feature.properties) {
+                        feature.properties = {};
+                      }
+                      feature.properties.ptalValues = ptalValues;
+                      console.log('Stored PTAL values:', ptalValues);
+                    } catch (singleFeatureError) {
+                      console.warn('Error storing PTAL values for single feature:', singleFeatureError);
+                    }
+                  }
+
+                  // Draw ALL PTAL features
+                  console.log('Drawing all PTAL features...');
+                  ptalFeatures.forEach((ptalFeature, index) => {
+                    try {
+                      const ptalValue = ptalFeature.properties.legend || ptalFeature.properties.ptal_desc || ptalFeature.properties.ptal;
+                      const color = ptalColors[ptalValue] || '#808080';
+                      
+                      if (ptalFeature.geometry?.coordinates?.[0]) {
+                        drawBoundary(ctx, ptalFeature.geometry.coordinates[0], centerX, centerY, size, config.width, {
+                          fill: true,
+                          strokeStyle: '#000000',
+                          fillStyle: color,
+                          lineWidth: 2
+                        });
+                      }
+                    } catch (drawError) {
+                      console.warn(`Error drawing PTAL feature ${index}:`, drawError);
+                    }
+                  });
+                } else {
+                  console.log('No PTAL features found in response');
+                }
+              } catch (ptalRequestError) {
+                console.error('Failed to fetch PTAL data:', ptalRequestError);
+              }
+            }
+          }
+        }
+      }
+    } catch (giraffError) {
+      console.error('Failed to get PTAL data from Giraffe:', giraffError);
     }
 
     // Draw all features
-    if (feature.type === 'FeatureCollection') {
+    if (feature.type === 'FeatureCollection' && feature.features?.length > 0) {
       console.log('Drawing multiple features:', feature.features.length);
       feature.features.forEach((f, index) => {
-        drawFeatureBoundaries(ctx, f, centerX, centerY, size, config.width, {
-          showLabels: true, // Always show labels for multiple features
-          strokeStyle: '#FF0000',
-          lineWidth: 6
-        });
+        try {
+          drawFeatureBoundaries(ctx, f, centerX, centerY, size, config.width, {
+            showLabels: true, // Always show labels for multiple features
+            strokeStyle: '#FF0000',
+            lineWidth: 6
+          });
+        } catch (drawError) {
+          console.warn(`Error drawing feature ${index}:`, drawError);
+        }
       });
     } else {
       // Single feature case
       console.log('Drawing single feature');
-      drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width);
+      try {
+        drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width);
+      } catch (drawError) {
+        console.warn('Error drawing feature:', drawError);
+      }
+    }
+
+    // Add PTAL legend
+    try {
+      // Draw legend background
+      const legendHeight = 350;
+      const legendWidth = 300;
+      const padding = 20;
+      const legendX = canvas.width - legendWidth - padding;
+      const legendY = canvas.height - legendHeight - padding;
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.strokeStyle = '#002664';
+      ctx.lineWidth = 2;
+      ctx.fillRect(legendX, legendY, legendWidth, legendHeight);
+      ctx.strokeRect(legendX, legendY, legendWidth, legendHeight);
+
+      // Legend title
+      ctx.font = 'bold 24px Public Sans';
+      ctx.fillStyle = '#002664';
+      ctx.textBaseline = 'top';
+      ctx.fillText('PTAL Ratings', legendX + padding, legendY + padding);
+
+      // PTAL legend items
+      const ptalLegendItems = [
+        { value: '1 - Low', color: '#ff000080' },
+        { value: '2 - Low-Medium', color: '#ff7f0e80' },
+        { value: '3 - Medium', color: '#f2ff0080' },
+        { value: '4 - Medium-High', color: '#0e9aff80' },
+        { value: '5 - High', color: '#a8ff7f80' },
+        { value: '6 - Very High', color: '#1d960480' }
+      ];
+
+      ctx.textBaseline = 'middle';
+      ctx.font = '18px Public Sans';
+
+      ptalLegendItems.forEach((item, index) => {
+        const y = legendY + padding + 60 + (index * 40);
+        
+        // Draw color box
+        ctx.fillStyle = item.color;
+        ctx.fillRect(legendX + padding, y - 10, 30, 20);
+        ctx.strokeStyle = '#363636';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(legendX + padding, y - 10, 30, 20);
+        
+        // Draw label
+        ctx.fillStyle = '#363636';
+        ctx.fillText(item.value, legendX + padding + 40, y);
+      });
+    } catch (legendError) {
+      console.warn('Error drawing PTAL legend:', legendError);
     }
 
     console.log('PTAL map capture completed successfully');
@@ -3457,7 +4537,7 @@ export async function captureContaminationMap(feature, developableArea = null, s
         size: 2048,
         padding: 0.3
       };
-
+      
       // First get the features
       const { bbox } = calculateMercatorParams(centerX, centerY, size);
       const queryParams = new URLSearchParams({
@@ -3512,7 +4592,7 @@ export async function captureContaminationMap(feature, developableArea = null, s
         console.log('Querying additional contamination features from:', additionalQueryUrl);
         const additionalContaminationResponse = await proxyRequest(additionalQueryUrl);
         console.log('Additional Contamination Response:', additionalContaminationResponse);
-
+        
         if (additionalContaminationResponse?.features?.length > 0) {
           // Merge with existing features
           contaminationFeatures = [...contaminationFeatures, ...additionalContaminationResponse.features];
@@ -3581,7 +4661,18 @@ export async function captureContaminationMap(feature, developableArea = null, s
     }
 
     // Draw boundaries
-    drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, { showLabels });
+    if (feature.type === 'FeatureCollection') {
+      console.log('Drawing multiple features:', feature.features.length);
+      feature.features.forEach((f, index) => {
+        drawFeatureBoundaries(ctx, f, centerX, centerY, size, config.width, {
+          showLabels: false,
+          strokeStyle: '#FF0000',
+          lineWidth: 6
+        });
+      });
+    } else {
+      drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, { showLabels: false });
+    }
 
     if (developableArea?.features?.length > 0 && showDevelopableArea) {
       drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width, showDevelopableArealabels);
@@ -3592,7 +4683,7 @@ export async function captureContaminationMap(feature, developableArea = null, s
       console.log('Drawing contamination point features...');
       drawPointFeatures(contaminationFeatures, centerX, centerY, size, config.width);
     }
-
+    
     return {
       image: canvas.toDataURL('image/png', 1.0),
       features: contaminationFeatures
@@ -3603,634 +4694,34 @@ export async function captureContaminationMap(feature, developableArea = null, s
   }
 }
 
-export async function captureOpenStreetMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false, showLabels = false, showDevelopableArealabels = false) {
-  if (!feature) return null;
-  console.log('Starting OpenStreetMap capture...');
-
-  try {
-    const config = {
-      width: 2048,
-      height: 2048,
-      padding: 0.2
-    };
-    
-    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
-    
-    // Convert center and size to Web Mercator for consistent coordinate system
-    const [mercatorCenterX, mercatorCenterY] = gda94ToWebMercator(centerX, centerY);
-    const [mercatorMinX, mercatorMinY] = gda94ToWebMercator(centerX - size/2, centerY - size/2);
-    const [mercatorMaxX, mercatorMaxY] = gda94ToWebMercator(centerX + size/2, centerY + size/2);
-    const mercatorSize = Math.max(
-      Math.abs(mercatorMaxX - mercatorMinX),
-      Math.abs(mercatorMaxY - mercatorMinY)
-    );
-    
-    // Create base canvas
-    const canvas = createCanvas(config.width, config.height);
-    const ctx = canvas.getContext('2d', { alpha: true });
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(0, 0, config.width, config.height);
-
-    try {
-      // Convert Web Mercator to WGS84 for tile calculations
-      const [minLon, minLat] = mercatorToWGS84(mercatorMinX, mercatorMinY);
-      const [maxLon, maxLat] = mercatorToWGS84(mercatorMaxX, mercatorMaxY);
-      
-      // Calculate zoom level
-      const latSpan = Math.abs(maxLat - minLat);
-      const lonSpan = Math.abs(maxLon - minLon);
-      const maxSpan = Math.max(latSpan, lonSpan);
-      const zoomLevel = Math.min(18, Math.floor(Math.log2(360 / maxSpan)));
-      
-      // Calculate tile coordinates
-      const tileSize = 256;
-      const minTileX = lon2tile(minLon, zoomLevel);
-      const maxTileX = lon2tile(maxLon, zoomLevel);
-      const minTileY = lat2tile(maxLat, zoomLevel);
-      const maxTileY = lat2tile(minLat, zoomLevel);
-
-      // Calculate dimensions
-      const tilesX = maxTileX - minTileX + 1;
-      const tilesY = maxTileY - minTileY + 1;
-      const totalWidth = tilesX * tileSize;
-      const totalHeight = tilesY * tileSize;
-      
-      // Calculate scale to fill the canvas
-      const scale = Math.max(
-        config.width / totalWidth,
-        config.height / totalHeight
-      );
-      
-      const offsetX = (config.width - totalWidth * scale) / 2;
-      const offsetY = (config.height - totalHeight * scale) / 2;
-
-      // Load and draw tiles
-      ctx.save();
-      ctx.translate(offsetX, offsetY);
-      ctx.scale(scale, scale);
-
-      const maxRetries = 3;
-      for (let x = minTileX; x <= maxTileX; x++) {
-        for (let y = minTileY; y <= maxTileY; y++) {
-          const url = `https://tile.openstreetmap.org/${zoomLevel}/${x}/${y}.png`;
-          
-          let retryCount = 0;
-          while (retryCount < maxRetries) {
-            try {
-              const tile = await loadImage(url);
-              const tileX = (x - minTileX) * tileSize;
-              const tileY = (y - minTileY) * tileSize;
-              ctx.drawImage(tile, tileX, tileY, tileSize, tileSize);
-              break;
-            } catch (tileError) {
-              retryCount++;
-              if (retryCount === maxRetries) {
-                console.error(`Failed to load tile at ${x},${y} after ${maxRetries} attempts`);
-              } else {
-                await new Promise(resolve => setTimeout(resolve, 1000));
-              }
-            }
-          }
-        }
-      }
-
-      ctx.restore();
-    
-    // Transform coordinates function that handles GDA94 to Web Mercator conversion
-    const transformCoord = (coord) => {
-      const [mercX, mercY] = gda94ToWebMercator(coord[0], coord[1]);
-      
-      // Scale to canvas coordinates
-        const x = ((mercX - mercatorMinX) / mercatorSize) * totalWidth * scale + offsetX;
-        const y = ((mercatorMaxY - mercY) / mercatorSize) * totalHeight * scale + offsetY;
-      return [x, y];
-    };
-
-      // Draw developable area
-      if (developableArea?.features?.[0]?.geometry?.coordinates?.[0]) {
-        ctx.beginPath();
-        ctx.strokeStyle = '#02d1b8';
-        ctx.lineWidth = 8;
-        ctx.setLineDash([20, 10]);
-        
-        const coords = developableArea.features[0].geometry.coordinates[0];
-        coords.forEach((coord, i) => {
-          const [x, y] = transformCoord(coord);
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        });
-        
-        ctx.closePath();
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
-
-      // Draw property boundary
-      ctx.beginPath();
-      ctx.strokeStyle = '#FF0000';
-      ctx.lineWidth = 6;
-      
-      const coords = feature.geometry.coordinates[0];
-      coords.forEach((coord, i) => {
-        const [x, y] = transformCoord(coord);
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      });
-      
-      ctx.closePath();
-      ctx.stroke();
-
-      return canvas.toDataURL('image/png', 1.0);
-    } catch (error) {
-      console.error('Failed to load OpenStreetMap layer:', error);
-      return null;
-    }
-  } catch (error) {
-    console.error('Failed to capture OpenStreetMap:', error);
-    return null;
-  }
-}
-
-export async function captureTECMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false, showLabels = false, showDevelopableArealabels = false) {
-  if (!feature) {
-    console.log('No feature provided for TEC map capture');
-    return null;
-  }
-  console.log('Starting TEC map capture...', { feature, developableArea });
-
-  try {
-    const config = LAYER_CONFIGS[SCREENSHOT_TYPES.TEC];
-    
-    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
-    console.log('Calculated bounds:', { centerX, centerY, size });
-    
-    // Calculate bbox early for both Mercator and GDA94
-    const { bbox: mercatorBbox } = calculateMercatorParams(centerX, centerY, size);
-    const gda94Bbox = `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`;
-    console.log('Calculated bboxes:', { mercatorBbox, gda94Bbox });
-    
-    // Create base canvas
-    const canvas = createCanvas(config.width || config.size, config.height || config.size);
-    const ctx = canvas.getContext('2d', { alpha: true });
-    
-    try {
-      // 1. Aerial imagery (base)
-      console.log('Loading aerial base layer...');
-      const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];
-      
-      const params = new URLSearchParams({
-        SERVICE: 'WMS',
-        VERSION: '1.3.0',
-        REQUEST: 'GetMap',
-        BBOX: mercatorBbox,
-        CRS: 'EPSG:3857',
-        WIDTH: config.width || config.size,
-        HEIGHT: config.height || config.size,
-        LAYERS: aerialConfig.layers,
-        STYLES: '',
-        FORMAT: 'image/png',
-        DPI: config.dpi,
-        MAP_RESOLUTION: config.dpi,
-        FORMAT_OPTIONS: `dpi:${config.dpi}`
-      });
-
-      const url = `${aerialConfig.url}?${params.toString()}`;
-      const baseMap = await loadImage(url);
-      drawImage(ctx, baseMap, canvas.width, canvas.height, 0.7);
-    } catch (error) {
-      console.error('Failed to load aerial layer:', error);
-    }
-
-    let tecFeatures = [];
-
-    try {
-      // 2. TEC layer
-      console.log('Loading TEC layer...');
-      
-      // First get the features using proxy
-      const queryParams = new URLSearchParams({
-        where: '1=1',
-        geometry: gda94Bbox,
-        geometryType: 'esriGeometryEnvelope',
-        inSR: config.spatialReference,
-        spatialRel: 'esriSpatialRelIntersects',
-        outFields: '*',
-        returnGeometry: true,
-        f: 'geojson'
-      });
-
-      const queryUrl = `${config.url}/${config.layerId}/query?${queryParams.toString()}`;
-      console.log('Querying TEC features through proxy:', queryUrl);
-      
-      try {
-        const tecResponse = await proxyRequest(queryUrl);
-        console.log('TEC Response:', tecResponse);
-        
-        if (tecResponse?.features?.length > 0) {
-          tecFeatures = tecResponse.features;
-          // Store both the features and response
-          if (!feature.properties) {
-            feature.properties = {};
-          }
-          feature.properties.site_suitability__tecFeatures = tecResponse;
-          feature.properties.tecFeatures = tecFeatures;
-          console.log('Stored TEC features:', tecFeatures.length);
-        } else {
-          console.log('No TEC features found in response');
-          if (!feature.properties) {
-            feature.properties = {};
-          }
-          feature.properties.site_suitability__tecFeatures = { type: 'FeatureCollection', features: [] };
-          feature.properties.tecFeatures = [];
-        }
-      } catch (error) {
-        console.error('Error querying TEC features:', error);
-      }
-
-      // Then get the image using proxy
-      const imageParams = new URLSearchParams({
-        f: 'image',
-        format: config.format,
-        transparent: config.transparent.toString(),
-        size: `${config.size},${config.size}`,
-        bbox: gda94Bbox,
-        bboxSR: config.spatialReference,
-        imageSR: config.spatialReference,
-        layers: `show:${config.layerId}`,
-        dpi: config.dpi
-      });
-
-      const imageUrl = `${config.url}/export?${imageParams.toString()}`;
-      console.log('Requesting TEC layer image through proxy:', imageUrl);
-      
-      try {
-        const proxyUrl = await proxyRequest(imageUrl);
-        if (!proxyUrl) {
-          throw new Error('Failed to get proxy URL for TEC layer');
-        }
-
-        console.log('Loading TEC image from proxy URL...');
-        const tecLayer = await loadImage(proxyUrl);
-        console.log('TEC layer loaded successfully');
-        drawImage(ctx, tecLayer, canvas.width, canvas.height, 0.7);
-      } catch (error) {
-        console.error('Error loading TEC layer image:', error);
-      }
-    } catch (error) {
-      console.warn('Failed to process TEC layer:', error);
-    }
-
-    // Draw boundaries
-    console.log('Drawing boundaries...');
-    if (feature.geometry?.coordinates?.[0]) {
-      console.log('Drawing site boundary');
-      drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width || config.size);
-    }
-
-    // Draw developable area if provided
-    if (developableArea?.features?.[0]?.geometry?.coordinates?.[0] && showDevelopableArea) {
-      console.log('Drawing developable area boundary');
-      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width || config.size, {
-        strokeStyle: '#02d1b8',
-        lineWidth: 12,
-        dashArray: [20, 10]
-      });
-    }
-
-    return canvas.toDataURL('image/png', 1.0);
-  } catch (error) {
-    console.error('Failed to capture TEC map:', error);
-    return null;
-  }
-}
-
-export async function captureBiodiversityMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false, showLabels = false, showDevelopableArealabels = false) {
-  if (!feature) return null;
-  console.log('Starting biodiversity map capture...', { feature, developableArea });
-
-  try {
-    const config = {
-      width: 2048,
-      height: 2048,
-      padding: 0.3
-    };
-    
-    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
-    console.log('Calculated bounds:', { centerX, centerY, size });
-    
-    // Create base canvas
-    const canvas = createCanvas(config.width, config.height);
-    const ctx = canvas.getContext('2d', { alpha: true });
-
-    try {
-      // 1. Aerial imagery (base)
-      console.log('Loading aerial base layer...');
-      const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];
-      const { bbox } = calculateMercatorParams(centerX, centerY, size);
-      
-      const params = new URLSearchParams({
-        SERVICE: 'WMS',
-        VERSION: '1.3.0',
-        REQUEST: 'GetMap',
-        BBOX: bbox,
-        CRS: 'EPSG:3857',
-        WIDTH: config.width,
-        HEIGHT: config.height,
-        LAYERS: aerialConfig.layers,
-        STYLES: '',
-        FORMAT: 'image/png',
-        DPI: 300,
-        MAP_RESOLUTION: 300,
-        FORMAT_OPTIONS: 'dpi:300'
-      });
-
-      const url = `${aerialConfig.url}?${params.toString()}`;
-      const baseMap = await loadImage(url);
-      drawImage(ctx, baseMap, canvas.width, canvas.height, 0.7);
-      console.log('Aerial base layer loaded successfully');
-    } catch (error) {
-      console.error('Failed to load aerial layer:', error);
-    }
-
-    try {
-      // 2. Biodiversity Values layer
-      console.log('Loading biodiversity layer...');
-      const biodiversityConfig = {
-        url: 'https://www.lmbc.nsw.gov.au/arcgis/rest/services/BV/BiodiversityValues/MapServer',
-        layerId: 0,
-        size: 2048,
-        padding: 0.3
-      };
-
-      // First get the features for overlap calculation
-      const { bbox: mercatorBbox } = calculateMercatorParams(centerX, centerY, size);
-      const queryParams = new URLSearchParams({
-        where: '1=1',
-        geometry: mercatorBbox,
-        geometryType: 'esriGeometryEnvelope',
-        inSR: 3857,
-        spatialRel: 'esriSpatialRelIntersects',
-        outFields: '*',
-        returnGeometry: true,
-        f: 'geojson'
-      });
-
-      const queryUrl = `${biodiversityConfig.url}/${biodiversityConfig.layerId}/query?${queryParams.toString()}`;
-      console.log('Querying biodiversity features from:', queryUrl);
-      const bioResponse = await proxyRequest(queryUrl);
-      console.log('Biodiversity Response:', bioResponse);
-      
-      if (bioResponse?.features?.length > 0) {
-        if (!feature.properties) {
-          feature.properties = {};
-        }
-        feature.properties.site_suitability__biodiversityFeatures = bioResponse;
-        console.log('Stored biodiversity features:', bioResponse.features.length);
-      }
-
-      // Then get the image
-      const params = new URLSearchParams({
-        f: 'image',
-        format: 'png32',
-        transparent: 'true',
-        size: `${biodiversityConfig.size},${biodiversityConfig.size}`,
-        bbox: mercatorBbox,
-        bboxSR: 3857,
-        imageSR: 3857,
-        layers: `show:${biodiversityConfig.layerId}`,
-        dpi: 96
-      });
-
-      const url = `${biodiversityConfig.url}/export?${params.toString()}`;
-      console.log('Requesting biodiversity layer through proxy...', url);
-      
-      const proxyUrl = await proxyRequest(url);
-      if (!proxyUrl) {
-        throw new Error('Failed to get proxy URL for biodiversity layer');
-      }
-      
-      console.log('Loading biodiversity image from proxy URL...');
-      const biodiversityLayer = await loadImage(proxyUrl);
-      console.log('Biodiversity layer loaded successfully');
-      drawImage(ctx, biodiversityLayer, canvas.width, canvas.height, 0.8);
-    } catch (error) {
-      console.warn('Failed to load biodiversity layer:', error);
-      console.error('Error details:', error);
-    }
-
-    // Draw boundaries
-    if (feature.geometry) {
-      drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, { showLabels });
-      console.log('Added site boundary');
-    }
-
-    // Draw developable area with more prominent styling
-    if (developableArea?.features?.[0] && showDevelopableArea) {
-      drawBoundary(ctx, developableArea.features[0].geometry.coordinates[0], centerX, centerY, size, config.width, {
-        strokeStyle: '#02d1b8',
-        lineWidth: 12,
-        dashArray: [20, 10]
-      });
-      console.log('Added developable area boundary');
-    }
-
-    return canvas.toDataURL('image/png', 1.0);
-  } catch (error) {
-    console.error('Failed to capture biodiversity map:', error);
-    return null;
-  }
-}
-
-// Helper functions for tile calculations
-function long2tile(lon, zoom) {
-  const n = Math.pow(2, zoom);
-  return Math.floor(((lon + 180) / 360) * n);
-}
-
-function lat2tile(lat, zoom) {
-  const n = Math.pow(2, zoom);
-  const latRad = lat * Math.PI / 180;
-  return Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
-}
-
-// Convert Web Mercator to WGS84
-function mercatorToWGS84(x, y) {
-  const lon = (x / 20037508.34) * 180;
-  const lat = (Math.atan(Math.exp(y / 20037508.34 * Math.PI)) * 360 / Math.PI) - 90;
-  return [lon, lat];
-}
-
-
-
-export async function captureHistoricalImagery(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false, showLabels = false, showDevelopableArealabels = false) {
-  if (!feature) return null;
-  console.log('Starting historical imagery capture...');
-
-  try {
-    const config = {
-      width: 2048,
-      height: 2048,
-      padding: 0.4
-    };
-
-    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
-    const { bbox } = calculateMercatorParams(centerX, centerY, size);
-
-    // Try each layer in order from oldest to newest
-    const layersToTry = [...HISTORICAL_LAYERS].reverse();
-    for (const layerInfo of layersToTry) {
-      try {
-        console.log(`Trying Metromap layer from ${layerInfo.year} (${layerInfo.region}): ${layerInfo.layer}`);
-        
-        const canvas = createCanvas(config.width, config.height);
-        const ctx = canvas.getContext('2d', { alpha: true });
-        
-        // Fill with white background
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(0, 0, config.width, config.height);
-
-        const params = new URLSearchParams({
-          ...METROMAP_CONFIG.defaultParams,
-          BBOX: bbox,
-          WIDTH: config.width,
-          HEIGHT: config.height,
-          LAYERS: layerInfo.layer
-        });
-
-        const url = `${METROMAP_CONFIG.baseUrl}?${params.toString()}`;
-        console.log(`Requesting Metromap imagery for ${layerInfo.year} (${layerInfo.region})`);
-        
-        const image = await loadImage(url);
-        
-        // Create a temporary canvas to check image content
-        const tempCanvas = createCanvas(config.width, config.height);
-        const tempCtx = tempCanvas.getContext('2d');
-        tempCtx.drawImage(image, 0, 0, config.width, config.height);
-        
-        // Check if image has content
-        const imageData = tempCtx.getImageData(0, 0, config.width, config.height).data;
-        let hasContent = false;
-        
-        for (let i = 0; i < imageData.length; i += 4) {
-          if (imageData[i + 3] > 0) {
-            hasContent = true;
-            break;
-          }
-        }
-        
-        if (!hasContent) {
-          console.log(`Layer ${layerInfo.layer} returned empty/transparent image, trying next layer...`);
-          continue;
-        }
-
-        // If we get here, we found a valid layer with content
-        console.log(`Found valid historical imagery from ${layerInfo.year} (${layerInfo.region})`);
-        
-        // Draw the image
-        drawImage(ctx, image, canvas.width, canvas.height, 1.0);
-
-        // Draw boundaries
-        drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, { showLabels });
-
-        if (developableArea?.features?.length > 0 && showDevelopableArea) {
-          drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width, showDevelopableArealabels);
-        }
-
-        // Add source attribution
-        ctx.font = 'bold 24px Arial';
-        ctx.fillStyle = '#002664';
-        const sourceText = `Source: Metromap ${layerInfo.region} (${layerInfo.year})`;
-        const textWidth = ctx.measureText(sourceText).width;
-        const padding = 20;
-        
-        // Draw semi-transparent background for text
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-        ctx.fillRect(
-          canvas.width - textWidth - padding * 2,
-          canvas.height - 40 - padding,
-          textWidth + padding * 2,
-          40
-        );
-        
-        // Draw text
-        ctx.fillStyle = '#002664';
-        ctx.fillText(sourceText, canvas.width - textWidth - padding, canvas.height - padding - 10);
-
-        // Return single image result
-        return [{
-          image: canvas.toDataURL('image/png', 1.0),
-          year: layerInfo.year,
-          type: 'metromap',
-          layer: layerInfo.layer,
-          region: layerInfo.region,
-          source: 'Metromap'
-        }];
-      } catch (error) {
-        console.warn(`Failed to load ${layerInfo.year} ${layerInfo.region} layer:`, error.message);
-        continue;
-      }
-    }
-
-    console.log('No valid historical imagery found');
-    return null;
-  } catch (error) {
-    console.error('Failed to capture historical imagery:', error);
-    return null;
-  }
-}
-
-// Helper function to draw developable area boundaries with labels
-function drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, canvasWidth, showLabels = true) {
-  if (!developableArea?.features?.length) return;
+// Helper function to calculate centroid of a polygon
+function calculatePolygonCentroid(points) {
+  if (!points || points.length === 0) return [0, 0];
   
-  const hasMultipleAreas = developableArea.features.length > 1;
+  let sumX = 0;
+  let sumY = 0;
   
-  // Draw all developable area features
-  developableArea.features.forEach((feature, index) => {
-    if (feature.geometry?.coordinates?.[0]) {
-      // Draw boundary for all features
-      drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, canvasWidth, {
-        strokeStyle: '#00FFFF',
-        lineWidth: 12,
-        dashArray: [20, 10]
-      });
-      
-      // Add label on centroid ONLY if there are multiple areas AND showLabels is true
-      if (hasMultipleAreas && showLabels) {
-        const label = String.fromCharCode(65 + index); // A=65, B=66, etc.
-        try {
-          const polygon = turf.polygon([feature.geometry.coordinates[0]]);
-          const centroid = turf.centroid(polygon);
-          
-          if (centroid && centroid.geometry && centroid.geometry.coordinates) {
-            const [lon, lat] = centroid.geometry.coordinates;
-            const [mercX, mercY] = convertToWebMercator(lon, lat);
-            const { centerMercX, centerMercY, sizeInMeters } = calculateMercatorParams(centerX, centerY, size);
-            
-            // Transform to canvas coordinates
-            const x = ((mercX - (centerMercX - sizeInMeters/2)) / sizeInMeters) * canvasWidth;
-            const y = ((centerMercY + sizeInMeters/2 - mercY) / sizeInMeters) * canvasWidth;
-            
-            // Draw white circle with teal stroke
-            ctx.beginPath();
-            ctx.arc(x, y, 40, 0, Math.PI * 2);
-            ctx.fillStyle = '#FFFFFF';
-            ctx.fill();
-            ctx.strokeStyle = '#00FFFF';
-            ctx.lineWidth = 3;
-            ctx.stroke();
-            
-            // Draw label text
-            ctx.fillStyle = '#00FFFF';
-            ctx.font = 'bold 48px "Public Sans"';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(label, x, y);
-          }
-        } catch (error) {
-          console.warn('Error adding developable area centroid label:', error);
-        }
-      }
-    }
+  points.forEach(point => {
+    sumX += point[0];
+    sumY += point[1];
   });
+  
+  return [sumX / points.length, sumY / points.length];
+}
+
+// Helper function to generate circle points for simplified isochrone
+function generateCirclePoints(centerX, centerY, radius, numPoints = 60) {
+  const points = [];
+  
+  for (let i = 0; i < numPoints; i++) {
+    const angle = (i / numPoints) * 2 * Math.PI;
+    const x = centerX + radius * Math.cos(angle);
+    const y = centerY + radius * Math.sin(angle);
+    points.push([x, y]);
+  }
+  
+  // Close the circle
+  points.push([...points[0]]);
+  
+  return points;
 }

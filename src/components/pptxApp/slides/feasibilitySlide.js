@@ -234,13 +234,10 @@ export async function addFeasibilitySlide(pptx, properties, userSettings = {}) {
 
       // Add title
       slide.addText([
-        { text: properties.site__address, options: { color: styles.title.color } },
+        { text: properties.formatted_address || properties.site__address, options: { color: styles.title.color } },
         { text: ' ', options: { breakLine: true } },
         { text: `Development Feasibility - ${densityType}`, options: { color: styles.subtitle.color } }
-      ], convertCmValues({
-        ...styles.title,
-        color: undefined
-      }));
+      ], convertCmValues(styles.title));
 
       // Add horizontal line under title
       slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.titleLine));

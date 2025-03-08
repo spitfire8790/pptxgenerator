@@ -206,13 +206,10 @@ export async function addPlanningSlide2(pptx, properties) {
   try {
     // Add title
     slide.addText([
-    { text: properties.site__address, options: { color: styles.title.color } },
-    { text: ' ', options: { breakLine: true } },
-    { text: 'Heritage & Acid Sulfate Soils', options: { color: styles.subtitle.color } }
-   ], convertCmValues({
-    ...styles.title,
-    color: undefined
-   }));
+      { text: properties.formatted_address || properties.site__address, options: { color: styles.title.color } },
+      { text: ' ', options: { breakLine: true } },
+      { text: 'Heritage & Acid Sulfate Soils', options: { color: styles.subtitle.color } }
+    ], convertCmValues(styles.title));
     
     // Add horizontal line under title
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.titleLine));

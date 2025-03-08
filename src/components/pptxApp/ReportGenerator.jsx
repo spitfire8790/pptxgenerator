@@ -2,17 +2,22 @@ import React, { useState, useEffect, useRef } from 'react';
 import { generateReport } from '../../lib/powerpoint';
 import { addCoverSlide } from './slides/coverSlide';
 import { addPropertySnapshotSlide } from './slides/propertySnapshotSlide';
+import { addPrimarySiteAttributesSlide } from './slides/primarySiteAttributesSlide';
+import { addSecondaryAttributesSlide } from './slides/secondaryAttributesSlide';
 import { addPlanningSlide } from './slides/planningSlide';
 import { addPlanningSlide2 } from './slides/planningSlide2';
 import { addServicingSlide } from './slides/servicingSlide';
+import { addUtilisationSlide } from './slides/utilisationSlide';
+import { addAccessSlide } from './slides/accessSlide';
+import { addHazardsSlide } from './slides/hazardsSlide';
+import { addEnviroSlide } from './slides/enviroSlide';
+import { addContaminationSlide } from './slides/contaminationSlide';
 import { createScoringSlide } from './slides/scoringSlide';
-import { checkUserClaims } from './utils/auth/tokenUtils';
-import scoringCriteria from './slides/scoringLogic';
-import { area } from '@turf/area';
 import { addContextSlide } from './slides/contextSlide';
 import { addPermissibilitySlide } from './slides/permissibilitySlide';
 import { addDevelopmentSlide } from './slides/developmentSlide';
 import { addFeasibilitySlide } from './slides/feasibilitySlide';
+import { area } from '@turf/area';
 import { 
   captureMapScreenshot, 
   capturePrimarySiteAttributesMap, 
@@ -41,14 +46,7 @@ import SlidePreview from './SlidePreview';
 import PlanningMapView from './PlanningMapView';
 import PptxGenJS from 'pptxgenjs';
 import DevelopableAreaSelector, { DevelopableAreaOptions } from './DevelopableAreaSelector';
-import GenerationProgress from './GenerationProgress';
-import { addPrimarySiteAttributesSlide } from './slides/primarySiteAttributesSlide';
-import { addSecondaryAttributesSlide } from './slides/secondaryAttributesSlide';
-import { addUtilisationSlide } from './slides/utilisationSlide';
-import { addAccessSlide } from './slides/accessSlide';
-import { addHazardsSlide } from './slides/hazardsSlide';
-import { addContaminationSlide } from './slides/contaminationSlide';
-import { addEnviroSlide } from './slides/enviroSlide';
+
 import { 
   Home,
   Image as ImageIcon,
@@ -807,9 +805,42 @@ const ReportGenerator = ({
         } else {
           featureToCapture = primaryFeature;
         }
-        screenshots.roadsScreenshot = await captureRoadsMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
-        screenshots.udpPrecinctsScreenshot = await captureUDPPrecinctMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
-        screenshots.ptalScreenshot = await capturePTALMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
+        
+        // Run all map operations in parallel instead of sequentially
+        addLog('Generating access maps in parallel...', 'info');
+        const [roadsResult, udpPrecinctsResult, ptalScreenshot] = await Promise.all([
+          captureRoadsMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true),
+          captureUDPPrecinctMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds),
+          capturePTALMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true)
+        ]);
+
+        // Create propertyData if not already created
+        const propertyData = {};
+
+        // Ensure we have valid image data
+        const roadsImageData = roadsResult?.dataURL || roadsResult;
+
+        // Store the results
+        screenshots.roadsScreenshot = roadsImageData;
+        screenshots.roadFeatures = roadsResult?.roadFeatures;
+
+        // Log the road features to verify they're being captured correctly
+        console.log('Road features captured:', screenshots.roadFeatures);
+
+        // Ensure the road features are also stored in propertyData for scoring
+        propertyData.roadFeatures = screenshots.roadFeatures;
+
+        // Store UDP precinct data - handle both old string format and new object format
+        if (typeof udpPrecinctsResult === 'string') {
+          screenshots.udpPrecinctsScreenshot = udpPrecinctsResult;
+        } else {
+          // Store just the dataURL in the screenshot field for PowerPoint
+          screenshots.udpPrecinctsScreenshot = udpPrecinctsResult?.dataURL || null;
+          // Store features data in propertyData for scoring
+          propertyData.udpFeatures = udpPrecinctsResult?.udpFeatures || null;
+        }
+
+        screenshots.ptalScreenshot = ptalScreenshot;
       }
       
       if (selectedSlides.hazards) {
@@ -851,10 +882,23 @@ const ReportGenerator = ({
         } else {
           featureToCapture = primaryFeature;
         }
-        screenshots.tecMapScreenshot = await captureTECMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
-        screenshots.tecFeatures = screenshots.tecMapScreenshot?.features;
-        screenshots.biodiversityMapScreenshot = await captureBiodiversityMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
-        screenshots.biodiversityFeatures = screenshots.biodiversityMapScreenshot?.features;
+        const tecMapResult = await captureTECMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
+        screenshots.tecMapScreenshot = tecMapResult?.dataURL;
+        
+        // Store the TEC features for scoring
+        if (tecMapResult?.tecFeatures) {
+          screenshots.site_suitability__tecFeatures = tecMapResult.tecFeatures;
+          console.log('Stored TEC features from map capture:', tecMapResult.tecFeatures);
+        }
+        
+        const biodiversityMapResult = await captureBiodiversityMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
+        screenshots.biodiversityMapScreenshot = biodiversityMapResult?.dataURL;
+        
+        // Store the biodiversity features for scoring
+        if (biodiversityMapResult?.biodiversityFeatures) {
+          screenshots.site_suitability__biodiversityFeatures = biodiversityMapResult.biodiversityFeatures;
+          console.log('Stored biodiversity features from map capture:', biodiversityMapResult.biodiversityFeatures);
+        }
       }
       
       if (selectedSlides.contamination) {
@@ -875,7 +919,7 @@ const ReportGenerator = ({
         screenshots.contaminationMapScreenshot = contaminationResult?.image;
         screenshots.contaminationFeatures = contaminationResult?.features;
         
-        screenshots.historicalImagery = await captureHistoricalImagery(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
+        screenshots.historicalImagery = await captureHistoricalImagery(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, false);
       }
 
       setFailedScreenshots(failed);
@@ -971,6 +1015,9 @@ const ReportGenerator = ({
         // Explicitly include flood and bushfire features if they exist in the screenshots
         site_suitability__floodFeatures: screenshots.site_suitability__floodFeatures || primaryFeature.properties?.site_suitability__floodFeatures,
         site_suitability__bushfireFeatures: screenshots.site_suitability__bushfireFeatures || primaryFeature.properties?.site_suitability__bushfireFeatures,
+        // Explicitly include TEC and biodiversity features if they exist in the screenshots
+        site_suitability__tecFeatures: screenshots.site_suitability__tecFeatures || primaryFeature.properties?.site_suitability__tecFeatures,
+        site_suitability__biodiversityFeatures: screenshots.site_suitability__biodiversityFeatures || primaryFeature.properties?.site_suitability__biodiversityFeatures,
         // Include any features stored during screenshot capture
         ...Object.fromEntries(
           Object.entries(primaryFeature.properties || {})
@@ -1090,7 +1137,12 @@ const ReportGenerator = ({
       );
       
       // Capture GPR map for context slide
-      const gprResult = await captureGPRMap(selectedFeatures[0], developableArea, showDevelopableArea, useDevelopableAreaForBounds);
+      const gprResult = await captureGPRMap(
+        featureToCapture, 
+        developableArea, 
+        showDevelopableArea, 
+        useDevelopableAreaForBounds
+      );
       
       setPreviewScreenshot(coverScreenshot);
       setScreenshots({
@@ -1245,7 +1297,7 @@ const ReportGenerator = ({
             <HelpCircle className="w-5 h-5 text-blue-600" />
             How to use
           </button>
-          
+
           <button
             className="px-4 py-2.5 rounded-xl text-gray-900 font-medium bg-white border-2 border-blue-600 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
             onClick={(e) => {
@@ -1300,6 +1352,18 @@ const ReportGenerator = ({
             <h2 className="text-xl font-semibold">Desktop Due Diligence PowerPoint Report Generator</h2>
           </div>
           <div className="h-1 bg-[#da2244] mt-2 rounded-full"></div>
+          
+          {/* Animated scrolling news ticker */}
+          <div className="mt-2 py-2 bg-blue-50 rounded-md overflow-hidden border border-blue-200">
+            <div className="news-ticker-container overflow-hidden">
+              <div className="news-ticker-content flex items-center whitespace-nowrap text-blue-800 font-medium px-4">
+                <span className="inline-flex items-center bg-blue-600 text-white px-2 py-0.5 rounded-md text-xs mr-3">
+                  NEW
+                </span>
+                7 March 2025 Update: Multiple Sites and Multiple Developable Areas can now be incorporated into a single report.
+              </div>
+            </div>
+          </div>
         </div>
         
         <PlanningMapView 

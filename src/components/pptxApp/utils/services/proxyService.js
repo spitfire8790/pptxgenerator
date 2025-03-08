@@ -58,8 +58,14 @@ export async function proxyRequest(url, options = {}) {
       
       // Add specific timeout for ArcGIS services
       if (!options.timeout) {
-        options.timeout = 60000; // 60 seconds for ArcGIS services
-        console.log('Set extended timeout for ArcGIS service');
+        // Special handling for SIX Maps services which need longer timeouts
+        if (url.includes('maps.six.nsw.gov.au')) {
+          options.timeout = 240000; // 4 minutes for SIX Maps services
+          console.log('Set extended timeout (2 minutes) for SIX Maps service');
+        } else {
+          options.timeout = 240000; // 4 minutes for other ArcGIS services
+          console.log('Set extended timeout (90 seconds) for ArcGIS service');
+        }
       }
       
       // Log the specific ArcGIS service being called
@@ -104,8 +110,8 @@ export async function proxyRequest(url, options = {}) {
       hasBody: !!options.body
     });
     
-    // Set a timeout for the request - use provided timeout or default to 30 seconds
-    const timeoutMs = options.timeout || 30000;
+    // Set a timeout for the request - use provided timeout or default to 60 seconds (increased from 30)
+    const timeoutMs = options.timeout || 60000;
     console.log(`Setting request timeout to ${timeoutMs}ms`);
     
     const controller = new AbortController();

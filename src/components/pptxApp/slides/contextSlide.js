@@ -130,13 +130,10 @@ export async function addContextSlide(pptx, properties) {
   try {
     // Add title
     slide.addText([
-      { text: properties.site__address, options: { color: styles.title.color } },
+      { text: properties.formatted_address || properties.site__address, options: { color: styles.title.color } },
       { text: ' ', options: { breakLine: true } },
       { text: 'Site Context', options: { color: styles.subtitle.color } }
-    ], convertCmValues({
-      ...styles.title,
-      color: undefined
-    }));
+    ], convertCmValues(styles.title));
     
     // Add horizontal line under title
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.titleLine));
@@ -191,7 +188,37 @@ export async function addContextSlide(pptx, properties) {
    // Only capture GPR map when generating the slide
    let gprResult = null;
    try {
-     gprResult = await captureGPRMap(properties.site__geometry, properties.developableArea);
+     // Log the properties being passed
+     console.log('Capturing GPR map with properties:', {
+       hasGeometry: !!properties.site__geometry,
+       geometryType: properties.site__geometry?.type,
+       hasDevelopableArea: !!properties.developableArea,
+       developableAreaType: properties.developableArea?.type,
+       developableAreaFeatureCount: properties.developableArea?.features?.length
+     });
+     
+     // Ensure we're passing the correct parameters
+     // If site__geometry is an array of coordinates, make sure it's properly formatted
+     let featureGeometry = properties.site__geometry;
+     
+     // If it's a combined site with multiple features, ensure it's a proper FeatureCollection
+     if (properties.isMultipleProperties && properties.combinedGeometry) {
+       console.log('Using combinedGeometry for GPR map');
+       featureGeometry = properties.combinedGeometry;
+     }
+     
+     console.log('GPR feature geometry type:', {
+       type: Array.isArray(featureGeometry) ? 'Array' : (featureGeometry?.type || 'Unknown'),
+       isMultipleProperties: properties.isMultipleProperties,
+       hasCombinedGeometry: !!properties.combinedGeometry
+     });
+     
+     gprResult = await captureGPRMap(
+       featureGeometry, 
+       properties.developableArea, 
+       properties.showDevelopableArea ?? true, // Use showDevelopableArea from properties or default to true
+       properties.useDevelopableAreaForBounds ?? false // Use useDevelopableAreaForBounds from properties or default to false
+     );
      console.log('GPR capture result:', {
       hasImage: !!gprResult?.image,
       featureCount: gprResult?.features?.length || 0,
@@ -254,13 +281,13 @@ export async function addContextSlide(pptx, properties) {
   } else {
      console.warn('No GPR screenshot available');
      // Add placeholder or error message
-     slide.addText('GPR map unavailable', convertCmValues({
-      x: '5%',
-      y: '24%',
-      w: '40%',
-      h: '50%',
+     slide.addText('No Government Property Register data available for this area.', convertCmValues({
+      x: '11%',
+      y: '40%',
+      w: '34%',
+      h: '10%',
       fontSize: 12,
-      color: 'FF0000',
+      color: '363636',
       align: 'center',
       valign: 'middle'
    }));
@@ -378,17 +405,61 @@ export async function addContextSlide(pptx, properties) {
   // Only capture services and amenities map when generating the slide
   let servicesResult = null;
   try {
-    servicesResult = await captureServicesAndAmenitiesMap(properties.site__geometry, properties.developableArea);
+    // Log the properties being passed
+    console.log('Capturing services map with properties:', {
+      hasGeometry: !!properties.site__geometry,
+      geometryType: properties.site__geometry?.type,
+      hasDevelopableArea: !!properties.developableArea,
+      developableAreaType: properties.developableArea?.type,
+      developableAreaFeatureCount: properties.developableArea?.features?.length
+    });
+    
+    // Ensure we're passing the correct parameters
+    // If site__geometry is an array of coordinates, make sure it's properly formatted
+    let featureGeometry = properties.site__geometry;
+    
+    // If it's a combined site with multiple features, ensure it's a proper FeatureCollection
+    if (properties.isMultipleProperties && properties.combinedGeometry) {
+      console.log('Using combinedGeometry for services map');
+      featureGeometry = properties.combinedGeometry;
+    }
+    
+    console.log('Services feature geometry type:', {
+      type: Array.isArray(featureGeometry) ? 'Array' : (featureGeometry?.type || 'Unknown'),
+      isMultipleProperties: properties.isMultipleProperties,
+      hasCombinedGeometry: !!properties.combinedGeometry
+    });
+    
+    // Ensure we're passing the correct parameters
+    servicesResult = await captureServicesAndAmenitiesMap(
+      featureGeometry, 
+      properties.developableArea,
+      properties.showDevelopableArea ?? true, // Use showDevelopableArea from properties or default to true
+      properties.useDevelopableAreaForBounds ?? false // Use useDevelopableAreaForBounds from properties or default to false
+    );
+    
+    console.log('Services capture result:', {
+      hasImage: !!servicesResult?.image || !!servicesResult?.dataURL,
+      hasServicesData: !!servicesResult?.servicesData || !!servicesResult?.properties?.servicesData,
+      imageLength: servicesResult?.image?.length || servicesResult?.dataURL?.length || 0
+    });
   } catch (captureError) {
     console.error('Error capturing services and amenities map:', captureError);
     servicesResult = null;
   }
 
-  if (servicesResult?.image) {
+  // Check for image in either format (compatibility with both formats)
+  const imageData = servicesResult?.image || servicesResult?.dataURL;
+  if (imageData) {
     try {
+      // Ensure the image data is properly formatted
+      const formattedImage = imageData.startsWith('data:') 
+        ? imageData 
+        : `data:image/png;base64,${imageData}`;
+        
       // Add the image with correct dimensions
       slide.addImage({
-        data: servicesResult.image,
+        data: formattedImage,
         ...convertCmValues({
           x: '56%',
           y: '18%',
@@ -401,24 +472,24 @@ export async function addContextSlide(pptx, properties) {
           }
         })
       });
-
+      console.log('Successfully added services map image to slide');
     } catch (error) {
       console.error('Error adding services and amenities map:', error);
       addServicesErrorMessage();
     }
   } else {
-    console.warn('No services and amenities map available');
+    console.warn('No services screenshot available');
     addServicesErrorMessage();
   }
 
   function addServicesErrorMessage() {
-    slide.addText('Services and amenities map unavailable', convertCmValues({
-      x: '50%',
-      y: '24%',
-      w: '40%',
-      h: '50%',
+    slide.addText('No services or amenities found in the immediate vicinity.', convertCmValues({
+      x: '56%',
+      y: '40%',
+      w: '34%',
+      h: '10%',
       fontSize: 12,
-      color: 'FF0000',
+      color: '363636',
       align: 'center',
       valign: 'middle'
     }));
@@ -434,10 +505,10 @@ export async function addContextSlide(pptx, properties) {
     line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
   }));
 
-  // Add description text for services
-  const servicesText = servicesResult?.servicesData 
-    ? `Nearby Services:\n${servicesResult.servicesData}`
-    : 'Please update with details about nearby services and amenities including:\n- Public transport\n- Schools and education\n- Shopping centers\n- Medical facilities\n- Parks and recreation';
+  // Add description text for services - handle both formats
+  const servicesText = servicesResult?.servicesData || servicesResult?.properties?.servicesData 
+    ? `Nearby Services:\n${servicesResult.servicesData || servicesResult.properties.servicesData}`
+    : 'No services or amenities found in the immediate vicinity.';
 
   slide.addText(servicesText, convertCmValues({
     x: '50%',

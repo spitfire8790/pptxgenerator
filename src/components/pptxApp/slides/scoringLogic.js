@@ -1388,8 +1388,8 @@ const scoringCriteria = {
           const developablePolygon = turf.polygon([developableCoords]);
           console.log(`Created developable polygon ${areaIndex + 1}`);
           
-          // Increase buffer distance to 20 meters to ensure we catch nearby roads
-          const bufferDistance = 20;
+          // Increase buffer distance to 30 meters to ensure we catch nearby roads
+          const bufferDistance = 30;
           console.log(`Creating buffer of ${bufferDistance} meters around developable area ${areaIndex + 1}`);
           
           const bufferedPolygon = turf.buffer(developablePolygon, bufferDistance, { units: 'meters' });
@@ -1407,22 +1407,102 @@ const scoringCriteria = {
           features.forEach((feature, index) => {
             if (feature.geometry?.type === 'LineString' || feature.geometry?.type === 'MultiLineString') {
               try {
-                const line = turf.lineString(feature.geometry.coordinates);
-                
-                const intersects = turf.booleanIntersects(bufferedPolygon, line);
+                console.log(`\nProcessing road feature ${index}:`);
+                console.log(`Feature type: ${feature.geometry.type}`);
+                console.log(`Feature properties:`, feature.properties);
 
-                if (intersects) {
-                  const roadInfo = {
-                    name: feature.properties?.ROADNAMEST || 'Unnamed Road',
-                    function: feature.properties?.FUNCTION || 'Unknown',
-                    laneCount: parseInt(feature.properties?.LANECOUNT) || 0
-                  };
-                  nearbyRoadsForThisArea.push(roadInfo);
-                  console.log(`Found nearby road for area ${areaIndex + 1}:`, roadInfo);
+                if (feature.geometry.type === 'LineString') {
+                  // For LineString, create a line directly from coordinates
+                  const line = turf.lineString(feature.geometry.coordinates);
+                  console.log(`LineString coordinates:`, feature.geometry.coordinates);
+                  console.log(`Created line feature:`, line);
+                  
+                  const intersects = turf.booleanIntersects(bufferedPolygon, line);
+                  console.log(`Intersection check with buffered polygon: ${intersects}`);
+                  console.log(`Buffer distance used: ${bufferDistance}m`);
+                  
+                  if (intersects) {
+                    const roadInfo = {
+                      name: feature.properties?.ROADNAMEST || 'Unnamed Road',
+                      function: feature.properties?.FUNCTION || 'Unknown',
+                      laneCount: parseInt(feature.properties?.LANECOUNT) || 0
+                    };
+                    console.log(`Road info for intersecting road:`, roadInfo);
+                    
+                    // Skip roads with blank names or 0 lanes
+                    if (roadInfo.name !== 'Unnamed Road' && roadInfo.laneCount !== 0) {
+                      // Check if this road is already in the array (avoid duplicates)
+                      const existingRoad = nearbyRoadsForThisArea.find(r => 
+                        r.name === roadInfo.name && r.function === roadInfo.function
+                      );
+                      if (!existingRoad) {
+                        nearbyRoadsForThisArea.push(roadInfo);
+                        console.log(`Added new road to area ${areaIndex + 1}:`, roadInfo);
+                      } else {
+                        console.log(`Road already exists in area ${areaIndex + 1}, skipping`);
+                      }
+                    } else {
+                      console.log(`Skipping road with ${roadInfo.name === 'Unnamed Road' ? 'blank name' : 'zero lanes'}`);
+                    }
+                  }
+                } else if (feature.geometry.type === 'MultiLineString') {
+                  // For MultiLineString, check each line segment
+                  console.log(`MultiLineString with ${feature.geometry.coordinates.length} segments`);
+                  let hasIntersection = false;
+                  
+                  for (const [segmentIndex, lineCoords] of feature.geometry.coordinates.entries()) {
+                    if (hasIntersection) {
+                      console.log(`Already found intersection, skipping remaining segments`);
+                      break;
+                    }
+                    
+                    console.log(`\nProcessing segment ${segmentIndex + 1}/${feature.geometry.coordinates.length}`);
+                    console.log(`Segment coordinates:`, lineCoords);
+                    
+                    const segmentLine = turf.lineString(lineCoords);
+                    console.log(`Created line segment:`, segmentLine);
+                    
+                    const intersects = turf.booleanIntersects(bufferedPolygon, segmentLine);
+                    console.log(`Segment ${segmentIndex + 1} intersection check: ${intersects}`);
+                    console.log(`Buffer distance used: ${bufferDistance}m`);
+                    
+                    if (intersects) {
+                      const roadInfo = {
+                        name: feature.properties?.ROADNAMEST || 'Unnamed Road',
+                        function: feature.properties?.FUNCTION || 'Unknown',
+                        laneCount: parseInt(feature.properties?.LANECOUNT) || 0
+                      };
+                      console.log(`Road info for intersecting segment:`, roadInfo);
+                      
+                      // Skip roads with blank names or 0 lanes
+                      if (roadInfo.name !== 'Unnamed Road' && roadInfo.laneCount !== 0) {
+                        // Check if this road is already in the array (avoid duplicates)
+                        const existingRoad = nearbyRoadsForThisArea.find(r => 
+                          r.name === roadInfo.name && r.function === roadInfo.function
+                        );
+                        if (!existingRoad) {
+                          nearbyRoadsForThisArea.push(roadInfo);
+                          console.log(`Added new road from segment ${segmentIndex + 1} to area ${areaIndex + 1}:`, roadInfo);
+                          hasIntersection = true;
+                        } else {
+                          console.log(`Road from segment ${segmentIndex + 1} already exists in area ${areaIndex + 1}, skipping`);
+                        }
+                      } else {
+                        console.log(`Skipping road with ${roadInfo.name === 'Unnamed Road' ? 'blank name' : 'zero lanes'}`);
+                      }
+                    }
+                  }
                 }
               } catch (error) {
                 console.error(`Error processing road feature ${index}:`, error);
+                console.error('Error details:', {
+                  featureType: feature.geometry?.type,
+                  coordinates: feature.geometry?.coordinates,
+                  properties: feature.properties
+                });
               }
+            } else {
+              console.log(`Skipping feature ${index} - not a LineString or MultiLineString (type: ${feature.geometry?.type})`);
             }
           });
           
@@ -1438,7 +1518,7 @@ const scoringCriteria = {
         // If we have no nearby roads for any area, return low score
         if (nearbyRoadsForAllAreas.every(area => area.nearbyRoads.length === 0)) {
           console.log('No nearby roads found for any developable area - returning score 1');
-          return { score: 1, nearbyRoads: [], nearbyRoadsByArea: nearbyRoadsForAllAreas };
+          return { score: 1, nearbyRoads: [], nearbyRoadsByArea: nearbyRoadsForAllAreas, noRoadAccess: true };
         }
 
         // Calculate overall score by checking if ANY developable area has roads with multiple lanes
@@ -1467,22 +1547,28 @@ const scoringCriteria = {
         return { 
           score, 
           nearbyRoads: uniqueRoads,
-          nearbyRoadsByArea: nearbyRoadsForAllAreas
+          nearbyRoadsByArea: nearbyRoadsForAllAreas,
+          noRoadAccess: false
         };
       } catch (error) {
         console.error('Error calculating roads score:', error);
         console.error('Error stack:', error.stack);
-        return { score: 0, nearbyRoads: [] };
+        return { score: 0, nearbyRoads: [], noRoadAccess: true };
       }
     },
     getScoreDescription: (scoreObj) => {
-      const { score, nearbyRoads = [] } = scoreObj;
+      const { score, nearbyRoads = [], noRoadAccess } = scoreObj;
+
+      // Explicitly check for no road access
+      if (noRoadAccess || score === 1) {
+        return "The developable areas do not have road access.";
+      }
 
       if (score === 3 || score === 2) {
         const roadDescriptions = nearbyRoads.map(road => {
           // Add spaces between words in road function classification
           const formattedFunction = road.function.replace(/([A-Z])/g, ' $1').trim();
-          return `${road.name} which is a ${formattedFunction} with ${road.laneCount} lane${road.laneCount !== 1 ? 's' : ''}`
+          return `${road.name} which is a ${formattedFunction.toLowerCase()} with ${road.laneCount} lane${road.laneCount !== 1 ? 's' : ''}`
         });
 
         if (roadDescriptions.length === 0) {
@@ -1495,7 +1581,7 @@ const scoringCriteria = {
         }
       }
 
-      return "The developable areas do not have road access.";
+      return "Road access information could not be determined.";
     },
     getScoreColor: (score) => {
       return scoreColors[score] || scoreColors[0];
@@ -1652,8 +1738,7 @@ const scoringCriteria = {
         }, { minDistance: Infinity, nearestPrecinct: null });
         
         // Check for LMR proximity (if we don't have direct overlap)
-        // We'll use the pixel counts to estimate proximity to LMR areas
-        const hasNearbyLMR = Object.values(lmrOverlap.pixelCounts || {}).some(count => count > 0);
+        const hasNearbyLMR = lmrOverlap?.hasOverlap || false;
         
         let score;
         if (bestResult.minDistance === 0 || bestResult.minDistance <= 800) {
@@ -1746,7 +1831,10 @@ const scoringCriteria = {
       console.log('floodFeatures:', JSON.stringify(floodFeatures, null, 2));
       console.log('developableArea:', JSON.stringify(developableArea, null, 2));
 
-      if (!developableArea || !developableArea.length) {
+      // Ensure developableArea is an array
+      const developableAreas = Array.isArray(developableArea) ? developableArea : [developableArea];
+
+      if (!developableAreas || developableAreas.length === 0 || !developableAreas[0]) {
         console.log('No developable area - returning score 0');
         return { score: 0, minDistance: Infinity };
       }
@@ -1756,14 +1844,14 @@ const scoringCriteria = {
         const areaResults = [];
         
         // Process each feature in the developable area
-        for (let areaIndex = 0; areaIndex < developableArea.length; areaIndex++) {
+        for (let areaIndex = 0; areaIndex < developableAreas.length; areaIndex++) {
           try {
-            if (!developableArea[areaIndex].geometry || !developableArea[areaIndex].geometry.coordinates) {
+            if (!developableAreas[areaIndex].geometry || !developableAreas[areaIndex].geometry.coordinates) {
               console.log(`Skipping developable area feature ${areaIndex} - invalid geometry`);
               continue;
             }
             
-            const developableCoords = developableArea[areaIndex].geometry.coordinates[0];
+            const developableCoords = developableAreas[areaIndex].geometry.coordinates[0];
             console.log(`Developable coordinates for area ${areaIndex}:`, developableCoords);
             
             const developablePolygon = turf.polygon([developableCoords]);
@@ -1927,7 +2015,10 @@ const scoringCriteria = {
       console.log('bushfireFeatures:', JSON.stringify(bushfireFeatures, null, 2));
       console.log('developableArea:', JSON.stringify(developableArea, null, 2));
 
-      if (!developableArea || !developableArea.length) {
+      // Ensure developableArea is an array
+      const developableAreas = Array.isArray(developableArea) ? developableArea : [developableArea];
+
+      if (!developableAreas || developableAreas.length === 0 || !developableAreas[0]) {
         console.log('No developable area - returning score 0');
         return { score: 0, minDistance: Infinity };
       }
@@ -1937,14 +2028,14 @@ const scoringCriteria = {
         const areaResults = [];
         
         // Process each feature in the developable area
-        for (let areaIndex = 0; areaIndex < developableArea.length; areaIndex++) {
+        for (let areaIndex = 0; areaIndex < developableAreas.length; areaIndex++) {
           try {
-            if (!developableArea[areaIndex].geometry || !developableArea[areaIndex].geometry.coordinates) {
+            if (!developableAreas[areaIndex].geometry || !developableAreas[areaIndex].geometry.coordinates) {
               console.log(`Skipping developable area feature ${areaIndex} - invalid geometry`);
               continue;
             }
             
-            const developableCoords = developableArea[areaIndex].geometry.coordinates[0];
+            const developableCoords = developableAreas[areaIndex].geometry.coordinates[0];
             console.log(`Developable coordinates for area ${areaIndex}:`, developableCoords);
             
             const developablePolygon = turf.polygon([developableCoords]);
@@ -2100,6 +2191,628 @@ const scoringCriteria = {
       return scoreColors[score] || scoreColors[0];
     }
   },
+  
 };
 
 export default scoringCriteria;
+
+// Add the new scoring methods
+scoringCriteria.contamination = {
+  calculateScore: (contaminationFeatures, developableArea) => {
+    console.log('=== Contamination Score Calculation Start ===');
+    console.log('Input validation:');
+    console.log('contaminationFeatures:', JSON.stringify(contaminationFeatures, null, 2));
+    console.log('developableArea:', JSON.stringify(developableArea, null, 2));
+
+    // Ensure developableArea is an array
+    const developableAreas = Array.isArray(developableArea) ? developableArea : [developableArea];
+
+    if (!developableAreas || developableAreas.length === 0 || !developableAreas[0]) {
+      console.log('No developable area provided - returning score 0');
+      return { score: 0, minDistance: Infinity, allFeatures: [] };
+    }
+
+    try {
+      // Process all developable areas
+      const areaResults = [];
+      // Track all contamination features and their distances
+      const allContaminationFeatures = [];
+      
+      // Process each feature in the developable area
+      for (let areaIndex = 0; areaIndex < developableAreas.length; areaIndex++) {
+        try {
+          if (!developableAreas[areaIndex].geometry || !developableAreas[areaIndex].geometry.coordinates) {
+            console.log(`Skipping developable area feature ${areaIndex} - invalid geometry`);
+            continue;
+          }
+          
+          const developableCoords = developableAreas[areaIndex].geometry.coordinates[0];
+          console.log(`Developable coordinates for area ${areaIndex}:`, developableCoords);
+          
+          const developablePolygon = turf.polygon([developableCoords]);
+          console.log(`Created developable polygon for area ${areaIndex}:`, JSON.stringify(developablePolygon, null, 2));
+
+          // Handle both direct features array and FeatureCollection format
+          const features = Array.isArray(contaminationFeatures) ? contaminationFeatures : 
+                          contaminationFeatures?.features || [];
+          
+          console.log(`Processing ${features.length} contamination features for area ${areaIndex}`);
+
+          // First check if developable area intersects with any contamination features
+          let intersectionFound = false;
+          let minDistance = Infinity;
+          let nearestFeature = null;
+
+          features.forEach((feature, index) => {
+            try {
+              // Handle point features from lat/long coordinates
+              if (!feature.geometry && feature.properties?.Latitude && feature.properties?.Longitude) {
+                const featurePoint = turf.point([
+                  parseFloat(feature.properties.Longitude),
+                  parseFloat(feature.properties.Latitude)
+                ]);
+                console.log(`Created point from lat/long for feature ${index} for area ${areaIndex}:`, featurePoint);
+
+                // Check if point is inside developable area
+                const pointInPolygon = turf.booleanPointInPolygon(featurePoint, developablePolygon);
+                if (pointInPolygon) {
+                  intersectionFound = true;
+                  minDistance = 0;
+                  nearestFeature = feature;
+                  console.log(`Area ${areaIndex}: Point is inside developable area - setting minDistance to 0`);
+                } else {
+                  // Calculate distance from point to developable area boundary (not centroid)
+                  // Use nearestPointOnLine with the polygon boundary
+                  const polygonBoundary = turf.lineString(developableCoords);
+                  const nearestPoint = turf.nearestPointOnLine(polygonBoundary, featurePoint);
+                  const distance = nearestPoint.properties.dist * 1000; // Convert to meters
+                  
+                  console.log(`Distance from point feature ${index} to area ${areaIndex} boundary:`, distance.toFixed(2), 'm');
+
+                  // Store this feature and its distance for the description
+                  allContaminationFeatures.push({
+                    feature,
+                    distance,
+                    areaIndex
+                  });
+
+                  if (distance < minDistance) {
+                    minDistance = distance;
+                    nearestFeature = feature;
+                    console.log(`Area ${areaIndex}: New minimum distance found:`, minDistance.toFixed(2), 'm');
+                  }
+                }
+              }
+              // Handle polygon features
+              else if (feature.geometry?.type === 'MultiPolygon') {
+                feature.geometry.coordinates.forEach((polygonCoords, polyIndex) => {
+                  console.log(`\nProcessing polygon ${polyIndex + 1} of MultiPolygon ${index + 1} for area ${areaIndex}`);
+                  const polygon = turf.polygon(polygonCoords);
+                  const intersects = turf.booleanIntersects(developablePolygon, polygon);
+                  console.log(`Polygon ${polyIndex + 1} intersects with area ${areaIndex}:`, intersects);
+                  
+                  if (intersects) {
+                    intersectionFound = true;
+                    minDistance = 0;
+                    nearestFeature = feature;
+                    console.log(`Area ${areaIndex}: Found intersection - setting minDistance to 0`);
+                    
+                    // Store this feature for the description
+                    allContaminationFeatures.push({
+                      feature,
+                      distance: 0,
+                      areaIndex
+                    });
+                    
+                    return;
+                  }
+
+                  // Calculate minimum distance between polygon boundaries (not centroids)
+                  try {
+                    // Create lines from polygon boundaries
+                    const developableBoundary = turf.lineString(developableCoords);
+                    const contaminationBoundary = turf.lineString(polygonCoords[0]);
+                    
+                    // Find nearest points between the boundaries
+                    const nearestPointOnDevelopable = turf.nearestPointOnLine(developableBoundary, turf.centroid(polygon));
+                    const nearestPointOnContamination = turf.nearestPointOnLine(contaminationBoundary, turf.centroid(developablePolygon));
+                    
+                    // Calculate distance between these nearest points
+                    const distance = turf.distance(
+                      nearestPointOnDevelopable,
+                      nearestPointOnContamination,
+                      { units: 'meters' }
+                    );
+                    
+                    // Store this feature and its distance for the description
+                    allContaminationFeatures.push({
+                      feature,
+                      distance,
+                      areaIndex
+                    });
+                    
+                    if (distance < minDistance) {
+                      minDistance = distance;
+                      nearestFeature = feature;
+                      console.log(`Area ${areaIndex}: New minimum distance found:`, minDistance.toFixed(2), 'm');
+                    }
+                  } catch (distError) {
+                    console.error(`Error calculating polygon distance for area ${areaIndex}:`, distError);
+                  }
+                });
+              }
+              else if (feature.geometry?.type === 'Polygon') {
+                const polygon = turf.polygon(feature.geometry.coordinates);
+                const intersects = turf.booleanIntersects(developablePolygon, polygon);
+                console.log(`Polygon ${index} intersects with area ${areaIndex}:`, intersects);
+                
+                if (intersects) {
+                  intersectionFound = true;
+                  minDistance = 0;
+                  nearestFeature = feature;
+                  console.log(`Area ${areaIndex}: Found intersection - setting minDistance to 0`);
+                  
+                  // Store this feature for the description
+                  allContaminationFeatures.push({
+                    feature,
+                    distance: 0,
+                    areaIndex
+                  });
+                  
+                  return;
+                }
+
+                // Calculate minimum distance between polygon boundaries (not centroids)
+                try {
+                  // Create lines from polygon boundaries
+                  const developableBoundary = turf.lineString(developableCoords);
+                  const contaminationBoundary = turf.lineString(feature.geometry.coordinates[0]);
+                  
+                  // Find nearest points between the boundaries
+                  const nearestPointOnDevelopable = turf.nearestPointOnLine(developableBoundary, turf.centroid(polygon));
+                  const nearestPointOnContamination = turf.nearestPointOnLine(contaminationBoundary, turf.centroid(developablePolygon));
+                  
+                  // Calculate distance between these nearest points
+                  const distance = turf.distance(
+                    nearestPointOnDevelopable,
+                    nearestPointOnContamination,
+                    { units: 'meters' }
+                  );
+                  
+                  // Store this feature and its distance for the description
+                  allContaminationFeatures.push({
+                    feature,
+                    distance,
+                    areaIndex
+                  });
+                  
+                  if (distance < minDistance) {
+                    minDistance = distance;
+                    nearestFeature = feature;
+                    console.log(`Area ${areaIndex}: New minimum distance found:`, minDistance.toFixed(2), 'm');
+                  }
+                } catch (distError) {
+                  console.error(`Error calculating polygon distance for area ${areaIndex}:`, distError);
+                }
+              }
+            } catch (error) {
+              console.error(`Error processing contamination feature ${index} for area ${areaIndex}:`, error);
+            }
+          });
+
+          let score;
+          if (intersectionFound || minDistance <= 20) {
+            score = 1; // Developable area is impacted by contamination or within 20m
+            console.log(`Area ${areaIndex}: Site is impacted by contamination or within 20m - setting score to 1`);
+          } else if (minDistance <= 100) {
+            score = 2; // Within 100m of contaminated site
+            console.log(`Area ${areaIndex}: Distance ${minDistance.toFixed(2)}m is within 100m - setting score to 2`);
+          } else {
+            score = 3; // Further than 100m from contaminated site
+            console.log(`Area ${areaIndex}: Distance ${minDistance.toFixed(2)}m is beyond 100m - setting score to 3`);
+          }
+
+          areaResults.push({
+            areaIndex,
+            score,
+            minDistance,
+            features: nearestFeature ? [nearestFeature] : []
+          });
+        } catch (error) {
+          console.error(`Error processing developable area ${areaIndex}:`, error);
+          areaResults.push({
+            areaIndex,
+            score: 0,
+            minDistance: Infinity,
+            features: []
+          });
+        }
+      }
+
+      console.log('\nResults for all developable areas:', areaResults);
+      
+      // Find worst score (lowest is worst) across all areas
+      const worstResult = areaResults.reduce((worst, current) => {
+        return current.score < worst.score ? current : 
+               (current.score === worst.score && current.minDistance < worst.minDistance) ? current : worst;
+      }, { score: 3, minDistance: Infinity, features: [] });
+      
+      // Add all contamination features to the result
+      worstResult.allFeatures = allContaminationFeatures;
+      
+      console.log('\nFinal result (worst case):', worstResult);
+      return worstResult;
+    } catch (error) {
+      console.error('Error calculating contamination score:', error);
+      console.error('Error stack:', error.stack);
+      return { score: 0, minDistance: Infinity, features: [], allFeatures: [] };
+    }
+  },
+  getScoreDescription: (scoreObj, developableArea) => {
+    const { score, minDistance, features, allFeatures } = scoreObj;
+    
+    // Get site name from the nearest feature if available
+    let siteName = '';
+    if (features?.[0]?.properties?.SiteName) {
+      siteName = ` (${features[0].properties.SiteName})`;
+    }
+
+    // If we have a point feature, check if it's inside the developable area
+    if (features?.[0] && features[0].properties?.Latitude && features[0].properties?.Longitude) {
+      const point = turf.point([
+        parseFloat(features[0].properties.Longitude),
+        parseFloat(features[0].properties.Latitude)
+      ]);
+      
+      // If we have a developable area polygon, check if point is inside
+      if (scoreObj.developablePolygon) {
+        if (turf.booleanPointInPolygon(point, scoreObj.developablePolygon)) {
+          return `Developable area contains a contaminated site${siteName}.`;
+        }
+      }
+    }
+    
+    // Create a detailed description of all contamination features
+    let detailedDescription = '';
+    if (allFeatures && allFeatures.length > 0) {
+      // Sort features by distance
+      const sortedFeatures = [...allFeatures].sort((a, b) => a.distance - b.distance);
+      
+      // Create a map to deduplicate features (same site might be listed multiple times for different areas)
+      const uniqueFeatures = new Map();
+      
+      sortedFeatures.forEach(item => {
+        const feature = item.feature;
+        const siteName = feature.properties?.SiteName || 'Unnamed site';
+        const key = siteName;
+        
+        if (!uniqueFeatures.has(key) || item.distance < uniqueFeatures.get(key).distance) {
+          uniqueFeatures.set(key, {
+            siteName,
+            distance: item.distance,
+            areaIndex: item.areaIndex,
+            comment: feature.properties?.Comment || '',
+            type: feature.properties?.ContaminationActivityType || ''
+          });
+        }
+      });
+      
+      // Convert to array and create description
+      const uniqueFeaturesList = Array.from(uniqueFeatures.values());
+      
+      if (uniqueFeaturesList.length > 0) {
+        detailedDescription = '\n\nContaminated sites in proximity to developable areas:';
+        
+        uniqueFeaturesList.forEach(item => {
+          detailedDescription += `\n• ${item.siteName}: ${item.distance.toFixed(0)}m from developable area`;
+          
+          if (item.type) {
+            detailedDescription += `\n  Type: ${item.type}`;
+          }
+          
+          if (item.comment) {
+            detailedDescription += `\n  Comments: ${item.comment}`;
+          }
+        });
+      }
+    }
+    
+    // Base description based on score
+    let baseDescription;
+    switch (score) {
+      case 3:
+        if (minDistance === Infinity || features.length === 0) {
+          baseDescription = "Developable area is not impacted by contamination and there is no known contamination in close proximity to the site.";
+        } else {
+          baseDescription = `Developable area is not impacted by contamination and is ${minDistance.toFixed(0)}m from the nearest contaminated site${siteName}.`;
+        }
+        break;
+      case 2:
+        baseDescription = `Developable area is not impacted by contamination but is ${minDistance.toFixed(0)}m from the nearest contaminated site${siteName}.`;
+        break;
+      case 1:
+        if (minDistance === 0) {
+          baseDescription = `Developable area is impacted by a contaminated site${siteName}.`;
+        } else {
+          baseDescription = `Developable area is within ${minDistance.toFixed(0)}m of a contaminated site${siteName}.`;
+        }
+        break;
+      default:
+        baseDescription = "Contamination risk not assessed";
+    }
+    
+    return baseDescription + detailedDescription;
+  },
+  getScoreColor: (score) => {
+    return scoreColors[score] || scoreColors[0];
+  }
+};
+
+scoringCriteria.tec = {
+  calculateScore: (tecFeatures, developableArea) => {
+    console.log('=== TEC Score Calculation Start ===');
+    console.log('Input validation:');
+    console.log('tecFeatures:', JSON.stringify(tecFeatures));
+    console.log('developableArea:', developableArea);
+
+    // Ensure developableArea is an array
+    const developableAreas = Array.isArray(developableArea) ? developableArea : [developableArea];
+
+    if (!developableAreas || developableAreas.length === 0 || !developableAreas[0]) {
+      console.log('No developable area provided - returning score 0');
+      return { score: 0, coverage: 0, features: [] };
+    }
+
+    try {
+      // Process all developable areas together to calculate total coverage
+      let totalDevelopableArea = 0;
+      let totalTecArea = 0;
+      const allRelevantFeatures = [];
+      
+      // First calculate the total area of all developable areas
+      for (let areaIndex = 0; areaIndex < developableAreas.length; areaIndex++) {
+        try {
+          if (!developableAreas[areaIndex].geometry || !developableAreas[areaIndex].geometry.coordinates) {
+            console.log(`Skipping developable area feature ${areaIndex} - invalid geometry`);
+            continue;
+          }
+          
+          const developableCoords = developableAreas[areaIndex].geometry.coordinates;
+          console.log(`Raw developable coordinates for area ${areaIndex}:`, developableCoords);
+          
+          // Validate developable area coordinates
+          if (!developableCoords || !Array.isArray(developableCoords) || developableCoords.length === 0) {
+            console.error(`Invalid developable area coordinates for area ${areaIndex}:`, developableCoords);
+            continue;
+          }
+          
+          // For polygon coordinates, we need at least one ring with at least 3 points
+          if (!Array.isArray(developableCoords[0]) || !Array.isArray(developableCoords[0][0]) || developableCoords[0].length < 3) {
+            console.error(`Invalid developable area polygon structure for area ${areaIndex}:`, developableCoords);
+            continue;
+          }
+          
+          // Create a valid GeoJSON polygon - ensure coordinates are properly wrapped
+          const developablePolygon = {
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'Polygon',
+              coordinates: developableCoords
+            }
+          };
+
+          // Validate the created polygon
+          if (!turf.booleanValid(developablePolygon)) {
+            console.error(`Invalid developable polygon geometry for area ${areaIndex}`);
+            continue;
+          }
+
+          console.log(`Created valid developable polygon for area ${areaIndex}:`, JSON.stringify(developablePolygon));
+          const areaSize = turf.area(developablePolygon);
+          totalDevelopableArea += areaSize;
+          console.log(`Area ${areaIndex} size: ${areaSize} square meters, Total so far: ${totalDevelopableArea} square meters`);
+          
+          // Calculate TEC overlap for this developable area
+          const features = tecFeatures?.features || [];
+          features.forEach((feature, index) => {
+            console.log(`\nProcessing feature ${index + 1} for area ${areaIndex}:`, feature);
+            
+            if (!feature.geometry?.coordinates) {
+              console.log(`Feature ${index + 1} has no coordinates`);
+              return;
+            }
+
+            try {
+              let featurePolygon;
+              if (feature.geometry.type === 'Polygon') {
+                try {
+                  console.log(`Processing Polygon feature ${index} for area ${areaIndex}:`, {
+                    coordinates: feature.geometry.coordinates
+                  });
+
+                  // Create a valid polygon from the feature
+                  featurePolygon = turf.polygon(feature.geometry.coordinates);
+                  console.log(`Created polygon feature for area ${areaIndex}`);
+
+                  if (!turf.booleanValid(featurePolygon)) {
+                    console.error(`Created polygon is invalid for area ${areaIndex}`);
+                    return;
+                  }
+
+                  // Check intersection
+                  const doesIntersect = turf.booleanIntersects(developablePolygon, featurePolygon);
+                  console.log(`Intersection check for area ${areaIndex}:`, doesIntersect);
+
+                  if (doesIntersect) {
+                    try {
+                      // Calculate intersection using a try-catch block for each method
+                      let intersection;
+                      try {
+                        intersection = turf.intersect(developablePolygon, featurePolygon);
+                      } catch (intersectError) {
+                        console.log(`Primary intersection method failed for area ${areaIndex}, trying alternative...`);
+                        // If direct intersection fails, try with simplified geometries
+                        const simplifiedDevelopable = turf.simplify(developablePolygon, { tolerance: 0.0001 });
+                        const simplifiedFeature = turf.simplify(featurePolygon, { tolerance: 0.0001 });
+                        intersection = turf.intersect(simplifiedDevelopable, simplifiedFeature);
+                      }
+
+                      if (intersection) {
+                        const intersectionArea = turf.area(intersection);
+                        totalTecArea += intersectionArea;
+                        allRelevantFeatures.push({
+                          ...feature,
+                          areaIndex,
+                          intersectionArea
+                        });
+                        console.log(`Intersection area for area ${areaIndex}:`, intersectionArea);
+                        console.log(`Total TEC area so far: ${totalTecArea} square meters`);
+                      } else {
+                        console.log(`No valid intersection found for area ${areaIndex}`);
+                      }
+                    } catch (intersectError) {
+                      console.error(`All intersection calculation methods failed for area ${areaIndex}:`, intersectError);
+                      // If all intersection methods fail, estimate using overlap
+                      const featureArea = turf.area(featurePolygon);
+                      const estimatedIntersectionArea = Math.min(areaSize, featureArea) * 0.1; // Conservative 10% estimate
+                      totalTecArea += estimatedIntersectionArea;
+                      allRelevantFeatures.push({
+                        ...feature,
+                        areaIndex,
+                        intersectionArea: estimatedIntersectionArea,
+                        estimated: true
+                      });
+                      console.log(`Using estimated intersection area for area ${areaIndex}:`, estimatedIntersectionArea);
+                      console.log(`Total TEC area so far: ${totalTecArea} square meters`);
+                    }
+                  }
+                } catch (error) {
+                  console.error(`Error processing polygon feature for area ${areaIndex}:`, error);
+                }
+              } else if (feature.geometry.type === 'MultiPolygon') {
+                try {
+                  console.log(`Processing MultiPolygon feature for area ${areaIndex}`);
+                  feature.geometry.coordinates.forEach((polygonCoords, polyIndex) => {
+                    try {
+                      const polygon = turf.polygon(polygonCoords);
+                      if (!turf.booleanValid(polygon)) {
+                        console.error(`Invalid polygon ${polyIndex} in MultiPolygon for area ${areaIndex}`);
+                        return;
+                      }
+
+                      const doesIntersect = turf.booleanIntersects(developablePolygon, polygon);
+                      if (doesIntersect) {
+                        try {
+                          let intersection;
+                          try {
+                            intersection = turf.intersect(developablePolygon, polygon);
+                          } catch (intersectError) {
+                            console.log(`Primary intersection method failed for MultiPolygon in area ${areaIndex}, trying alternative...`);
+                            const simplifiedDevelopable = turf.simplify(developablePolygon, { tolerance: 0.0001 });
+                            const simplifiedPolygon = turf.simplify(polygon, { tolerance: 0.0001 });
+                            intersection = turf.intersect(simplifiedDevelopable, simplifiedPolygon);
+                          }
+
+                          if (intersection) {
+                            const intersectionArea = turf.area(intersection);
+                            totalTecArea += intersectionArea;
+                            allRelevantFeatures.push({
+                              ...feature,
+                              areaIndex,
+                              intersectionArea,
+                              polygonIndex: polyIndex
+                            });
+                            console.log(`Intersection area for polygon ${polyIndex} in area ${areaIndex}:`, intersectionArea);
+                            console.log(`Total TEC area so far: ${totalTecArea} square meters`);
+                          }
+                        } catch (intersectError) {
+                          console.error(`Intersection calculation failed for polygon ${polyIndex} in area ${areaIndex}:`, intersectError);
+                          // Estimate intersection area
+                          const polygonArea = turf.area(polygon);
+                          const estimatedIntersectionArea = Math.min(areaSize, polygonArea) * 0.1;
+                          totalTecArea += estimatedIntersectionArea;
+                          allRelevantFeatures.push({
+                            ...feature,
+                            areaIndex,
+                            intersectionArea: estimatedIntersectionArea,
+                            polygonIndex: polyIndex,
+                            estimated: true
+                          });
+                          console.log(`Using estimated intersection area for polygon ${polyIndex} in area ${areaIndex}:`, estimatedIntersectionArea);
+                          console.log(`Total TEC area so far: ${totalTecArea} square meters`);
+                        }
+                      }
+                    } catch (polyError) {
+                      console.error(`Error processing polygon ${polyIndex} in MultiPolygon for area ${areaIndex}:`, polyError);
+                    }
+                  });
+                } catch (error) {
+                  console.error(`Error processing MultiPolygon feature for area ${areaIndex}:`, error);
+                }
+              }
+            } catch (error) {
+              console.error(`Error processing feature ${index + 1} for area ${areaIndex}:`, error);
+              console.error('Feature geometry:', feature.geometry);
+            }
+          });
+        } catch (error) {
+          console.error(`Error processing developable area ${areaIndex}:`, error);
+        }
+      }
+
+      console.log('\nTotal developable area across all areas:', totalDevelopableArea, 'square meters');
+      console.log('Total TEC area across all areas:', totalTecArea, 'square meters');
+
+      // Calculate overall coverage percentage across all areas
+      const totalCoverage = totalDevelopableArea > 0 ? (totalTecArea / totalDevelopableArea) * 100 : 0;
+      console.log('Total coverage percentage:', totalCoverage.toFixed(2) + '%');
+
+      // Determine score based on total coverage
+      let score;
+      if (totalCoverage === 0) {
+        score = 3;
+        console.log('No coverage (0%) - Score: 3');
+      } else if (totalCoverage < 50) {
+        score = 2;
+        console.log('Coverage < 50% - Score: 2');
+      } else {
+        score = 1;
+        console.log('Coverage >= 50% - Score: 1');
+      }
+
+      console.log('=== Final Result ===');
+      const result = { 
+        score, 
+        coverage: parseFloat(totalCoverage.toFixed(2)), 
+        features: allRelevantFeatures,
+        totalDevelopableArea,
+        totalTecArea
+      };
+      console.log(result);
+      
+      return result;
+    } catch (error) {
+      console.error('Error calculating TEC score:', error);
+      console.error('Error stack:', error.stack);
+      return { score: 0, coverage: 0, features: [] };
+    }
+  },
+  getScoreDescription: (scoreObj) => {
+    const { score, coverage, features = [] } = scoreObj;
+    
+    switch (score) {
+      case 3:
+        return "Developable area is not impacted by any Threatened Ecological Communities.";
+      case 2:
+        return `Developable area has limited TEC coverage (${coverage.toFixed(1)}%).`;
+      case 1:
+        return `Developable area has significant TEC coverage (${coverage.toFixed(1)}%).`;
+      default:
+        return "TEC impact not assessed";
+    }
+  },
+  getScoreColor: (score) => {
+    return scoreColors[score] || scoreColors[0];
+  }
+};

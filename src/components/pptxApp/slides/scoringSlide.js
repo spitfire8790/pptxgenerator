@@ -1,4 +1,5 @@
 import scoringCriteria from './scoringLogic';
+import { convertCmValues } from '../utils/units';
 import nswLogo from '../../../../public/images/NSW-Government-official-logo.jpg';
 
 const styles = {
@@ -82,12 +83,12 @@ export async function createScoringSlide(pres, propertyData) {
   const slide = pres.addSlide({ masterName: 'NSW_MASTER' });
 
   try {
-    // Add title with fallback for missing address
+    // Add title
     slide.addText([
-      { text: propertyData?.site__address || 'Address not available', options: { color: styles.title.color } },
+      { text: propertyData?.formatted_address || propertyData?.site__address || 'Address not available', options: { color: styles.title.color } },
       { text: ' ', options: { breakLine: true } },
-      { text: 'Scoring', options: { color: styles.subtitle.color } }
-    ], styles.title);
+      { text: 'Site Scoring', options: { color: styles.subtitle.color } }
+    ], convertCmValues(styles.title));
     
     // Add horizontal line under title
     slide.addShape(pres.shapes.RECTANGLE, styles.titleLine);

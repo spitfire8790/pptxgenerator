@@ -49,6 +49,22 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
     error: null
   });
   
+  // Add state for tracking customized values
+  const [customizedValues, setCustomizedValues] = useState({
+    dwellingPrice: {
+      lowMidDensity: false,
+      highDensity: false
+    },
+    dwellingSize: {
+      lowMidDensity: false,
+      highDensity: false
+    },
+    constructionCostM2: {
+      lowMidDensity: false,
+      highDensity: false
+    }
+  });
+  
   // Add state for LMR options
   const [lmrOptions, setLmrOptions] = useState({
     isInLMRArea: false,
@@ -116,18 +132,23 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
     return costPerM2List[Math.floor(costPerM2List.length / 2)].cost;
   };
 
-  const calculateMedianDwellingSize = (certificates, densityTypes) => {
+  const calculateMedianDwellingSize = (certificates, densityTypes, bedroomCount = 2) => {
     if (!certificates?.length) return null;
 
-    console.log(`Calculating median dwelling size for density types:`, densityTypes);
+    console.log(`Calculating median dwelling size for density types with ${bedroomCount} bedrooms:`, densityTypes);
 
     // Filter for relevant development types and valid data
+    // Also filter for 2-bedroom dwellings when bedroom data is available
     const validCertificates = certificates.filter(cert => {
       const isRelevantType = hasMatchingDensityType(cert.DevelopmentType, densityTypes);
       const hasValidData = cert.ProposedGrossFloorArea && 
                           cert.UnitsProposed && 
                           cert.UnitsProposed > 0 && 
                           cert.ProposedGrossFloorArea >= MIN_GFA;
+      
+      // Check if this is the proper bedroom count if data available
+      const hasCorrectBedroomCount = !cert.Bedrooms || 
+                                    cert.Bedrooms.some(bed => bed.BedroomCount === bedroomCount);
 
       if (isRelevantType && !hasValidData) {
         console.log('Certificate excluded due to invalid data:', {
@@ -137,25 +158,30 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
         });
       }
 
-      return isRelevantType && hasValidData;
+      return isRelevantType && hasValidData && hasCorrectBedroomCount;
     });
 
-    console.log(`Found ${validCertificates.length} valid certificates for dwelling size calculation`);
+    console.log(`Found ${validCertificates.length} valid certificates with ${bedroomCount} bedrooms for dwelling size calculation`);
     console.log('Valid certificates:', validCertificates.map(cert => ({
       type: cert.DevelopmentType?.map(t => t.DevelopmentType).join(', '),
       gfa: cert.ProposedGrossFloorArea,
       units: cert.UnitsProposed,
-      gfaPerDwelling: cert.ProposedGrossFloorArea / cert.UnitsProposed
+      gfaPerDwelling: cert.ProposedGrossFloorArea / cert.UnitsProposed,
+      bedrooms: cert.Bedrooms?.map(bed => bed.BedroomCount) || 'unknown'
     })));
 
-    if (!validCertificates.length) return null;
+    if (!validCertificates.length) {
+      // If no 2-bedroom dwellings, fall back to any valid data
+      return calculateMedianDwellingSize(certificates, densityTypes, null);
+    }
 
     // Calculate GFA per dwelling for each valid certificate
     const gfaPerDwellingList = validCertificates
       .map(cert => ({
         gfaPerDwelling: cert.ProposedGrossFloorArea / cert.UnitsProposed,
         units: cert.UnitsProposed,
-        type: cert.DevelopmentType?.map(t => t.DevelopmentType).join(', ')
+        type: cert.DevelopmentType?.map(t => t.DevelopmentType).join(', '),
+        bedrooms: cert.Bedrooms?.map(bed => bed.BedroomCount) || 'unknown'
       }))
       .filter(({ gfaPerDwelling }) => {
         const isValid = gfaPerDwelling >= MIN_GFA;
@@ -187,10 +213,10 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
     let medianValue = null;
     for (const item of gfaPerDwellingList) {
       cumulativeUnits += item.units;
-      console.log('Cumulative units:', cumulativeUnits, 'Current GFA:', item.gfaPerDwelling, 'Type:', item.type);
+      console.log('Cumulative units:', cumulativeUnits, 'Current GFA:', item.gfaPerDwelling, 'Type:', item.type, 'Bedrooms:', item.bedrooms);
       if (cumulativeUnits >= halfTotalUnits && !medianValue) {
         medianValue = item.gfaPerDwelling;
-        console.log('Found median value:', medianValue, 'from type:', item.type);
+        console.log('Found median value:', medianValue, 'from type:', item.type, 'Bedrooms:', item.bedrooms);
         break;
       }
     }
@@ -201,6 +227,21 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
     const simpleMedian = gfaPerDwellingList[Math.floor(gfaPerDwellingList.length / 2)].gfaPerDwelling;
     console.log('Using fallback simple median:', simpleMedian);
     return simpleMedian;
+  };
+
+  // Function to get sales data for specific bedroom count
+  const getSalesDataForBedroomCount = (salesData, densityTypes, bedroomCount = 2) => {
+    if (!salesData?.length) return [];
+
+    // Filter sales data for specified property types and bedroom count
+    const filteredSales = salesData.filter(sale => {
+      const propertyType = sale.property_type?.toLowerCase().trim();
+      const typeMatches = densityTypes.some(type => propertyType?.includes(type.toLowerCase()));
+      const bedroomMatches = sale.bedrooms === bedroomCount.toString();
+      return typeMatches && bedroomMatches;
+    });
+
+    return filteredSales;
   };
 
   // Add function to fetch LMR data
@@ -393,11 +434,11 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
         const lowMidDensityCost = calculateMedianCost(validCertificates, LOW_MID_DENSITY_TYPES);
         const highDensityCost = calculateMedianCost(validCertificates, HIGH_DENSITY_TYPES);
 
-        console.log('Calculating low-mid density dwelling size...');
-        const lowMidDensitySize = calculateMedianDwellingSize(validCertificates, LOW_MID_DENSITY_TYPES);
+        console.log('Calculating low-mid density dwelling size for 2 bedrooms...');
+        const lowMidDensitySize = calculateMedianDwellingSize(validCertificates, LOW_MID_DENSITY_TYPES, 2);
         
-        console.log('Calculating high density dwelling size...');
-        const highDensitySize = calculateMedianDwellingSize(validCertificates, HIGH_DENSITY_TYPES);
+        console.log('Calculating high density dwelling size for 2 bedrooms...');
+        const highDensitySize = calculateMedianDwellingSize(validCertificates, HIGH_DENSITY_TYPES, 2);
 
         // Count certificates by density type
         const lowMidDensityCount = validCertificates.filter(cert => 
@@ -425,6 +466,18 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
           }
         });
 
+        // Store dwelling sizes by bedroom count
+        const dwellingSizesByBedroom = {
+          lowMidDensity: {},
+          highDensity: {}
+        };
+
+        // Calculate for different bedroom counts (0-4)
+        for (let i = 0; i <= 4; i++) {
+          dwellingSizesByBedroom.lowMidDensity[i] = calculateMedianDwellingSize(validCertificates, LOW_MID_DENSITY_TYPES, i);
+          dwellingSizesByBedroom.highDensity[i] = calculateMedianDwellingSize(validCertificates, HIGH_DENSITY_TYPES, i);
+        }
+
         setConstructionData({
           lowMidDensity: lowMidDensityCost,
           highDensity: highDensityCost,
@@ -432,6 +485,7 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
             lowMidDensity: lowMidDensitySize,
             highDensity: highDensitySize
           },
+          dwellingSizesByBedroom,
           loading: false,
           error: null,
           lastUpdated: new Date(),
@@ -440,6 +494,31 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
             highDensity: highDensityCount
           }
         });
+
+        // Initialize settings with calculated values if not already set
+        if (!customizedValues.constructionCostM2.lowMidDensity && 
+            lowMidDensityCost && 
+            (!settings.lowMidDensity.constructionCostM2 || settings.lowMidDensity.constructionCostM2 === 0)) {
+          onSettingChange('constructionCostM2', lowMidDensityCost, 'lowMidDensity');
+        }
+        
+        if (!customizedValues.constructionCostM2.highDensity && 
+            highDensityCost && 
+            (!settings.highDensity.constructionCostM2 || settings.highDensity.constructionCostM2 === 0)) {
+          onSettingChange('constructionCostM2', highDensityCost, 'highDensity');
+        }
+        
+        if (!customizedValues.dwellingSize.lowMidDensity && 
+            lowMidDensitySize && 
+            (!settings.lowMidDensity.dwellingSize || settings.lowMidDensity.dwellingSize === 0)) {
+          onSettingChange('dwellingSize', lowMidDensitySize, 'lowMidDensity');
+        }
+        
+        if (!customizedValues.dwellingSize.highDensity && 
+            highDensitySize && 
+            (!settings.highDensity.dwellingSize || settings.highDensity.dwellingSize === 0)) {
+          onSettingChange('dwellingSize', highDensitySize, 'highDensity');
+        }
 
         // After setting construction data, fetch LMR data
         await fetchLMRData(selectedFeature);
@@ -455,7 +534,7 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
     };
 
     fetchConstructionData();
-  }, [open, selectedFeature?.properties?.site_suitability__LGA]);
+  }, [open, selectedFeature?.properties?.site_suitability__LGA, customizedValues]);
 
   // Function to handle showing median prices modal
   const handleShowMedianPrices = () => {
@@ -473,7 +552,43 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
     }));
   };
 
-  // Add this after the fetchConstructionData function
+  // Modified to track customized values
+  const handleSettingChange = (setting, value, density) => {
+    // Update customized flag for the specific setting
+    if (setting === 'dwellingPrice' || setting === 'dwellingSize' || setting === 'constructionCostM2') {
+      setCustomizedValues(prev => ({
+        ...prev,
+        [setting]: {
+          ...prev[setting],
+          [density]: true
+        }
+      }));
+    }
+    
+    // Call the original setting change handler
+    onSettingChange(setting, value, density);
+  };
+
+  // Function to revert to calculated values
+  const handleRevertToCalculated = (setting, density) => {
+    // Reset customized flag
+    setCustomizedValues(prev => ({
+      ...prev,
+      [setting]: {
+        ...prev[setting],
+        [density]: false
+      }
+    }));
+    
+    // Reset to calculated value
+    if (setting === 'dwellingSize') {
+      onSettingChange(setting, constructionData.dwellingSizes[density], density);
+    } else if (setting === 'constructionCostM2') {
+      onSettingChange(setting, constructionData[density], density);
+    }
+  };
+
+  // Calculate feasibility with modified input parameters
   const calculateFeasibility = async (settings, propertyData, density, useLMR = false, lmrOption = null) => {
     try {
       // Get property data
@@ -534,7 +649,8 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
 
       // Calculate NSA and development yield
       const nsa = gfa * settings.gfaToNsaRatio;
-      const dwellingSize = constructionData?.dwellingSizes?.[density] || 80; // Default fallback
+      // Use dwelling size from settings (which can now be customized)
+      const dwellingSize = settings.dwellingSize || constructionData?.dwellingSizes?.[density] || 80;
       const developmentYield = Math.floor(nsa / dwellingSize);
 
       // Calculate total gross realisation
@@ -551,8 +667,8 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
       const profitAndRisk = netRealisation * settings.profitAndRisk;
       const netRealisationAfterProfitAndRisk = netRealisation - profitAndRisk;
 
-      // Get construction cost
-      const constructionCostPerGfa = constructionData?.[density] || 3500; // Default fallback
+      // Use construction cost from settings (which can now be customized)
+      const constructionCostPerGfa = settings.constructionCostM2 || constructionData?.[density] || 3500;
       
       // Calculate development costs
       const constructionCosts = constructionCostPerGfa * gfa;

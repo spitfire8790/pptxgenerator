@@ -78,20 +78,56 @@ export async function addDevelopmentSlide(pptx, properties) {
     console.log('Creating development slide...');
     const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
 
-    // Capture both screenshots
-    const daMapResult = await captureDevelopmentApplicationsMap({
+    // Prepare feature data for screenshots
+    // Use the combinedGeometry if it exists (for multiple properties), otherwise create a single feature
+    const featureToUse = properties.combinedGeometry || {
+      type: 'Feature',
       geometry: {
+        type: 'Polygon',
         coordinates: [properties.site__geometry]
       },
       properties: properties
-    }, properties.developableArea);
+    };
 
-    const ccMapResult = await captureConstructionCertificatesMap({
-      geometry: {
-        coordinates: [properties.site__geometry]
-      },
-      properties: properties
-    }, properties.developableArea);
+    // If we have a FeatureCollection, make sure each feature has the necessary properties
+    if (featureToUse.type === 'FeatureCollection' && featureToUse.features) {
+      featureToUse.features.forEach(feature => {
+        if (!feature.properties) {
+          feature.properties = {};
+        }
+        // Ensure each feature has the LGA property
+        if (!feature.properties.site_suitability__LGA && properties.site_suitability__LGA) {
+          feature.properties.site_suitability__LGA = properties.site_suitability__LGA;
+        }
+      });
+    }
+
+    // Also add the LGA directly to the feature for fallback
+    if (properties.site_suitability__LGA) {
+      featureToUse.site_suitability__LGA = properties.site_suitability__LGA;
+    }
+
+    // Format developableArea consistently for screenshots
+    const formattedDevelopableArea = properties.developableArea?.length ? {
+      type: 'FeatureCollection',
+      features: properties.developableArea.map(area => ({
+        type: 'Feature',
+        geometry: area.geometry
+      }))
+    } : null;
+
+    // Capture both screenshots
+    const daMapResult = await captureDevelopmentApplicationsMap(
+      featureToUse,
+      formattedDevelopableArea,
+      true, // Show developable area
+      false // Don't use developable area for bounds
+    );
+
+    const ccMapResult = await captureConstructionCertificatesMap(
+      featureToUse,
+      formattedDevelopableArea
+    );
 
     // Store construction certificates data in properties for use in feasibility slide
     if (ccMapResult) {
@@ -187,19 +223,54 @@ export async function addDevelopmentSlide(pptx, properties) {
     // Development Applications Text
     const daText = daMapResult?.daFeatures?.length > 0 
       ? (() => {
-          // Sort DAs by lodgement date in descending order and take the most recent
-          const mostRecentDA = [...daMapResult.daFeatures].sort((a, b) => 
+          // Sort DAs by lodgement date in descending order
+          const sortedDAs = [...daMapResult.daFeatures].sort((a, b) => 
             new Date(b.LodgementDate) - new Date(a.LodgementDate)
-          )[0];
+          );
           
-          let text = `There is a development application on the property. The proposed use is ${mostRecentDA.DevelopmentType?.map(t => t.DevelopmentType).join(', ')} and its current status is ${mostRecentDA.ApplicationStatus}.`;
-          
-          // Add dwelling count if available and not zero
-          if (mostRecentDA.NumberOfNewDwellings && mostRecentDA.NumberOfNewDwellings !== '0') {
-            text += ` The number of proposed dwellings is ${mostRecentDA.NumberOfNewDwellings}.`;
+          // If there's only one DA, use the existing text format
+          if (sortedDAs.length === 1) {
+            const da = sortedDAs[0];
+            let text = `There is a development application on the property. The proposed use is ${da.DevelopmentType?.map(t => t.DevelopmentType).join(', ')} and its current status is ${da.ApplicationStatus}.`;
+            
+            // Add dwelling count if available and not zero
+            if (da.NumberOfNewDwellings && da.NumberOfNewDwellings !== '0') {
+              text += ` The number of proposed dwellings is ${da.NumberOfNewDwellings}.`;
+            }
+            
+            return text;
+          } else {
+            // For multiple DAs, create a summary
+            let text = `There are ${sortedDAs.length} development applications on the property. `;
+            
+            // Group DAs by status
+            const statusGroups = {};
+            sortedDAs.forEach(da => {
+              if (!statusGroups[da.ApplicationStatus]) {
+                statusGroups[da.ApplicationStatus] = [];
+              }
+              statusGroups[da.ApplicationStatus].push(da);
+            });
+            
+            // Add status summary
+            const statusSummary = Object.entries(statusGroups)
+              .map(([status, das]) => `${das.length} ${status.toLowerCase()}`)
+              .join(', ');
+            
+            text += `Current status: ${statusSummary}. `;
+            
+            // Add details about the most recent DA
+            const mostRecentDA = sortedDAs[0];
+            text += `The most recent application was lodged on ${new Date(mostRecentDA.LodgementDate).toLocaleDateString('en-AU')} for ${mostRecentDA.DevelopmentType?.map(t => t.DevelopmentType).join(', ')}.`;
+            
+            // Add total dwelling count if available
+            const totalDwellings = sortedDAs.reduce((sum, da) => sum + (parseInt(da.NumberOfNewDwellings) || 0), 0);
+            if (totalDwellings > 0) {
+              text += ` Total proposed dwellings across all applications: ${totalDwellings}.`;
+            }
+            
+            return text;
           }
-          
-          return text;
         })()
       : 'There are no development applications associated with the property.';
 
@@ -436,7 +507,7 @@ export async function addDevelopmentSlide(pptx, properties) {
 
     // Construction Certificates Text
     const ccText = ccMapResult 
-      ? `Over the last two years there have been ${ccMapResult.totalCount} residential construction certificates in ${properties.site_suitability__LGA} with a total value of $${Math.round(ccMapResult.totalCost / 1000000).toLocaleString()} million. The most common type is ${
+      ? `Over the last two years there have been ${ccMapResult.totalCount} residential construction certificates in ${properties.site_suitability__LGA || 'this LGA'} with a total value of $${Math.round(ccMapResult.totalCost / 1000000).toLocaleString()} million. The most common type is ${
           ccMapResult.typeStats.sort((a, b) => b.count - a.count)[0]?.type || 'unknown'
         }.`
       : 'No construction certificates found.';
@@ -473,7 +544,10 @@ export async function addDevelopmentSlide(pptx, properties) {
 
     // Add footer text and page number
     slide.addText('Property and Development NSW', convertCmValues(styles.footer));
-    slide.addText('16', convertCmValues(styles.pageNumber));
+    
+    // Use the page number from properties if available, otherwise use the default
+    const pageNumber = properties.pageNumbers?.development || '16';
+    slide.addText(pageNumber, convertCmValues(styles.pageNumber));
 
     return slide;
   } catch (error) {

@@ -149,7 +149,7 @@ export async function generateReport(properties, onProgress) {
     }
 
     // Generate and save
-    const filename = (properties.site__address || 'Unnamed_Location').replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = (properties.formatted_address || properties.site__address || 'Unnamed_Location').replace(/[^a-zA-Z0-9]/g, '_');
     await pptx.writeFile({ fileName: `${filename}_Desktop_DD_Report.pptx` });
     
     // Ensure we show 100% at the end

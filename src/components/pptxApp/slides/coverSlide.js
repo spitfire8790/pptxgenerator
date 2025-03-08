@@ -118,21 +118,26 @@ export function addCoverSlide(pptx, properties) {
 
   // Check if multiple properties are selected
   if (properties.allProperties && properties.allProperties.length > 1) {
-    // For multiple properties, list all addresses on separate lines
-    const addressText = properties.allProperties
-      .map(property => {
-        // Try to get address in different possible formats based on how the data might be structured
-        return property.address || 
-               property.site__address || 
-               property?.properties?.copiedFrom?.site__address || 
-               property?.copiedFrom?.site__address || 
-               'Unnamed Property';
-      })
-      .join('\n');
-    slide.addText(addressText, convertCmValues(styles.address));
+    // For multiple properties, use the pre-formatted address from ReportGenerator
+    if (properties.formatted_address) {
+      slide.addText(properties.formatted_address, convertCmValues(styles.address));
+    } else {
+      // Fallback to the old way if formatted_address is not available
+      const addressText = properties.allProperties
+        .map(property => {
+          // Try to get address in different possible formats based on how the data might be structured
+          return property.address || 
+                property.site__address || 
+                property?.properties?.copiedFrom?.site__address || 
+                property?.copiedFrom?.site__address || 
+                'Unnamed Property';
+        })
+        .join('\n');
+      slide.addText(addressText, convertCmValues(styles.address));
+    }
   } else {
     // For a single property, display its address
-    slide.addText(properties.site__address, convertCmValues(styles.address));
+    slide.addText(properties.formatted_address || properties.site__address, convertCmValues(styles.address));
   }
   
   slide.addText(properties.reportDate, convertCmValues(styles.date));

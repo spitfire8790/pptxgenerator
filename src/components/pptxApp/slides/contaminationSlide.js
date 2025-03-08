@@ -1,6 +1,6 @@
 import { convertCmValues } from '../utils/units';
 import scoringCriteria from './scoringLogic';
-import { captureContaminationMap, captureOpenStreetMap } from '../utils/map/services/screenshot';
+import { captureContaminationMap } from '../utils/map/services/screenshot';
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
 
 const styles = {
@@ -131,13 +131,10 @@ export async function addContaminationSlide(pptx, properties) {
   try {
     // Add title
     slide.addText([
-      { text: properties.site__address, options: { color: styles.title.color } },
+      { text: properties.formatted_address || properties.site__address, options: { color: styles.title.color } },
       { text: ' ', options: { breakLine: true } },
       { text: 'Site Contamination', options: { color: styles.subtitle.color } }
-    ], convertCmValues({
-      ...styles.title,
-      color: undefined
-    }));
+    ], convertCmValues(styles.title));
     
     // Add horizontal line under title
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.titleLine));
@@ -252,56 +249,11 @@ export async function addContaminationSlide(pptx, properties) {
       contaminationScore = scoreResult.score;
       contaminationText = scoringCriteria.contamination.getScoreDescription(scoreResult, properties.developableArea);
           
-      // Add additional contamination information if contamination is found
-      if (contaminationScore === 1 && scoreResult.nearestFeature) {
-        const feature = scoreResult.nearestFeature;
-        
-        // Create a point from the feature's coordinates
-        const point = {
-          type: 'Feature',
-          geometry: {
-            type: 'Point',
-            coordinates: [
-              feature.properties.Longitude,
-              feature.properties.Latitude
-            ]
-          }
-        };
-
-        // Get the developable area polygon
-        const polygon = properties.developableArea?.features?.[0];
-        
-        console.log('Checking point in polygon:', {
-          point: point.geometry.coordinates,
-          polygonCoords: polygon?.geometry?.coordinates?.[0],
-          hasValidPolygon: !!polygon?.geometry?.coordinates?.[0]?.length
-        });
-
-        // Check if the point is within the developable area polygon
-        const isWithin = polygon?.geometry?.coordinates?.[0]?.length > 0 && 
-          booleanPointInPolygon(point, polygon);
-        
-        console.log('Point in polygon result:', {
-          isWithin,
-          siteName: feature.properties.SiteName
-        });
-        
-        if (isWithin) {
-          contaminationText += `\n\nDevelopable area contains a contaminated site "${feature.properties.SiteName}"`;
-        } else {
-          contaminationText += `\n\nSite Name: ${feature.properties.SiteName}`;
-          
-          if (feature.properties?.Comment) {
-            contaminationText += `\nComments: ${feature.properties.Comment}`;
-          }
-          if (feature.properties?.ContaminationActivityType) {
-            contaminationText += `\nType: ${feature.properties.ContaminationActivityType}`;
-          }
-        }
-      }
+      // The detailed contamination information is now included in the getScoreDescription method
+      // No need to add additional information here
     } catch (error) {
-      console.error('Error processing contamination features:', error);
-      contaminationText = 'Error processing contamination data.';
+      console.error('Error calculating contamination score:', error);
+      contaminationText = 'Error calculating contamination score.';
       contaminationScore = 0;
     }
   } else {
@@ -478,7 +430,7 @@ export async function addContaminationSlide(pptx, properties) {
       w: '40%',
       h: '8%',
       fontSize: 7,
-      color: '363636',
+      color: 'FF0000',
       fontFace: 'Public Sans',
       align: 'left',
       valign: 'top',

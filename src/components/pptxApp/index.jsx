@@ -164,7 +164,7 @@ const MapScreenshotApp = () => {
               <PropertyOverview selectedFeature={selectedFeature} />
             </div>
             <div className="flex-1">
-              <MapView onFeatureSelect={handleFeatureSelect} />
+              <MapView onFeatureSelect={handleFeatureSelect} zoomOnSelection={false} />
             </div>
           </div>
         )}
@@ -177,7 +177,7 @@ const MapScreenshotApp = () => {
               <Planning selectedFeature={selectedFeature} />
             </div>
             <div className="flex-1">
-              <MapView onFeatureSelect={handleFeatureSelect} />
+              <MapView onFeatureSelect={handleFeatureSelect} zoomOnSelection={false} />
             </div>
           </div>
         )}
@@ -190,7 +190,7 @@ const MapScreenshotApp = () => {
               <Development selectedFeature={selectedFeature} />
             </div>
             <div className="flex-1">
-              <MapView onFeatureSelect={handleFeatureSelect} />
+              <MapView onFeatureSelect={handleFeatureSelect} zoomOnSelection={false} />
             </div>
           </div>
         )}
@@ -218,7 +218,7 @@ const MapScreenshotApp = () => {
               <Sales selectedFeature={selectedFeature} />
             </div>
             <div className="flex-1">
-              <MapView onFeatureSelect={handleFeatureSelect} />
+              <MapView onFeatureSelect={handleFeatureSelect} zoomOnSelection={false} />
             </div>
           </div>
         )}
@@ -231,7 +231,7 @@ const MapScreenshotApp = () => {
               <Topography selectedFeature={selectedFeature} />
             </div>
             <div className="flex-1">
-              <MapView onFeatureSelect={handleFeatureSelect} />
+              <MapView onFeatureSelect={handleFeatureSelect} zoomOnSelection={false} />
             </div>
           </div>
         )}
@@ -244,7 +244,7 @@ const MapScreenshotApp = () => {
               <Climate selectedFeature={selectedFeature} />
             </div>
             <div className="flex-1">
-              <MapView onFeatureSelect={handleFeatureSelect} />
+              <MapView onFeatureSelect={handleFeatureSelect} zoomOnSelection={false} />
             </div>
           </div>
         )}
@@ -257,7 +257,7 @@ const MapScreenshotApp = () => {
               <AreaOverview selectedFeature={selectedFeature} />
             </div>
             <div className="flex-1">
-              <MapView onFeatureSelect={handleFeatureSelect} />
+              <MapView onFeatureSelect={handleFeatureSelect} zoomOnSelection={false} />
             </div>
           </div>
         )}
@@ -270,7 +270,7 @@ const MapScreenshotApp = () => {
               <LayerDrawing selectedFeature={selectedFeature} />
             </div>
             <div className="flex-1">
-              <MapView onFeatureSelect={handleFeatureSelect} />
+              <MapView onFeatureSelect={handleFeatureSelect} zoomOnSelection={false} />
             </div>
           </div>
         )}
@@ -283,7 +283,7 @@ const MapScreenshotApp = () => {
               <ReportGenerator selectedFeature={selectedFeature} />
             </div>
             <div className="flex-1">
-              <MapView onFeatureSelect={handleFeatureSelect} />
+              <MapView onFeatureSelect={handleFeatureSelect} zoomOnSelection={false} />
             </div>
           </div>
         )}

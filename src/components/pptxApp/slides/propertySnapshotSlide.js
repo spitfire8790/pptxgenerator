@@ -264,10 +264,11 @@ export function addPropertySnapshotSlide(pptx, properties) {
                               Array.isArray(properties.site__multiple_addresses) && 
                               properties.site__multiple_addresses.length > 1);
   
-  // Get the appropriate address text using formatAddresses
-  const addressText = isMultipleProperties 
-    ? formatAddresses(properties.site__multiple_addresses)
-    : properties.site__address;
+  // Use the pre-formatted address if available, otherwise fall back to the old logic
+  const addressText = properties.formatted_address || 
+                      (isMultipleProperties 
+                        ? formatAddresses(properties.site__multiple_addresses)
+                        : properties.site__address);
   
   // Prepare an array of all property data for multi-property scenarios
   let allProperties = [];
@@ -383,17 +384,17 @@ export function addPropertySnapshotSlide(pptx, properties) {
       }
     }, 'Site Description', { 
       text: properties.site__description || 'Please insert site description',
-      options: { italic: true, color: '808080' }
+      options: { italic: true, color: 'FF0000' }
     }],
     ['Current Use', { 
       text: properties.site_suitability__current_government_land_use ? 
         properties.site_suitability__current_government_land_use.split(':')[0].replace(/[\[\]]/g, '') : 
         'Please insert current use',
-      options: { italic: true, color: '808080' }
+      options: { italic: true, color: 'FF0000' }
     }],
     ['Restrictions', { 
       text: properties.site__restrictions || 'Please insert restrictions',
-      options: { italic: true, color: '808080' }
+      options: { italic: true, color: 'FF0000' }
     }],
     // Planning Controls
     [{ 

@@ -119,13 +119,10 @@ export async function addEnviroSlide(pptx, properties) {
   try {
     // Add title
     slide.addText([
-      { text: properties.site__address, options: { color: styles.title.color } },
+      { text: properties.formatted_address || properties.site__address, options: { color: styles.title.color } },
       { text: ' ', options: { breakLine: true } },
       { text: 'Environmental', options: { color: styles.subtitle.color } }
-    ], convertCmValues({
-      ...styles.title,
-      color: undefined
-    }));
+    ], convertCmValues(styles.title));
     
     // Add horizontal line under title
     slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.titleLine));
@@ -225,18 +222,15 @@ export async function addEnviroSlide(pptx, properties) {
     console.log('Raw TEC features:', properties.site_suitability__tecFeatures);
 
     // Check if we have the required data
-    if (properties.developableArea) {
+    if (properties.developableArea && properties.site_suitability__tecFeatures) {
       try {
         console.log('=== Starting TEC Score Calculation ===');
         console.log('Developable area geometry:', JSON.stringify(properties.developableArea[0].geometry));
         
         // Ensure we have a valid FeatureCollection structure
-        const tecFeatureCollection = {
-          type: 'FeatureCollection',
-          features: properties.site_suitability__tecFeatures?.features || []
-        };
+        const tecFeatureCollection = properties.site_suitability__tecFeatures;
         
-        console.log('Constructed TEC FeatureCollection:', tecFeatureCollection);
+        console.log('Using TEC FeatureCollection:', tecFeatureCollection);
         
         const result = scoringCriteria.tec.calculateScore(tecFeatureCollection, properties.developableArea);
         console.log('\nScore Calculation Result:');

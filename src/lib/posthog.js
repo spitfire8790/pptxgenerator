@@ -6,12 +6,6 @@ const posthogInit = () => {
     import.meta.env.VITE_POSTHOG_KEY,
     {
       api_host: import.meta.env.VITE_POSTHOG_HOST,
-      loaded: (posthog) => {
-        if (import.meta.env.DEV) {
-          // In development, log to console when events are sent
-          posthog.debug()
-        }
-      },
       autocapture: true,
       capture_pageview: true,
       capture_pageleave: true,

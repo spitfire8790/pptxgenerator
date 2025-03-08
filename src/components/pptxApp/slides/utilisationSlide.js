@@ -132,13 +132,10 @@ export async function addUtilisationSlide(pptx, properties) {
     try {
         // Add title
         slide.addText([
-            { text: properties.site__address, options: { color: styles.title.color } },
+            { text: properties.formatted_address || properties.site__address, options: { color: styles.title.color } },
             { text: ' ', options: { breakLine: true } },
             { text: 'Utilisation and Improvements', options: { color: styles.subtitle.color } }
-        ], convertCmValues({
-            ...styles.title,
-            color: undefined
-        }));
+        ], convertCmValues(styles.title));
 
         // Add horizontal line under title
         slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.titleLine));
@@ -449,7 +446,7 @@ export async function addUtilisationSlide(pptx, properties) {
             w: '40%',
             h: '8%',
             fontSize: 7,
-            color: '363636',
+            color: 'FF0000',
             fontFace: 'Public Sans',
             italic: true,
             align: 'left',

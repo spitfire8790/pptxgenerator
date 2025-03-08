@@ -645,16 +645,50 @@ export async function captureDevelopmentApplicationsMap(feature, developableArea
 
   try {
     // Convert array of coordinates to GeoJSON feature if necessary
-    const geoJSONFeature = Array.isArray(feature) ? {
-      type: 'Feature',
-      geometry: {
-        type: 'Polygon',
-        coordinates: [feature]
+    let geoJSONFeature;
+    
+    if (Array.isArray(feature)) {
+      // Check if this is a simple array of coordinates or an array of coordinate arrays (multiple features)
+      if (feature.length > 0 && Array.isArray(feature[0]) && feature[0].length === 2 && typeof feature[0][0] === 'number') {
+        // This is a single polygon's coordinates array
+        geoJSONFeature = {
+          type: 'Feature',
+          geometry: {
+            type: 'Polygon',
+            coordinates: [feature]
+          }
+        };
+      } else {
+        // This is likely an array of separate feature coordinates
+        // Create a FeatureCollection with multiple features
+        geoJSONFeature = {
+          type: 'FeatureCollection',
+          features: feature.map(coords => ({
+            type: 'Feature',
+            geometry: {
+              type: 'Polygon',
+              coordinates: [coords]
+            }
+          }))
+        };
       }
-    } : feature;
+    } else {
+      // Use the feature as is
+      geoJSONFeature = feature;
+    }
 
-    // Create a turf polygon for the property boundary
-    const propertyPolygon = turf.polygon(geoJSONFeature.geometry.coordinates);
+    // Create turf polygons for all property boundaries to check if DAs are within any of them
+    let propertyPolygons = [];
+    
+    if (geoJSONFeature.type === 'FeatureCollection' && geoJSONFeature.features) {
+      // Multiple features
+      propertyPolygons = geoJSONFeature.features.map(feat => 
+        turf.polygon(feat.geometry.coordinates)
+      );
+    } else {
+      // Single feature
+      propertyPolygons = [turf.polygon(geoJSONFeature.geometry.coordinates)];
+    }
 
     const config = {
       width: 2048,
@@ -683,9 +717,22 @@ export async function captureDevelopmentApplicationsMap(feature, developableArea
       console.error('Failed to load aerial layer:', error);
     }
 
-    // Draw boundaries
-    console.log('Drawing main feature boundary...');
-    if (geoJSONFeature?.geometry?.coordinates?.[0]) {
+    // Draw boundaries for all features
+    console.log('Drawing feature boundaries...');
+    if (geoJSONFeature.type === 'FeatureCollection' && geoJSONFeature.features) {
+      // Draw each feature in the collection
+      geoJSONFeature.features.forEach((feat, index) => {
+        if (feat.geometry?.coordinates?.[0]) {
+          console.log(`Drawing feature ${index} boundary`);
+          drawBoundary(ctx, feat.geometry.coordinates[0], centerX, centerY, size, config.width, {
+            strokeStyle: '#FF0000',
+            lineWidth: 6
+          });
+        }
+      });
+    } else if (geoJSONFeature.geometry?.coordinates?.[0]) {
+      // Draw single feature
+      console.log('Drawing single feature boundary');
       drawBoundary(ctx, geoJSONFeature.geometry.coordinates[0], centerX, centerY, size, config.width, {
         strokeStyle: '#FF0000',
         lineWidth: 6
@@ -708,8 +755,33 @@ export async function captureDevelopmentApplicationsMap(feature, developableArea
     let daFeatures = [];
     let dasWithinBoundary = [];
     try {
-      // Get LGA name from properties
-      const lgaName = feature.properties?.site_suitability__LGA;
+      // Get LGA name from properties - use the first feature's properties if it's a collection
+      let lgaName;
+      
+      if (geoJSONFeature.type === 'FeatureCollection' && geoJSONFeature.features && geoJSONFeature.features.length > 0) {
+        // Try to get LGA from the first feature that has it
+        for (const feat of geoJSONFeature.features) {
+          if (feat.properties?.site_suitability__LGA) {
+            lgaName = feat.properties.site_suitability__LGA;
+            console.log('Found LGA name in feature collection:', lgaName);
+            break;
+          }
+        }
+      } else if (geoJSONFeature.properties?.site_suitability__LGA) {
+        lgaName = geoJSONFeature.properties.site_suitability__LGA;
+        console.log('Found LGA name in single feature:', lgaName);
+      }
+      
+      if (!lgaName) {
+        // If we still don't have an LGA name, check if it's directly in the feature
+        if (feature.site_suitability__LGA) {
+          lgaName = feature.site_suitability__LGA;
+          console.log('Found LGA name directly in feature:', lgaName);
+        } else {
+          console.warn('No LGA name found in feature properties');
+        }
+      }
+        
       if (lgaName) {
         // Find the council name from the mapping
         const councilName = Object.entries(lgaMapping).find(([council, lga]) => 
@@ -720,16 +792,17 @@ export async function captureDevelopmentApplicationsMap(feature, developableArea
           console.log('Fetching DAs for council:', councilName);
           daFeatures = await fetchAllDAs(councilName);
           
-          // Filter DAs to only those within the property boundary
+          // Filter DAs to only those within any of the property boundaries
           dasWithinBoundary = daFeatures.filter(da => {
             if (da.Location?.[0]?.X && da.Location?.[0]?.Y) {
               const point = turf.point([parseFloat(da.Location[0].X), parseFloat(da.Location[0].Y)]);
-              return turf.booleanPointInPolygon(point, propertyPolygon);
+              // Check if the point is within any of the property polygons
+              return propertyPolygons.some(polygon => turf.booleanPointInPolygon(point, polygon));
             }
             return false;
           });
 
-          console.log(`Found ${dasWithinBoundary.length} DAs within property boundary out of ${daFeatures.length} total DAs`);
+          console.log(`Found ${dasWithinBoundary.length} DAs within property boundaries out of ${daFeatures.length} total DAs`);
           
           // Draw DA points for all DAs in the council area
           daFeatures.forEach((da, index) => {
@@ -835,11 +908,32 @@ export async function captureConstructionCertificatesMap(feature, developableAre
   console.log('Starting construction certificates analysis with feature:', feature);
 
   try {
-    // Get LGA name from properties
-    const lgaName = feature.properties?.site_suitability__LGA;
+    // Get LGA name from properties - use the first feature's properties if it's a collection
+    let lgaName;
+    
+    if (feature.type === 'FeatureCollection' && feature.features && feature.features.length > 0) {
+      // Try to get LGA from the first feature that has it
+      for (const feat of feature.features) {
+        if (feat.properties?.site_suitability__LGA) {
+          lgaName = feat.properties.site_suitability__LGA;
+          console.log('Found LGA name in feature collection:', lgaName);
+          break;
+        }
+      }
+    } else if (feature.properties?.site_suitability__LGA) {
+      lgaName = feature.properties.site_suitability__LGA;
+      console.log('Found LGA name in single feature:', lgaName);
+    }
+    
     if (!lgaName) {
-      console.warn('No LGA name found in feature properties');
-      return null;
+      // If we still don't have an LGA name, check if it's directly in the feature
+      if (feature.site_suitability__LGA) {
+        lgaName = feature.site_suitability__LGA;
+        console.log('Found LGA name directly in feature:', lgaName);
+      } else {
+        console.warn('No LGA name found in feature properties');
+        return null;
+      }
     }
 
     // Find the council name from the mapping
