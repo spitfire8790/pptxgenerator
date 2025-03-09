@@ -81,7 +81,7 @@ const SlidePreview = ({ selectedFeature, screenshot }) => {
               </div>
               <div className="text-[#002664] text-[18px] mb-2">Desktop Due Diligence Report</div>
               <div className="text-[#FFCC31] text-[18px]">
-                {selectedFeature?.properties?.copiedFrom?.site__address}
+                {selectedFeature?.properties?.copiedFrom?.site__address || 'Address not available'}
               </div>
               <div className="absolute bottom-8 text-[#363636] text-sm">
                 {new Date().toLocaleDateString('en-GB', {

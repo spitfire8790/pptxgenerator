@@ -17,6 +17,8 @@ import { addEnviroSlide } from '../components/pptxApp/slides/enviroSlide';
 import { createScoringSlide } from '../components/pptxApp/slides/scoringSlide';
 import { addContextSlide } from '../components/pptxApp/slides/contextSlide';
 import { addPermissibilitySlide } from '../components/pptxApp/slides/permissibilitySlide';
+import { addDevelopmentSlide } from '../components/pptxApp/slides/developmentSlide';
+import { addFeasibilitySlide } from '../components/pptxApp/slides/feasibilitySlide';
 
 export async function generateReport(properties, onProgress) {
   try {
@@ -50,13 +52,13 @@ export async function generateReport(properties, onProgress) {
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 
-    if (properties.selectedSlides.snapshot !== false) {
+    if (properties.selectedSlides.propertySnapshot !== false) {
       await addPropertySnapshotSlide(pptx, properties);
       updateProgress();
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 
-    if (properties.selectedSlides.primaryAttributes !== false) {
+    if (properties.selectedSlides.primarySiteAttributes !== false) {
       await addPrimarySiteAttributesSlide(pptx, properties);
       updateProgress();
       await new Promise(resolve => setTimeout(resolve, 300));
@@ -134,8 +136,20 @@ export async function generateReport(properties, onProgress) {
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 
+    if (properties.selectedSlides.development !== false) {
+      await addDevelopmentSlide(pptx, properties);
+      updateProgress();
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    if (properties.selectedSlides.feasibility !== false) {
+      await addFeasibilitySlide(pptx, properties);
+      updateProgress();
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
     // Generate and save
-    const filename = properties.site__address.replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = (properties.site__address || 'Unnamed_Location').replace(/[^a-zA-Z0-9]/g, '_');
     await pptx.writeFile({ fileName: `${filename}_Desktop_DD_Report.pptx` });
     
     // Ensure we show 100% at the end

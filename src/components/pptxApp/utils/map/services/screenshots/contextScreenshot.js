@@ -272,7 +272,7 @@ export async function captureGPRMap(feature, developableArea = null) {
     // Add GPR legend
     try {
       console.log('Loading GPR legend...');
-      const legendImage = await loadImage('./public/legends/gpr-legend.png');
+      const legendImage = await loadImage('/legends/gpr-legend.png');
       
       // Calculate position for bottom right corner with padding
       const padding = 20;
@@ -611,32 +611,15 @@ export async function captureServicesAndAmenitiesMap(feature, developableArea = 
           const poiGroups = poiFeatures.reduce((acc, feature) => {
             const type = feature.properties.poitype;
             if (!acc[type]) {
-              acc[type] = [];
+              acc[type] = 0;
             }
-            if (feature.properties.poilabel) {
-              acc[type].push(feature.properties.poilabel);
-            } else {
-              // For unnamed POIs, just increment a counter
-              acc[type].unnamed = (acc[type].unnamed || 0) + 1;
-            }
+            acc[type]++;
             return acc;
           }, {});
 
           servicesData = Object.entries(poiGroups)
-            .map(([type, data]) => {
-              const namedLocations = data.filter(name => typeof name === 'string');
-              const unnamedCount = data.unnamed || 0;
-              
-              let description = type;
-              if (namedLocations.length > 0) {
-                description += `: ${namedLocations.join(', ')}`;
-              }
-              if (unnamedCount > 0) {
-                description += `${namedLocations.length > 0 ? ', plus ' : ': '}${unnamedCount} unnamed location${unnamedCount > 1 ? 's' : ''}`;
-              }
-              return description;
-            })
-            .join('\n');
+            .map(([type, count]) => `${type} (${count})`)
+            .join(', ');
         } else {
           console.warn('No POI features found in response');
         }

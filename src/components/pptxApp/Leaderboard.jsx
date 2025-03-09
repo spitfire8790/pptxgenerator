@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { Trophy, MapPin, X, AlertCircle } from 'lucide-react';
+import supabase from '../../lib/supabase';
 
 // Initialize Supabase client with error handling
-const supabase = createClient(
-    'https://bgrbegqeoyolkrxjebho.supabase.co',
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJncmJlZ3Flb3lvbGtyeGplYmhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzE4MDkxNjIsImV4cCI6MjA0NzM4NTE2Mn0.r2n1T5ABTbQ2YJaJm21_6AgO8CQsILgb6MJ-pPW7Zv0'
-);
+// const supabase = createClient(
+//     'https://bgrbegqeoyolkrxjebho.supabase.co',
+//     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJncmJlZ3Flb3lvbGtyeGplYmhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzE4MDkxNjIsImV4cCI6MjA0NzM4NTE2Mn0.r2n1T5ABTbQ2YJaJm21_6AgO8CQsILgb6MJ-pPW7Zv0'
+// );
 
 const Leaderboard = ({ isOpen, onClose }) => {
     const [userStats, setUserStats] = useState([]);

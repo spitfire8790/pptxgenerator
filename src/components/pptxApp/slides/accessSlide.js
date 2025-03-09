@@ -92,7 +92,33 @@ export async function addAccessSlide(pptx, propertyData) {
     const roadsScoreResult = scoringCriteria.roads.calculateScore(propertyData.roadFeatures, propertyData.developableArea);
     const roadsDescription = scoringCriteria.roads.getScoreDescription(roadsScoreResult);
     
-    const udpScoreResult = scoringCriteria.udpPrecincts.calculateScore(propertyData.udpPrecincts, propertyData.developableArea);
+    // Get UDP precincts map with LMR layers
+    const udpMapFeature = {
+      geometry: {
+        coordinates: [propertyData.site__geometry]
+      },
+      properties: propertyData
+    };
+    const udpScreenshot = await captureUDPPrecinctMap(udpMapFeature, formattedDevelopableArea, propertyData.showDevelopableArea);
+    
+    // Get the LMR overlap information from the updated feature after map capture
+    const lmrOverlap = udpMapFeature.properties?.lmrOverlap || { 
+      hasOverlap: false, 
+      primaryOverlap: null,
+      pixelCounts: {}
+    };
+    
+    console.log('LMR overlap data for scoring:', lmrOverlap);
+    
+    // Store LMR status in propertyData for use by other slides
+    propertyData.isInLMRArea = lmrOverlap.hasOverlap;
+    propertyData.lmrOverlap = lmrOverlap;  // Store full overlap data for reference
+    
+    // Calculate UDP score using the enhanced scoring logic that includes LMR overlap
+    const udpScoreResult = scoringCriteria.udpPrecincts.calculateScore(
+      { ...propertyData.udpPrecincts, lmrOverlap }, 
+      propertyData.developableArea
+    );
     const udpDescription = scoringCriteria.udpPrecincts.getScoreDescription(udpScoreResult);
 
     // Get PTAL values from the map capture if they exist
@@ -124,7 +150,7 @@ export async function addAccessSlide(pptx, propertyData) {
     slide.addText([
       { text: propertyData.site__address, options: { color: styles.title.color } },
       { text: ' ', options: { breakLine: true } },
-      { text: 'Access', options: { color: styles.subtitle.color } }
+      { text: 'Access and Proximity to Strategic Centres', options: { color: styles.subtitle.color } }
     ], convertCmValues({
       ...styles.title,
       color: undefined
@@ -280,12 +306,6 @@ export async function addAccessSlide(pptx, propertyData) {
     }));
 
     // Add UDP precincts map
-    const udpScreenshot = await captureUDPPrecinctMap({
-      geometry: {
-        coordinates: [propertyData.site__geometry]
-      },
-      properties: propertyData
-    }, formattedDevelopableArea, propertyData.showDevelopableArea);
     if (udpScreenshot) {
       slide.addImage({
         data: udpScreenshot,

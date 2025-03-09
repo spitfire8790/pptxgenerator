@@ -1,19 +1,94 @@
 import { convertCmValues } from '../utils/units';
+import { getAllPermissibleHousingTypes } from '../utils/lmrPermissibility';
 
 export async function addPermissibilitySlide(pptx, properties) {
+  console.log('Permissibility slide data:', {
+    zoneCode: properties.site_suitability__principal_zone_identifier,
+    LGA: properties.site_suitability__LGA,
+    copiedFrom: properties.copiedFrom
+  });
+
   let slide;
   try {
     console.log('Starting to add permissibility slide...');
     slide = pptx.addSlide();
 
-    // Get zone code from the zone identifier - take only the code part (e.g., "SP2" from "SP2 - Infrastructure")
-    const zoneCode = properties.site_suitability__principal_zone_identifier?.split('-')?.[0]?.trim();
+    // Get zone code from the zone identifier - take only the code part before the first space
+    const zoneCode = properties.site_suitability__principal_zone_identifier?.split(' ')?.[0]?.trim();
     // Just use the LGA name as the API supports partial matches
     const lgaName = properties.site_suitability__LGA;
     
     if (!zoneCode || !lgaName) {
       throw new Error('Missing zone code or LGA information');
     }
+
+    // Helper function to fetch EPI Name from property ID
+    const fetchEPINameFromPropertyID = async (propertyID) => {
+      if (!propertyID) {
+        console.log('No property ID provided for EPI Name lookup');
+        return null;
+      }
+
+      console.log(`Fetching EPI Name for property ID: ${propertyID}`);
+      
+      try {
+        const API_BASE_URL = process.env.NODE_ENV === 'development' 
+          ? 'http://localhost:5173'
+          : 'https://proxy-server.jameswilliamstrutt.workers.dev';
+          
+        const response = await fetch(`${API_BASE_URL}${process.env.NODE_ENV === 'development' ? '/api/proxy' : ''}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({
+            url: `https://api.apps1.nsw.gov.au/planning/viewersf/V1/ePlanningApi/layerintersect?type=property&id=${propertyID}&layers=epi`,
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json'
+            }
+          })
+        });
+
+        if (!response.ok) {
+          console.error('Failed to fetch EPI Name:', response.statusText);
+          return null;
+        }
+
+        const data = await response.json();
+        console.log('EPI Name API response:', data);
+
+        // Look for Land Zoning Map entry first as it's most relevant
+        const landZoningEntry = data.find(item => item.layerName === "Land Zoning Map");
+        if (landZoningEntry && landZoningEntry.results && landZoningEntry.results.length > 0) {
+          const epiName = landZoningEntry.results[0].EPI_Name || landZoningEntry.results[0]["EPI Name"];
+          if (epiName) {
+            console.log(`Found EPI Name from Land Zoning Map: ${epiName}`);
+            return epiName;
+          }
+        }
+
+        // If not found in Land Zoning Map, look in other entries
+        for (const entry of data) {
+          if (entry.results && entry.results.length > 0) {
+            for (const result of entry.results) {
+              const epiName = result.EPI_Name || result["EPI Name"];
+              if (epiName && result["EPI Type"] === "LEP") {
+                console.log(`Found EPI Name from ${entry.layerName}: ${epiName}`);
+                return epiName;
+              }
+            }
+          }
+        }
+
+        console.log('No suitable EPI Name found in response');
+        return null;
+      } catch (error) {
+        console.error('Error fetching EPI Name:', error);
+        return null;
+      }
+    };
 
     // Helper function to normalize LGA names for API compatibility
     const normalizeLGAName = (name) => {
@@ -177,6 +252,30 @@ export async function addPermissibilitySlide(pptx, properties) {
         ? 'http://localhost:5173'
         : 'https://proxy-server.jameswilliamstrutt.workers.dev';
 
+      // Try to get EPI Name from property ID first
+      let epiName = null;
+      if (properties.site__property_id) {
+        epiName = await fetchEPINameFromPropertyID(properties.site__property_id);
+      }
+
+      // Prepare headers for the permissibility API request
+      const headers = {
+        'Accept': 'application/json'
+      };
+
+      // If we have an EPI Name from the property ID, use it
+      if (epiName) {
+        headers['EpiName'] = epiName;
+      } else {
+        // Otherwise fall back to normalized LGA name
+        headers['EpiName'] = normalizeLGAName(lgaName);
+      }
+
+      // Add zone code to headers
+      headers['ZoneCode'] = zoneCode;
+
+      console.log('Final API request headers:', headers);
+
       const response = await fetch(`${API_BASE_URL}${process.env.NODE_ENV === 'development' ? '/api/proxy' : ''}`, {
         method: 'POST',
         headers: {
@@ -186,11 +285,7 @@ export async function addPermissibilitySlide(pptx, properties) {
         body: JSON.stringify({
           url: 'https://api.apps1.nsw.gov.au/eplanning/data/v0/FetchEPILandUsePermissibility',
           method: 'GET',
-          headers: {
-            'EpiName': normalizeLGAName(lgaName),
-            'ZoneCode': zoneCode,
-            'Accept': 'application/json'
-          }
+          headers: headers
         })
       });
 
@@ -265,16 +360,796 @@ export async function addPermissibilitySlide(pptx, properties) {
         prohibited: [...prohibitedSet].sort((a, b) => a.localeCompare(b))
       };
 
-      // Format the permitted uses with bullets
-      const formatWithTicks = (items) => {
-        if (!items || items.length === 0) return 'None specified';
-        return items.map(item => `✓ ${item}`).join('\n');
+      // Helper function to ensure text is always a string
+      const ensureString = (text) => {
+        if (typeof text === 'string') return text;
+        if (text === null || text === undefined) return '';
+        if (Array.isArray(text)) return text.map(t => typeof t === 'object' ? (t.text || '') : String(t)).join('');
+        return String(text);
       };
 
-      const formatWithCrosses = (items) => {
+      // Check Low Medium Rise (LMR) housing area status
+      let lmrStatus = 'Checking...';
+      let isInLMRArea = properties.isInLMRArea || false; // Get LMR status from properties
+
+      // Set the LMR status based on the stored value
+      if (isInLMRArea) {
+        lmrStatus = '✓ Property is located within a Low Medium Rise (LMR) housing area. Additional development controls apply.';
+      } else {
+        lmrStatus = '✗ Property is not located within a Low Medium Rise (LMR) housing area.';
+      }
+      
+      // If property is in LMR area, check what's permissible
+      let lmrDevelopmentOptions = [];
+      if (isInLMRArea) {
+        console.log('Checking LMR development options');
+        lmrDevelopmentOptions = await getAllPermissibleHousingTypes(properties);
+        console.log('LMR development options:', lmrDevelopmentOptions);
+      }
+
+      // Helper function to format items with commas and proper styling
+      const formatItemsAsText = (items) => {
         if (!items || items.length === 0) return 'None specified';
-        return items.map(item => `✗ ${item}`).join('\n');
+        
+        return items.map((item, index) => {
+          const isHousingRelated = housingRelatedUses.has(item);
+          return item + (isHousingRelated ? ' 🏠' : '') + (index < items.length - 1 ? ', ' : '');
+        }).join('');
       };
+
+      // Create combined table rows with all information
+      const combinedTableRows = [
+        [
+          { 
+            text: 'Environmental Planning Instrument:', 
+            options: { 
+              bold: true,
+              color: '363636',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left'
+            }
+          },
+          {
+            text: ensureString(jsonData[0].EPIName),
+            options: {
+              color: '363636',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left',
+              wrap: true
+            }
+          }
+        ],
+        [
+          { 
+            text: 'Zone:', 
+            options: { 
+              bold: true,
+              color: '363636',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left'
+            }
+          },
+          {
+            text: [
+              { 
+                text: ensureString(properties.site_suitability__principal_zone_identifier || 'Not available'), 
+                options: { color: '363636' } 
+              },
+              { 
+                text: ' ', 
+                options: { color: '363636' } 
+              },
+              { 
+                text: '■', 
+                options: { 
+                  color: landZoningColors[zoneCode] || '363636'
+                } 
+              }
+            ],
+            options: {
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left'
+            }
+          }
+        ],
+        [
+          { 
+            text: 'LGA:', 
+            options: { 
+              bold: true,
+              color: '363636',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left'
+            }
+          },
+          {
+            text: ensureString(properties.site_suitability__LGA || 'Not available'),
+            options: {
+              color: '363636',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left'
+            }
+          }
+        ],
+        [
+          { 
+            text: 'Zone Objective:', 
+            options: { 
+              bold: true,
+              color: '363636',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left'
+            }
+          },
+          {
+            text: ensureString(zone.ZoneObjective?.trim() || 'No zone objective available'),
+            options: {
+              color: '363636',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left',
+              wrap: true
+            }
+          }
+        ],
+        [
+          { 
+            text: 'Permitted without consent',
+            options: { 
+              bold: true,
+              color: '4CAF50',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left'
+            }
+          },
+          {
+            text: formatItemsAsText(permittedUses.withoutConsent),
+            options: {
+              color: '4CAF50',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left',
+              wrap: true
+            }
+          }
+        ],
+        [
+          { 
+            text: 'Permitted with consent',
+            options: { 
+              bold: true,
+              color: '4CAF50',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left'
+            }
+          },
+          {
+            text: formatItemsAsText(permittedUses.withConsent),
+            options: {
+              color: '4CAF50',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left',
+              wrap: true
+            }
+          }
+        ],
+        [
+          { 
+            text: 'Prohibited Uses',
+            options: { 
+              bold: true,
+              color: 'FF3B3B',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left'
+            }
+          },
+          {
+            text: formatItemsAsText(permittedUses.prohibited),
+            options: {
+              color: 'FF3B3B',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left',
+              wrap: true
+            }
+          }
+        ]
+      ];
+
+      // Only add LMR-related rows if the LMR status has been determined in the access slide
+      if (typeof properties.isInLMRArea !== 'undefined') {
+        // Add LMR status row
+        combinedTableRows.push([
+          { 
+            text: 'Low Medium Rise (LMR)', 
+            options: { 
+              bold: true,
+              color: '363636',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left'
+            }
+          },
+          {
+            text: properties.isInLMRArea ? 
+              '✓ Property is located within a Low Medium Rise (LMR) housing area. Additional development controls apply.' :
+              '✗ Property is not located within a Low Medium Rise (LMR) housing area.',
+            options: {
+              color: properties.isInLMRArea ? '4CAF50' : 'FF3B3B',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left',
+              wrap: true
+            }
+          }
+        ]);
+
+        // Add LMR Housing Options row
+        combinedTableRows.push([
+          { 
+            text: 'LMR Housing Options', 
+            options: { 
+              bold: true,
+              color: properties.isInLMRArea ? '0066CC' : '363636',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left'
+            }
+          },
+          {
+            text: properties.isInLMRArea ? 
+              'See LMR Development Options table below for details' :
+              'Not applicable - Property is not within an LMR area',
+            options: {
+              color: properties.isInLMRArea ? '0066CC' : '363636',
+              fontSize: 8,
+              valign: 'middle',
+              align: 'left',
+              wrap: true
+            }
+          }
+        ]);
+      }
+
+      // Add the combined table
+      slide.addTable(combinedTableRows, {
+        ...convertCmValues({
+          x: '5%',
+          y: '18%',
+          w: '90%',
+          h: properties.isInLMRArea ? '45%' : '70%'
+        }),
+        colW: [2.2, 9.8],
+        rowH: 0.4,
+        fontSize: 8,
+        fontFace: 'Public Sans',
+        border: { 
+          type: 'solid',
+          pt: 1,
+          color: '002664'
+        },
+        align: 'left',
+        valign: 'middle',
+        margin: 3,
+        autoPage: false
+      });
+
+      // If property is in LMR area, add the LMR development options table on a new slide
+      if (properties.isInLMRArea) {
+        try {
+          // Check again if we have permissible options
+          const permissibleOptions = await getAllPermissibleHousingTypes(properties);
+          
+          if (permissibleOptions.length > 0) {
+            // Create a new slide for LMR development options
+            const lmrSlide = pptx.addSlide();
+            
+            // Add title to the new slide
+            lmrSlide.addText([
+              { text: properties.site__address, options: { color: styles.title.color } },
+              { text: ' ', options: { breakLine: true } },
+              { text: 'LMR Development Options', options: { color: styles.subtitle.color } }
+            ], convertCmValues({
+              ...styles.title,
+              color: undefined
+            }));
+
+            // Add horizontal line under title
+            lmrSlide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.titleLine));
+
+            // Add sensitive text
+            lmrSlide.addText("SENSITIVE: NSW GOVERNMENT", convertCmValues(styles.sensitiveText));
+
+            // Add NSW Logo
+            lmrSlide.addImage({
+              path: "/images/NSW-Government-official-logo.jpg",
+              ...convertCmValues(styles.nswLogo)
+            });
+
+            // Add footer line
+            lmrSlide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.footerLine));
+
+            // Add source footnote
+            lmrSlide.addText('Source: ', {
+              ...convertCmValues({
+                x: '5%',
+                y: '90%',
+                w: '90%',
+                h: '3%'
+              }),
+              fontSize: 8,
+              color: '363636',
+              fontFace: 'Public Sans',
+              align: 'left'
+            });
+
+            // Add footer text
+            lmrSlide.addText('Property and Development NSW', convertCmValues(styles.footer));
+            lmrSlide.addText('17', convertCmValues(styles.pageNumber));
+            
+            // Format the permissible options for the table
+            const lmrOptionsTableTitle = [
+              [
+                { 
+                  text: 'LMR Development Options', 
+                  options: { 
+                    bold: true,
+                    color: '002664',
+                    fontSize: 9,
+                    valign: 'middle',
+                    align: 'left',
+                    colspan: 6
+                  }
+                }
+              ],
+              [
+                { 
+                  text: 'Housing Type', 
+                  options: { 
+                    bold: true,
+                    color: '363636',
+                    fontSize: 8,
+                    valign: 'middle',
+                    align: 'left'
+                  }
+                },
+                { 
+                  text: 'Site Requirements', 
+                  options: { 
+                    bold: true,
+                    color: '363636',
+                    fontSize: 8,
+                    valign: 'middle',
+                    align: 'left'
+                  }
+                },
+                { 
+                  text: 'Site Characteristics', 
+                  options: { 
+                    bold: true,
+                    color: '363636',
+                    fontSize: 8,
+                    valign: 'middle',
+                    align: 'left'
+                  }
+                },
+                { 
+                  text: 'Permissible', 
+                  options: { 
+                    bold: true,
+                    color: '363636',
+                    fontSize: 8,
+                    valign: 'middle',
+                    align: 'center'
+                  }
+                },
+                { 
+                  text: 'FSR', 
+                  options: { 
+                    bold: true,
+                    color: '363636',
+                    fontSize: 8,
+                    valign: 'middle',
+                    align: 'center'
+                  }
+                },
+                { 
+                  text: 'HOB', 
+                  options: { 
+                    bold: true,
+                    color: '363636',
+                    fontSize: 8,
+                    valign: 'middle',
+                    align: 'center'
+                  }
+                }
+              ]
+            ];
+            
+            // Create rows for each housing type
+            const lmrOptionsRows = permissibleOptions.map(option => {
+              // Format the site requirements text
+              const siteRequirements = Object.entries(option.requirements || {})
+                .map(([key, value]) => {
+                  // Special handling for Residential Flat Buildings based on zone
+                  if (option.type === 'Residential Flat Buildings') {
+                    const zoneCode = properties.site_suitability__principal_zone_identifier?.split(' ')?.[0]?.trim() || '';
+                    
+                    if (zoneCode === 'R1' || zoneCode === 'R2') {
+                      if (key === 'area') return 'Min. Area: 500m²';
+                      if (key === 'width') return 'Min. Width: 12m';
+                    } else if (zoneCode === 'R3' || zoneCode === 'R4') {
+                      return null; // No minimum requirements for R3/R4
+                    }
+                  }
+                  
+                  // Format area values with commas for thousands
+                  if (key === 'area' && typeof value === 'number') {
+                    return `Min. Area: ${value.toLocaleString()}m²`;
+                  }
+                  
+                  // Format width values without decimal places
+                  if (key === 'width' && typeof value === 'number') {
+                    return `Min. Width: ${Math.round(value)}m`;
+                  }
+                  
+                  return `${key}: ${value}`;
+                })
+                .filter(Boolean) // Remove null entries
+                .join('\n');
+              
+              // Format the site characteristics text with ticks/crosses
+              const siteCharacteristics = Object.entries(option.criteria || {})
+                .map(([key, value], index, array) => {
+                  // Skip the distance criterion for Residential Flat Buildings as we're now using ranges
+                  if (option.type === 'Residential Flat Buildings' && key === 'distance') {
+                    return null;
+                  }
+                  
+                  const title = key.charAt(0).toUpperCase() + key.slice(1);
+                  const isMet = value.met;
+                  const symbol = isMet ? '✓' : '✗';
+                  const color = isMet ? '4CAF50' : 'FF3B3B';
+                  
+                  const elements = [
+                    { text: `${title}: `, options: { color: '363636' } },
+                    { text: value.actual, options: { color: '363636' } },
+                    { text: ' ', options: { color: '363636' } },
+                    { text: symbol, options: { color, bold: true } }
+                  ];
+                  
+                  // Add line break if not the last item
+                  if (index < array.length - 1) {
+                    elements.push({ text: '\n', options: { color: '363636' } });
+                  }
+                  
+                  return elements;
+                })
+                .filter(Boolean) // Remove null entries
+                .flat(); // Flatten the array of arrays into a single array
+              
+              // Format the permissible status with tick/cross
+              const permissibleStatus = option.isPermissible ? '✓' : '✗';
+              
+              // Format FSR values with comparison
+              const fsrText = (() => {
+                const current = typeof option.currentFSR === 'number' ? option.currentFSR.toFixed(2) : 'Unknown';
+                
+                // Special handling for Residential Flat Buildings
+                if (option.type === 'Residential Flat Buildings') {
+                  const zoneCode = properties.site_suitability__principal_zone_identifier?.split(' ')?.[0]?.trim() || '';
+                  
+                  if (zoneCode === 'R1' || zoneCode === 'R2') {
+                    const maxFSR = 0.8;
+                    
+                    if (typeof option.currentFSR === 'number') {
+                      const difference = maxFSR - option.currentFSR;
+                      const changeSymbol = difference > 0 ? '↑' : (difference < 0 ? '↓' : '=');
+                      const changeColor = difference > 0 ? '4CAF50' : (difference < 0 ? 'FF3B3B' : '363636');
+                      
+                      return [
+                        { text: `Current: ${current}\n`, options: { color: '363636' } },
+                        { text: `New: ${maxFSR.toFixed(2)}\n`, options: { color: '363636', bold: true } },
+                        { 
+                          text: `${changeSymbol} ${Math.abs(difference).toFixed(2)}`, 
+                          options: { color: changeColor, bold: true } 
+                        }
+                      ];
+                    } else {
+                      return [
+                        { text: `Current: ${current}\n`, options: { color: '363636' } },
+                        { text: `New: ${maxFSR.toFixed(2)}`, options: { color: '363636', bold: true } }
+                      ];
+                    }
+                  } else if (zoneCode === 'R3' || zoneCode === 'R4') {
+                    const minFSR = 1.5;
+                    const maxFSR = 2.2;
+                    
+                    if (typeof option.currentFSR === 'number') {
+                      const avgFSR = (minFSR + maxFSR) / 2;
+                      const difference = avgFSR - option.currentFSR;
+                      const minDifference = minFSR - option.currentFSR;
+                      const maxDifference = maxFSR - option.currentFSR;
+                      
+                      // Determine if all changes are positive, negative, or mixed
+                      const allPositive = minDifference >= 0;
+                      const allNegative = maxDifference <= 0;
+                      
+                      let changeSymbol, changeColor, changeText;
+                      
+                      if (allPositive) {
+                        changeSymbol = '↑';
+                        changeColor = '4CAF50';
+                        changeText = `${Math.abs(minDifference).toFixed(2)} - ${Math.abs(maxDifference).toFixed(2)}`;
+                      } else if (allNegative) {
+                        changeSymbol = '↓';
+                        changeColor = 'FF3B3B';
+                        changeText = `${Math.abs(maxDifference).toFixed(2)} - ${Math.abs(minDifference).toFixed(2)}`;
+                      } else {
+                        changeSymbol = '↕';
+                        changeColor = '363636';
+                        changeText = `${minDifference.toFixed(2)} to ${maxDifference.toFixed(2)}`;
+                      }
+                      
+                      return [
+                        { text: `Current: ${current}\n`, options: { color: '363636' } },
+                        { text: `New: ${minFSR.toFixed(2)} - ${maxFSR.toFixed(2)}\n`, options: { color: '363636', bold: true } },
+                        { 
+                          text: `${changeSymbol} ${changeText}`, 
+                          options: { color: changeColor, bold: true } 
+                        }
+                      ];
+                    } else {
+                      return [
+                        { text: `Current: ${current}\n`, options: { color: '363636' } },
+                        { text: `New: ${minFSR.toFixed(2)} - ${maxFSR.toFixed(2)}`, options: { color: '363636', bold: true } }
+                      ];
+                    }
+                  }
+                }
+                
+                // Standard handling for other housing types
+                const potential = option.potentialFSR.toFixed(2);
+                
+                if (typeof option.currentFSR === 'number') {
+                  const difference = option.potentialFSR - option.currentFSR;
+                  const changeSymbol = difference > 0 ? '↑' : (difference < 0 ? '↓' : '=');
+                  const changeColor = difference > 0 ? '4CAF50' : (difference < 0 ? 'FF3B3B' : '363636');
+                  
+                  return [
+                    { text: `Current: ${current}\n`, options: { color: '363636' } },
+                    { text: `New: ${potential}\n`, options: { color: '363636', bold: true } },
+                    { 
+                      text: `${changeSymbol} ${Math.abs(difference).toFixed(2)}`, 
+                      options: { color: changeColor, bold: true } 
+                    }
+                  ];
+                } else {
+                  return [
+                    { text: `Current: ${current}\n`, options: { color: '363636' } },
+                    { text: `New: ${potential}`, options: { color: '363636', bold: true } }
+                  ];
+                }
+              })();
+              
+              // Format HOB values with comparison
+              const hobText = (() => {
+                const current = typeof option.currentHOB === 'number' ? option.currentHOB.toFixed(1) + 'm' : 'Unknown';
+                
+                // Special handling for Residential Flat Buildings
+                if (option.type === 'Residential Flat Buildings') {
+                  const zoneCode = properties.site_suitability__principal_zone_identifier?.split(' ')?.[0]?.trim() || '';
+                  
+                  if (zoneCode === 'R1' || zoneCode === 'R2') {
+                    const maxHOB = 9.5;
+                    
+                    if (typeof option.currentHOB === 'number') {
+                      const difference = maxHOB - option.currentHOB;
+                      const changeSymbol = difference > 0 ? '↑' : (difference < 0 ? '↓' : '=');
+                      const changeColor = difference > 0 ? '4CAF50' : (difference < 0 ? 'FF3B3B' : '363636');
+                      
+                      return [
+                        { text: `Current: ${current}\n`, options: { color: '363636' } },
+                        { text: `New: ${maxHOB.toFixed(1)}m\n`, options: { color: '363636', bold: true } },
+                        { 
+                          text: `${changeSymbol} ${Math.abs(difference).toFixed(1)}m`, 
+                          options: { color: changeColor, bold: true } 
+                        }
+                      ];
+                    } else {
+                      return [
+                        { text: `Current: ${current}\n`, options: { color: '363636' } },
+                        { text: `New: ${maxHOB.toFixed(1)}m`, options: { color: '363636', bold: true } }
+                      ];
+                    }
+                  } else if (zoneCode === 'R3' || zoneCode === 'R4') {
+                    const minHOB = 17.5;
+                    const maxHOB = 22.0;
+                    
+                    return [
+                      { text: `Current: ${current}\n`, options: { color: '363636' } },
+                      { text: `New: ${minHOB.toFixed(1)}m - ${maxHOB.toFixed(1)}m`, options: { color: '363636', bold: true } }
+                    ];
+                  }
+                }
+                
+                // Standard handling for other housing types
+                const potential = option.potentialHOB.toFixed(1) + 'm';
+                
+                if (typeof option.currentHOB === 'number') {
+                  const difference = option.potentialHOB - option.currentHOB;
+                  const changeSymbol = difference > 0 ? '↑' : (difference < 0 ? '↓' : '=');
+                  const changeColor = difference > 0 ? '4CAF50' : (difference < 0 ? 'FF3B3B' : '363636');
+                  
+                  return [
+                    { text: `Current: ${current}\n`, options: { color: '363636' } },
+                    { text: `New: ${potential}\n`, options: { color: '363636', bold: true } },
+                    { 
+                      text: `${changeSymbol} ${Math.abs(difference).toFixed(1)}m`, 
+                      options: { color: changeColor, bold: true } 
+                    }
+                  ];
+                } else {
+                  return [
+                    { text: `Current: ${current}\n`, options: { color: '363636' } },
+                    { text: `New: ${potential}`, options: { color: '363636', bold: true } }
+                  ];
+                }
+              })();
+              
+              // Create the row
+              return [
+                { 
+                  text: ensureString(option.type), 
+                  options: { 
+                    color: '363636',
+                    fontSize: 8,
+                    valign: 'middle',
+                    align: 'left'
+                  }
+                },
+                { 
+                  text: ensureString(siteRequirements), 
+                  options: { 
+                    color: '363636',
+                    fontSize: 8,
+                    valign: 'middle',
+                    align: 'left',
+                    wrap: true
+                  }
+                },
+                { 
+                  text: siteCharacteristics, 
+                  options: { 
+                    fontSize: 8,
+                    valign: 'middle',
+                    align: 'left',
+                    wrap: true
+                  }
+                },
+                {
+                  text: permissibleStatus,
+                  options: {
+                    color: option.isPermissible ? '4CAF50' : 'FF3B3B',
+                    bold: true,
+                    fontSize: 10,
+                    valign: 'middle',
+                    align: 'center'
+                  }
+                },
+                { 
+                  text: fsrText, 
+                  options: { 
+                    fontSize: 8,
+                    valign: 'middle',
+                    align: 'center'
+                  }
+                },
+                { 
+                  text: hobText, 
+                  options: { 
+                    fontSize: 8,
+                    valign: 'middle',
+                    align: 'center'
+                  }
+                }
+              ];
+            });
+            
+            // Add proximity notes for residential flat buildings if applicable
+            const rfbOption = permissibleOptions.find(option => option.type === 'Residential Flat Buildings');
+            if (rfbOption) {
+              lmrOptionsRows.push([
+                { 
+                  text: 'Note: Residential Flat Buildings FSR/HOB Values', 
+                  options: { 
+                    color: '363636',
+                    fontSize: 8,
+                    valign: 'middle',
+                    align: 'left',
+                    bold: true,
+                    colspan: 6
+                  }
+                }
+              ]);
+              
+              // Get zone code
+              const zoneCode = properties.site_suitability__principal_zone_identifier?.split(' ')?.[0]?.trim() || '';
+              
+              if (zoneCode === 'R1' || zoneCode === 'R2') {
+                lmrOptionsRows.push([
+                  { 
+                    text: `For R1/R2 zones, Residential Flat Buildings have a max FSR of 0.8:1 and HOB of 9.5m.`, 
+                    options: { 
+                      color: '363636',
+                      fontSize: 8,
+                      valign: 'middle',
+                      align: 'left',
+                      colspan: 6
+                    }
+                  }
+                ]);
+              } else if (zoneCode === 'R3' || zoneCode === 'R4') {
+                lmrOptionsRows.push([
+                  { 
+                    text: `For R3/R4 zones, Residential Flat Buildings have max FSR values ranging from 1.5 to 2.2 and HOB values ranging from 17.5m to 22.0m, depending on proximity to stations/centers.`, 
+                    options: { 
+                      color: '363636',
+                      fontSize: 8,
+                      valign: 'middle',
+                      align: 'left',
+                      colspan: 6
+                    }
+                  }
+                ]);
+              }
+            }
+            
+            // Combine the title and rows
+            const lmrOptionsTableRows = [...lmrOptionsTableTitle, ...lmrOptionsRows];
+            
+            // Add the LMR options table to the new slide
+            lmrSlide.addTable(lmrOptionsTableRows, {
+              ...convertCmValues({
+                x: '5%',
+                y: '18%',
+                w: '90%',
+                h: '70%'  // Can use more space on the dedicated slide
+              }),
+              colW: [2.5, 2, 2, 1, 2, 2],  // Adjusted column widths to match the header line width
+              rowH: 0.4,  // Slightly increased row height for better readability
+              fontSize: 8,
+              fontFace: 'Public Sans',
+              border: { 
+                type: 'solid',
+                pt: 1,
+                color: '002664'
+              },
+              align: 'left',
+              valign: 'middle',
+              margin: 3,
+              autoPage: false
+            });
+            
+            // Update the text in the original slide to reference the new slide
+            const lmrRowIndex = 7; // Index of the LMR Housing Options row in combinedTableRows
+            combinedTableRows[lmrRowIndex][1].text = 'See next slide for LMR Development Options details';
+          }
+        } catch (lmrOptionsError) {
+          console.error('Error adding LMR options table:', lmrOptionsError);
+        }
+      }
 
       // Add title
       slide.addText([
@@ -298,343 +1173,12 @@ export async function addPermissibilitySlide(pptx, properties) {
         ...convertCmValues(styles.nswLogo)
       });
 
-      // Add LEP Information Card with rounded corners
-      slide.addShape(pptx.shapes.ROUNDED_RECTANGLE, convertCmValues({
-        x: '5%',
-        y: '18%',
-        w: '90%',
-        h: '22%',
-        fill: 'FFFFFF',
-        line: { color: '002664', width: 2 },
-        rectRadius: 0.1
-      }));
-
-      // Add LEP content as a table with proper PptxGenJS table formatting
-      const rows = [
-        [
-          { 
-            text: 'Environmental Planning Instrument:', 
-            options: { 
-              bold: true, 
-              fontSize: 8,
-              color: '363636',
-              align: 'left',
-              valign: 'middle'
-            }
-          },
-          { 
-            text: jsonData[0].EPIName, 
-            options: { 
-              fontSize: 8,
-              color: '363636',
-              align: 'left',
-              valign: 'middle'
-            }
-          }
-        ],
-        [
-          { 
-            text: 'Zone:', 
-            options: { 
-              bold: true, 
-              fontSize: 8,
-              color: '363636',
-              align: 'left',
-              valign: 'middle'
-            }
-          },
-          { 
-            text: [
-              {
-                text: properties.site_suitability__principal_zone_identifier || 'Not available',
-                options: {
-                  fontSize: 8,
-                  color: '363636',
-                  align: 'left',
-                  valign: 'middle'
-                }
-              },
-              {
-                text: ' ■',  // Changed to filled square character
-                options: {
-                  fontSize: 10,
-                  color: zoneCode ? landZoningColors[zoneCode] || '363636' : '363636',
-                  align: 'left',
-                  valign: 'middle'
-                }
-              }
-            ],
-            options: {
-              align: 'left',
-              valign: 'middle'
-            }
-          }
-        ],
-        [
-          { 
-            text: 'LGA:', 
-            options: { 
-              bold: true, 
-              fontSize: 8,
-              color: '363636',
-              align: 'left',
-              valign: 'middle'
-            }
-          },
-          { 
-            text: properties.site_suitability__LGA || 'Not available', 
-            options: { 
-              fontSize: 8,
-              color: '363636',
-              align: 'left',
-              valign: 'middle'
-            }
-          }
-        ],
-        [
-          { 
-            text: 'Zone Objective:', 
-            options: { 
-              bold: true, 
-              fontSize: 8,
-              color: '363636',
-              align: 'left',
-              valign: 'top'
-            }
-          },
-          { 
-            text: zone.ZoneObjective || 'No zone objective available', 
-            options: { 
-              fontSize: 8,
-              color: '363636',
-              align: 'left',
-              valign: 'top',
-              wrap: true
-            }
-          }
-        ]
-      ];
-
-      slide.addTable(rows, {
-        ...convertCmValues({
-          x: '6%',
-          y: '19%',
-          w: '90%',
-          h: '18%'  // Increased height for EPI box
-        }),
-        colW: [2, 9],
-        rowH: 0.15, // Slightly increased row height
-        fontFace: 'Public Sans',
-        border: { type: 'none' },
-        align: 'left',
-        valign: 'middle',
-        margin: 3,
-        autoPage: false
-      });
-
-      // Add Permitted Uses Section with three columns - adjusted widths
-      const withoutConsentWidth = '18%';  // Reduced width for smaller section
-      const withConsentWidth = '33%';     // Increased width for larger sections
-      const prohibitedWidth = '33%';      // Increased width for larger sections
-      const columnSpacing = '3%';
-      const startY = '42%';               // Moved down further to accommodate EPI box
-      const columnHeight = '50%';         // Slightly reduced height to fit
-
-      // Helper function to create table rows from items - only use second column when needed
-      const createTwoColumnTableRows = (items, symbol) => {
-        if (!items || items.length === 0) return [[{ 
-          text: 'None specified', 
-          options: { 
-            align: 'left', 
-            valign: 'top',
-            colspan: 2 
-          } 
-        }]];
-
-        // Format a single item with housing-related highlighting if applicable
-        const formatItem = (item) => {
-          const isHousingRelated = housingRelatedUses.has(item);
-          return {
-            text: `${symbol} ${item}`,
-            options: {
-              align: 'left',
-              valign: 'top',
-              wrap: true,
-              bold: isHousingRelated,
-              color: isHousingRelated ? '0066CC' : undefined, // Use blue for housing-related items
-              highlight: isHousingRelated ? 'CCFFCC' : undefined // Light green highlight for housing-related items
-            }
-          };
-        };
-
-        // If all items fit in one column, use single column
-        if (items.length <= 12) {
-          return items.map(item => [{
-            ...formatItem(item),
-            options: {
-              ...formatItem(item).options,
-              colspan: 2
-            }
-          }]);
-        }
-        
-        // Calculate maximum items per column based on available height
-        const maxItemsPerColumn = 20; // Adjust this number based on slide height and font size
-        
-        // Split items between columns, filling first column completely
-        const col1 = items.slice(0, maxItemsPerColumn);
-        const col2 = items.slice(maxItemsPerColumn);
-        
-        // Create rows with proper cell formatting
-        const rows = [];
-        const maxRows = Math.max(col1.length, col2.length);
-        
-        for (let i = 0; i < maxRows; i++) {
-          const row = [
-            col1[i] ? formatItem(col1[i]) : { text: '', options: { align: 'left', valign: 'top' } },
-            col2[i] ? formatItem(col2[i]) : { text: '', options: { align: 'left', valign: 'top' } }
-          ];
-          rows.push(row);
-        }
-        
-        return rows;
-      };
-
-      // First Column - Without Consent (Left) - Smaller width
-      slide.addShape(pptx.shapes.ROUNDED_RECTANGLE, convertCmValues({
-        x: '5%',
-        y: startY,
-        w: withoutConsentWidth,
-        h: columnHeight,
-        fill: 'FFFFFF',
-        line: { color: '4CAF50', width: 2 },
-        rectRadius: 0.1
-      }));
-
-      // Add Without Consent Title
-      slide.addText('Permitted without consent', convertCmValues({
-        x: '6%',
-        y: `${parseFloat(startY) + 1}%`,
-        w: '18%',
-        h: '4%',
-        color: '4CAF50',
-        fontSize: 10,
-        bold: true,
-        fontFace: 'Public Sans'
-      }));
-
-      // Add Without Consent Content as Table
-      const withoutConsentRows = createTwoColumnTableRows(permittedUses.withoutConsent, '✓');
-      slide.addTable(withoutConsentRows, {
-        ...convertCmValues({
-          x: '6%',
-          y: `${parseFloat(startY) + 6}%`,
-          w: '16%'
-        }),
-        colW: [1.2, 1.2],
-        rowH: 0.2, // Fixed row height
-        fontSize: 6,
-        color: '4CAF50',
-        fontFace: 'Public Sans',
-        border: { type: 'none' },
-        align: 'left',
-        valign: 'top',
-        margin: 1,
-        autoPage: false
-      });
-
-      // Second Column - With Consent (Middle) - Larger width
-      slide.addShape(pptx.shapes.ROUNDED_RECTANGLE, convertCmValues({
-        x: `${5 + parseInt(withoutConsentWidth) + parseInt(columnSpacing)}%`,
-        y: startY,
-        w: withConsentWidth,
-        h: columnHeight,
-        fill: 'FFFFFF',
-        line: { color: '4CAF50', width: 2 },
-        rectRadius: 0.1
-      }));
-
-      // Add With Consent Title
-      slide.addText('Permitted with consent', convertCmValues({
-        x: `${6 + parseInt(withoutConsentWidth) + parseInt(columnSpacing)}%`,
-        y: `${parseFloat(startY) + 1}%`,
-        w: '30%',
-        h: '4%',
-        color: '4CAF50',
-        fontSize: 10,
-        bold: true,
-        fontFace: 'Public Sans'
-      }));
-
-      // Add With Consent Content as Table
-      const withConsentRows = createTwoColumnTableRows(permittedUses.withConsent, '✓');
-      slide.addTable(withConsentRows, {
-        ...convertCmValues({
-          x: `${6 + parseInt(withoutConsentWidth) + parseInt(columnSpacing)}%`,
-          y: `${parseFloat(startY) + 6}%`,
-          w: '31%'
-        }),
-        colW: [2.2, 2.2],
-        rowH: 0.2, // Fixed row height
-        fontSize: 6,
-        color: '4CAF50',
-        fontFace: 'Public Sans',
-        border: { type: 'none' },
-        align: 'left',
-        valign: 'top',
-        margin: 1,
-        autoPage: false
-      });
-
-      // Third Column - Prohibited (Right) - Larger width
-      slide.addShape(pptx.shapes.ROUNDED_RECTANGLE, convertCmValues({
-        x: `${5 + parseInt(withoutConsentWidth) + parseInt(withConsentWidth) + 2 * parseInt(columnSpacing)}%`,
-        y: startY,
-        w: prohibitedWidth,
-        h: columnHeight,
-        fill: 'FFFFFF',
-        line: { color: 'FF3B3B', width: 2 },
-        rectRadius: 0.1
-      }));
-
-      // Add Prohibited Title
-      slide.addText('Prohibited Uses', convertCmValues({
-        x: `${6 + parseInt(withoutConsentWidth) + parseInt(withConsentWidth) + 2 * parseInt(columnSpacing)}%`,
-        y: `${parseFloat(startY) + 1}%`,
-        w: '30%',
-        h: '4%',
-        color: 'FF3B3B',
-        fontSize: 10,
-        bold: true,
-        fontFace: 'Public Sans'
-      }));
-
-      // Add Prohibited Content as Table
-      const prohibitedRows = createTwoColumnTableRows(permittedUses.prohibited, '✗');
-      slide.addTable(prohibitedRows, {
-        ...convertCmValues({
-          x: `${6 + parseInt(withoutConsentWidth) + parseInt(withConsentWidth) + 2 * parseInt(columnSpacing)}%`,
-          y: `${parseFloat(startY) + 6}%`,
-          w: '31%'
-        }),
-        colW: [2.2, 2.2],
-        rowH: 0.2, // Fixed row height
-        fontSize: 6,
-        color: 'FF3B3B',
-        fontFace: 'Public Sans',
-        border: { type: 'none' },
-        align: 'left',
-        valign: 'top',
-        margin: 1,
-        autoPage: false
-      });
-
       // Add footer line
       slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.footerLine));
 
       // Add footer text
       slide.addText('Property and Development NSW', convertCmValues(styles.footer));
-      slide.addText('15', convertCmValues(styles.pageNumber));
+      slide.addText(properties.isInLMRArea ? '16' : '15', convertCmValues(styles.pageNumber));
 
       return slide;
     } catch (error) {
@@ -736,7 +1280,7 @@ const styles = {
     y: '94%',
     w: '4%',
     h: '4%',
-    fontSize: 13,
+    fontSize: 8,
     color: '002664',
     fontFace: 'Public Sans',
     align: 'left'

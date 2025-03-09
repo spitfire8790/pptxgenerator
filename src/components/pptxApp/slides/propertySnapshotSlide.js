@@ -90,14 +90,14 @@ const styles = {
   categoryIcons: {
     property: {
       x: '5.3%',
-      y: '37%',
+      y: '39%',
       w: 0.4,
       h: 0.4,
       sizing: { type: 'contain' }
     },
     building: {
       x: '5.3%',
-      y: '64%',
+      y: '66%',
       w: 0.4,
       h: 0.4,
       sizing: { type: 'contain' }
@@ -126,6 +126,12 @@ const formatZoning = (zoning) => {
   const formattedDetails = details ? `: ${details.split(';').join(' (')}%)` : '';
   
   return `${zone}${formattedDetails}`;
+};
+
+// Helper function to format Lot/DP with spaces after commas
+const formatLotDP = (lotDP) => {
+  if (!lotDP) return 'Not specified';
+  return lotDP.replace(/,/g, ', ');
 };
 
 export function addPropertySnapshotSlide(pptx, properties) {
@@ -162,14 +168,15 @@ export function addPropertySnapshotSlide(pptx, properties) {
     [{ 
       text: 'Property Particulars\n\n',
       options: { 
-        rowspan: 7,
+        rowspan: 8,
         valign: 'middle'
       }
     }, 'Address', properties.site__address],
     ['LGA', properties.site_suitability__LGA || 'Not specified'],
+    ['Electorate', properties.site_suitability__electorate || 'Not specified'],
     ['Land Owning Agency', properties.site_suitability__NSW_government_agency ? 
-      properties.site_suitability__NSW_government_agency.split(':')[0].replace(/[\[\]]/g, '') : 'Not NSW Government-owned land'],
-    ['Lot/DP', properties.site__related_lot_references || 'Not specified'],
+      properties.site_suitability__NSW_government_agency.split(':')[0].replace(/[\[\]]/g, '') : 'N/A'],
+    ['Lot/DP', formatLotDP(properties.site__related_lot_references) || 'Not specified'],
     ['Site Area', `${properties.site_suitability__area ? properties.site_suitability__area.toLocaleString() : 'Not specified'} sqm`],
     ['Site Width', `${properties.site_suitability__site_width ? properties.site_suitability__site_width.toFixed(1) : 'Not specified'} m`],
     ['Public Transport Accessibility', properties.site_suitability__public_transport_access_level_AM ? 
@@ -213,8 +220,8 @@ export function addPropertySnapshotSlide(pptx, properties) {
     border: { type: 'solid', color: '363636', pt: 0.5 },
     rowH: [
       0.27, // Header row
-      0.27, 0.27, 0.27, 0.27, 0.27, 0.27, 0.27, // Property Particulars (7 rows)
-      0.8, 0.8, 0.6,  // Current Use (3 rows with increased height)
+      0.27, 0.27, 0.27, 0.27, 0.27, 0.27, 0.27, 0.27, // Property Particulars (8 rows)
+      0.7, 0.7, 0.6,  // Current Use (3 rows with increased height)
       0.27, 0.27, 0.27 // Planning Controls (3 rows)
     ],
     align: 'left',

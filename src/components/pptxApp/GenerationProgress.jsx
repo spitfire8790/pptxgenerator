@@ -50,7 +50,7 @@ const getStepDescription = (stepId) => {
     case 'access':
       return {
         title: 'Assessing Site Access',
-        detail: 'Evaluating transport and accessibility factors...'
+        detail: 'Evaluating transport and strategic centre accessibility factors...'
       };
     case 'hazards':
       return {

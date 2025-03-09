@@ -11,6 +11,8 @@ import scoringCriteria from './slides/scoringLogic';
 import { area } from '@turf/area';
 import { addContextSlide } from './slides/contextSlide';
 import { addPermissibilitySlide } from './slides/permissibilitySlide';
+import { addDevelopmentSlide } from './slides/developmentSlide';
+import { addFeasibilitySlide } from './slides/feasibilitySlide';
 import { 
   captureMapScreenshot, 
   capturePrimarySiteAttributesMap, 
@@ -63,31 +65,43 @@ import {
   LineChart,
   Trophy,
   Loader2,
-  Globe2
+  Globe2,
+  AlertCircle,
+  HelpCircle,
+  Calculator,
+  Settings2,
+  Banknote,
+  X
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import './Timer.css';
 import Leaderboard from './Leaderboard';
+import IssueModal from './IssueModal';
 import { recordReportGeneration } from './utils/stats/reportStats';
 import './GenerationLog.css';
 import { motion, AnimatePresence } from 'framer-motion';
+import IssuesList from './IssuesList';
+import FeasibilityManager from './components/FeasibilityManager';
+import Papa from 'papaparse';
 
 const slideOptions = [
   { id: 'cover', label: 'Cover Page', addSlide: addCoverSlide, icon: Home },
-  { id: 'snapshot', label: 'Property Snapshot', addSlide: addPropertySnapshotSlide, icon: ImageIcon },
-  { id: 'primaryAttributes', label: 'Primary Site Attributes', addSlide: addPrimarySiteAttributesSlide, icon: MapPin },
+  { id: 'propertySnapshot', label: 'Property Snapshot', addSlide: addPropertySnapshotSlide, icon: ImageIcon },
+  { id: 'primarySiteAttributes', label: 'Primary Site Attributes', addSlide: addPrimarySiteAttributesSlide, icon: MapPin },
   { id: 'secondaryAttributes', label: 'Secondary Attributes', addSlide: addSecondaryAttributesSlide, icon: ListTodo },
   { id: 'planning', label: 'Planning', addSlide: addPlanningSlide, icon: Building2 },
   { id: 'planningTwo', label: 'Heritage & Acid Sulfate Soils', addSlide: addPlanningSlide2, icon: Landmark },
   { id: 'servicing', label: 'Servicing', addSlide: addServicingSlide, icon: Wrench },
   { id: 'utilisation', label: 'Utilisation and Improvements', addSlide: addUtilisationSlide, icon: BarChart3 },
-  { id: 'access', label: 'Access', addSlide: addAccessSlide, icon: Navigation },
+  { id: 'access', label: 'Access and Strategic Centres', addSlide: addAccessSlide, icon: Navigation },
   { id: 'hazards', label: 'Natural Hazards', addSlide: addHazardsSlide, icon: AlertTriangle },
   { id: 'environmental', label: 'Environmental', addSlide: addEnviroSlide, icon: Leaf },
   { id: 'contamination', label: 'Site Contamination', addSlide: addContaminationSlide, icon: Skull },
   { id: 'scoring', label: 'Scoring', addSlide: createScoringSlide, icon: LineChart },
   { id: 'context', label: 'Site Context', addSlide: addContextSlide, icon: Globe2 },
-  { id: 'permissibility', label: 'Permissible Uses', addSlide: addPermissibilitySlide, icon: ListTodo }
+  { id: 'permissibility', label: 'Permissible Uses', addSlide: addPermissibilitySlide, icon: ListTodo },
+  { id: 'development', label: 'Development', addSlide: addDevelopmentSlide, icon: Building2 },
+  { id: 'feasibility', label: 'Feasibility', addSlide: addFeasibilitySlide, icon: Calculator }
 ];
 
 const getStepDescription = (stepId) => {
@@ -96,9 +110,9 @@ const getStepDescription = (stepId) => {
       return 'Capturing map screenshots...';
     case 'cover':
       return 'Creating title page and overview...';
-    case 'snapshot':
+    case 'propertySnapshot':
       return 'Adding aerial imagery and property details...';
-    case 'primaryAttributes':
+    case 'primarySiteAttributes':
       return 'Processing site attributes and measurements...';
     case 'secondaryAttributes':
       return 'Adding topography and site characteristics...';
@@ -217,8 +231,8 @@ const ReportGenerator = ({ selectedFeature }) => {
   const [status, setStatus] = useState(null);
   const [selectedSlides, setSelectedSlides] = useState({
     cover: true,
-    snapshot: true,
-    primaryAttributes: true,
+    propertySnapshot: true,
+    primarySiteAttributes: true,
     secondaryAttributes: true,
     planning: true,
     planningTwo: true,
@@ -230,7 +244,9 @@ const ReportGenerator = ({ selectedFeature }) => {
     contamination: true,
     permissibility: true,
     scoring: true,
-    context: true
+    context: true,
+    development: true,
+    feasibility: false
   });
   const [developableArea, setDevelopableArea] = useState(null);
   const [showDevelopableArea, setShowDevelopableArea] = useState(true);
@@ -243,28 +259,151 @@ const ReportGenerator = ({ selectedFeature }) => {
   const [failedScreenshots, setFailedScreenshots] = useState([]);
   const [showConfetti, setShowConfetti] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
+  const [showIssuesList, setShowIssuesList] = useState(false);
   const [generationStartTime, setGenerationStartTime] = useState(null);
   const [generationLogs, setGenerationLogs] = useState([]);
   const logCounterRef = useRef(0);
+  const [feasibilitySettings, setFeasibilitySettings] = useState({
+    lowMidDensity: {
+      siteEfficiencyRatio: 0.80,
+      floorToFloorHeight: 3.5,
+      gbaToGfaRatio: 0.75,
+      gfaToNsaRatio: 0.85,
+      unitSize: 75,
+      agentsSalesCommission: 0.02,
+      legalFeesOnSales: 0.005,
+      marketingCosts: 0.0075,
+      profitAndRisk: 0.20,
+      daApplicationFees: 200000,
+      professionalFees: 0.05,
+      interestRate: 0.075,
+      projectPeriod: 48
+    },
+    highDensity: {
+      siteEfficiencyRatio: 0.80,
+      floorToFloorHeight: 3.5,
+      gbaToGfaRatio: 0.75,
+      gfaToNsaRatio: 0.85,
+      unitSize: 75,
+      agentsSalesCommission: 0.02,
+      legalFeesOnSales: 0.005,
+      marketingCosts: 0.0075,
+      profitAndRisk: 0.20,
+      daApplicationFees: 200000,
+      professionalFees: 0.05,
+      interestRate: 0.075,
+      projectPeriod: 48
+    }
+  });
+  const [salesData, setSalesData] = useState([]);
+  const [showFeasibilitySettings, setShowFeasibilitySettings] = useState(false);
 
   useEffect(() => {
     if (selectedFeature) {
+      console.log('Selected Feature:', selectedFeature);
+      console.log('Address path:', selectedFeature?.properties?.copiedFrom?.site__address);
       handleScreenshotCapture();
     }
   }, [selectedFeature]);
 
   useEffect(() => {
-    // Test JWT claims when component mounts
-    const fetchClaims = async () => {
-      try {
-        const claims = await checkUserClaims();
-        console.log('Successfully retrieved user claims:', claims);
-      } catch (error) {
-        console.error('Failed to get user claims:', error);
-      }
-    };
-    fetchClaims();
-  }, []);
+    if (selectedFeature?.properties?.copiedFrom?.site_suitability__suburb) {
+      const fetchSalesData = async () => {
+        const suburb = selectedFeature.properties.copiedFrom.site_suitability__suburb.toUpperCase();
+        console.log('Starting fetchSalesData with params:', {
+          originalSuburb: selectedFeature.properties.copiedFrom.site_suitability__suburb,
+          uppercaseSuburb: suburb,
+          fullProperties: selectedFeature.properties
+        });
+        
+        try {
+          console.log('Fetching CSV data for:', suburb);
+          const response = await fetch('/nsw_property_sales.csv');
+          const csvText = await response.text();
+          
+          Papa.parse(csvText, {
+            header: true,
+            complete: (results) => {
+              console.log('CSV parsing complete:', {
+                totalRows: results.data.length,
+                sampleRow: results.data[0],
+                headers: results.meta.fields
+              });
+
+              // First try exact suburb match
+              let filteredData = results.data
+                .filter(row => 
+                  row.suburb?.toUpperCase() === suburb && 
+                  row.price && row.bedrooms
+                );
+
+              // If no results, try searching for suburbs containing the original suburb name
+              if (filteredData.length === 0) {
+                console.log('No exact suburb matches found, searching for related suburbs containing:', suburb);
+                const baseSuburb = suburb.split(' ').pop(); // Get the base suburb name (e.g., 'KILLARA' from 'EAST KILLARA')
+                filteredData = results.data
+                  .filter(row => 
+                    row.suburb?.toUpperCase().includes(baseSuburb) && 
+                    row.price && row.bedrooms
+                  );
+                
+                console.log('Found related suburbs:', {
+                  baseSuburb,
+                  matchedSuburbs: [...new Set(filteredData.map(row => row.suburb))],
+                  matchCount: filteredData.length
+                });
+              }
+
+              // Process the filtered data
+              const processedData = filteredData
+                .map(row => ({
+                  price: parseFloat(row.price),
+                  bedrooms: parseInt(row.bedrooms),
+                  bathrooms: parseInt(row.bathrooms) || 0,
+                  parking: parseInt(row.parking) || 0,
+                  address: row.address || 'Address not provided',
+                  property_type: row.property_type || 'Apartment',
+                  sold_date: row.sold_date || 'Date not provided',
+                  suburb: row.suburb // Include suburb in the processed data
+                }))
+                .filter(item => 
+                  !isNaN(item.price) && 
+                  !isNaN(item.bedrooms) && 
+                  item.price > 0
+                )
+                .sort((a, b) => new Date(b.sold_date) - new Date(a.sold_date));
+
+              console.log('Processed sales data:', {
+                originalLength: results.data.length,
+                filteredLength: processedData.length,
+                sample: processedData.slice(0, 3),
+                suburb,
+                uniqueSuburbs: [...new Set(processedData.map(item => item.suburb))]
+              });
+
+              setSalesData(processedData);
+            },
+            error: (error) => {
+              console.error('CSV parsing error:', error);
+              setSalesData([]);
+            }
+          });
+        } catch (error) {
+          console.error('Error fetching CSV:', error);
+          setSalesData([]);
+        }
+      };
+
+      fetchSalesData();
+    } else {
+      console.log('No suburb data available:', {
+        properties: selectedFeature?.properties,
+        copiedFrom: selectedFeature?.properties?.copiedFrom,
+        suburb: selectedFeature?.properties?.copiedFrom?.site_suitability__suburb
+      });
+    }
+  }, [selectedFeature?.properties?.copiedFrom?.site_suitability__suburb]);
 
   const addLog = (message, type = 'default') => {
     const timestamp = new Date().toLocaleTimeString();
@@ -292,6 +431,87 @@ const ReportGenerator = ({ selectedFeature }) => {
     clearServiceCache();
     
     try {
+      // Fetch fresh sales data before generating report
+      let currentSalesData = [];
+      if (selectedFeature?.properties?.copiedFrom?.site_suitability__suburb) {
+        const suburb = selectedFeature.properties.copiedFrom.site_suitability__suburb.toUpperCase();
+        console.log('Attempting to fetch sales data for:', {
+          suburb,
+          rawSuburb: selectedFeature.properties.copiedFrom.site_suitability__suburb,
+          fullProperties: selectedFeature.properties.copiedFrom
+        });
+
+        try {
+          const response = await fetch('/nsw_property_sales.csv');
+          const csvText = await response.text();
+          
+          await new Promise((resolve, reject) => {
+            Papa.parse(csvText, {
+              header: true,
+              complete: (results) => {
+                console.log('CSV parsing complete for report generation:', {
+                  totalRows: results.data.length,
+                  headers: results.meta.fields
+                });
+
+                // Filter for matching suburb and property_type
+                currentSalesData = results.data
+                  .filter(row => 
+                    row.suburb?.toUpperCase() === suburb && 
+                    row.price && row.bedrooms
+                  )
+                  .map(row => ({
+                    price: parseFloat(row.price),
+                    bedrooms: parseInt(row.bedrooms),
+                    bathrooms: parseInt(row.bathrooms) || 0,
+                    parking: parseInt(row.parking) || 0,
+                    address: row.address || 'Address not provided',
+                    property_type: row.property_type || 'Apartment',
+                    sold_date: row.sold_date || 'Date not provided'
+                  }))
+                  .filter(item => 
+                    !isNaN(item.price) && 
+                    !isNaN(item.bedrooms) && 
+                    item.price > 0
+                  )
+                  .sort((a, b) => new Date(b.sold_date) - new Date(a.sold_date));
+
+                console.log('Processed sales data for report:', {
+                  originalLength: results.data.length,
+                  filteredLength: currentSalesData.length,
+                  sample: currentSalesData.slice(0, 3),
+                  suburb
+                });
+
+                resolve();
+              },
+              error: (error) => {
+                console.error('CSV parsing error during report generation:', error);
+                reject(error);
+              }
+            });
+          });
+        } catch (error) {
+          console.error('Error fetching CSV during report generation:', error);
+          currentSalesData = [];
+        }
+      }
+
+      // Verify the sales data before proceeding
+      console.log('Final sales data check before report generation:', {
+        hasData: currentSalesData.length > 0,
+        length: currentSalesData.length,
+        sample: currentSalesData.slice(0, 3),
+        suburb: selectedFeature.properties.copiedFrom?.site_suitability__suburb
+      });
+
+      console.log('Starting report generation with:', {
+        suburb: selectedFeature.properties.site__suburb,
+        salesData: currentSalesData,
+        salesDataLength: currentSalesData.length,
+        feasibilitySettings
+      });
+
       const screenshots = {};
       const failed = [];
       
@@ -309,7 +529,7 @@ const ReportGenerator = ({ selectedFeature }) => {
         }
       }
       
-      if (selectedSlides.snapshot) {
+      if (selectedSlides.propertySnapshot) {
         addLog('Capturing aerial and snapshot images...', 'image');
         try {
           screenshots.aerialScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.AERIAL);
@@ -329,7 +549,7 @@ const ReportGenerator = ({ selectedFeature }) => {
         screenshots.hobScreenshot = await captureMapScreenshot(selectedFeature, SCREENSHOT_TYPES.HOB, true, developableArea, showDevelopableArea);
       }
       
-      if (selectedSlides.primaryAttributes) {
+      if (selectedSlides.primarySiteAttributes) {
         screenshots.compositeMapScreenshot = await capturePrimarySiteAttributesMap(selectedFeature, developableArea, showDevelopableArea);
       }
       
@@ -404,14 +624,32 @@ const ReportGenerator = ({ selectedFeature }) => {
       });
 
       const propertyData = {
-        ...selectedFeature.properties.copiedFrom,
+        ...selectedFeature.properties,
+        copiedFrom: selectedFeature.properties.copiedFrom,
         reportDate,
         selectedSlides,
+        site_suitability__principal_zone_identifier: selectedFeature.properties.copiedFrom?.site_suitability__principal_zone_identifier,
+        site_suitability__area: selectedFeature.properties.copiedFrom?.site_suitability__area,  
+        site_suitability__site_width: selectedFeature.properties.copiedFrom?.site_suitability__site_width,
+        site__related_lot_references: selectedFeature.properties.copiedFrom?.site__related_lot_references,
+        site_suitability__public_transport_access_level_AM: selectedFeature.properties.copiedFrom?.site_suitability__public_transport_access_level_AM,
+        site_suitability__current_government_land_use: selectedFeature.properties.copiedFrom?.site_suitability__current_government_land_use,
+        site_suitability__floorspace_ratio: selectedFeature.properties.copiedFrom?.site_suitability__floorspace_ratio,  
+        site_suitability__height_of_building: selectedFeature.properties.copiedFrom?.site_suitability__height_of_building,
+        site_suitability__NSW_government_agency: selectedFeature.properties.copiedFrom?.site_suitability__NSW_government_agency,
+        site_suitability__landzone: selectedFeature.properties.copiedFrom?.site_suitability__landzone,
         site__geometry: selectedFeature.geometry.coordinates[0],
+        site__address: selectedFeature.properties.copiedFrom?.site__address || 'Unnamed Location',
+        site__property_id: selectedFeature.properties.copiedFrom?.site__property_id,
+        site_suitability__LGA: selectedFeature.properties.copiedFrom?.site_suitability__LGA,
+        site_suitability__electorate: selectedFeature.properties.copiedFrom?.site_suitability__electorate,
+        site_suitability__suburb: selectedFeature.properties.copiedFrom?.site_suitability__suburb?.toUpperCase(),
         developableArea: developableArea?.features || null,
         showDevelopableArea,
         scores: {}, // Initialize empty scores object that will be populated by each slide
         screenshot: screenshots.coverScreenshot,
+        feasibilitySettings,
+        salesData: currentSalesData,  // Use the freshly fetched sales data
         ...screenshots,
         // Include any features stored during screenshot capture
         ...Object.fromEntries(
@@ -431,8 +669,8 @@ const ReportGenerator = ({ selectedFeature }) => {
         // Create an array of selected slide steps in order
         const selectedSteps = [
           ...(selectedSlides.cover ? ['cover'] : []),
-          ...(selectedSlides.snapshot ? ['snapshot'] : []),
-          ...(selectedSlides.primaryAttributes ? ['primaryAttributes'] : []),
+          ...(selectedSlides.propertySnapshot ? ['propertySnapshot'] : []),
+          ...(selectedSlides.primarySiteAttributes ? ['primarySiteAttributes'] : []),
           ...(selectedSlides.secondaryAttributes ? ['secondaryAttributes'] : []),
           ...(selectedSlides.planning ? ['planning'] : []),
           ...(selectedSlides.planningTwo ? ['planningTwo'] : []),
@@ -444,7 +682,9 @@ const ReportGenerator = ({ selectedFeature }) => {
           ...(selectedSlides.contamination ? ['contamination'] : []),
           ...(selectedSlides.scoring ? ['scoring'] : []),
           ...(selectedSlides.context ? ['context'] : []),
-          ...(selectedSlides.permissibility ? ['permissibility'] : [])
+          ...(selectedSlides.permissibility ? ['permissibility'] : []),
+          ...(selectedSlides.development ? ['development'] : []),
+          ...(selectedSlides.feasibility ? ['feasibility'] : [])
         ];
 
         if (selectedSteps.length === 0) return;
@@ -595,27 +835,88 @@ const ReportGenerator = ({ selectedFeature }) => {
     return logs[logs.length - 1] || null;
   };
 
+  const handleFeasibilitySettingChange = (setting, value, density) => {
+    setFeasibilitySettings(prev => ({
+      ...prev,
+      [density]: {
+        ...prev[density],
+        [setting]: value
+      }
+    }));
+  };
+
   return (
     <div className="h-full overflow-auto">
-      <div className="p-4">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold">Desktop Due Diligence PowerPoint Report Generator (WIP)</h2>
+      <div className="p-4 relative z-50">
+        <div className="grid grid-cols-4 gap-4 mb-6 relative">
+          <button
+            className="px-4 py-2.5 rounded-xl text-gray-900 font-medium bg-white border-2 border-blue-600 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
+            onClick={(e) => {
+              console.log('How to use button clicked');
+              e.preventDefault();
+              e.stopPropagation();
+              setShowHowTo(prev => {
+                console.log('Setting showHowTo to:', !prev);
+                return !prev;
+              });
+            }}
+          >
+            <HelpCircle className="w-5 h-5 text-blue-600" />
+            How to use
+          </button>
           
-          <div className="flex gap-2">
-            <button
-              className="px-4 py-2 rounded text-white font-medium bg-blue-600 hover:bg-blue-700 transition-colors"
-              onClick={() => setShowHowTo(true)}
-            >
-              How to use
-            </button>
-            
-            <button
-              className="px-4 py-2 rounded text-white font-medium bg-yellow-600 hover:bg-yellow-700 transition-colors flex items-center gap-2"
-              onClick={() => setShowLeaderboard(true)}
-            >
-              <Trophy className="w-4 h-4" />
-              Leaderboard
-            </button>
+          <button
+            className="px-4 py-2.5 rounded-xl text-gray-900 font-medium bg-white border-2 border-blue-600 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
+            onClick={(e) => {
+              console.log('Leaderboard button clicked');
+              e.preventDefault();
+              e.stopPropagation();
+              setShowLeaderboard(prev => {
+                console.log('Setting showLeaderboard to:', !prev);
+                return !prev;
+              });
+            }}
+          >
+            <Trophy className="w-5 h-5 text-yellow-500" />
+            Leaderboard
+          </button>
+
+          <button
+            onClick={(e) => {
+              console.log('View Issues button clicked');
+              e.preventDefault();
+              e.stopPropagation();
+              setShowIssuesList(prev => {
+                console.log('Setting showIssuesList to:', !prev);
+                return !prev;
+              });
+            }}
+            className="px-4 py-2.5 rounded-xl text-gray-900 font-medium bg-white border-2 border-blue-600 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
+          >
+            <AlertCircle className="w-5 h-5 text-blue-600" />
+            View Issues
+          </button>
+
+          <button
+            onClick={(e) => {
+              console.log('Log Issue button clicked');
+              e.preventDefault();
+              e.stopPropagation();
+              setIsIssueModalOpen(prev => {
+                console.log('Setting isIssueModalOpen to:', !prev);
+                return !prev;
+              });
+            }}
+            className="px-4 py-2.5 rounded-xl text-gray-900 font-medium bg-white border-2 border-blue-600 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
+          >
+            <AlertCircle className="w-5 h-5 text-red-600" />
+            Log Issue
+          </button>
+        </div>
+
+        <div className="mb-4">
+          <div className="flex justify-between items-center">
+            <h2 className="text-xl font-semibold">Desktop Due Diligence PowerPoint Report Generator (WIP)</h2>
           </div>
         </div>
         
@@ -685,35 +986,72 @@ const ReportGenerator = ({ selectedFeature }) => {
           <div className="space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {slideOptions.map((option) => {
-                const isActive = currentStep === option.id;
                 const isCompleted = completedSteps.includes(option.id);
+                const isActive = currentStep === option.id;
                 const Icon = option.icon;
-                
+                const isDisabled = option.id === 'feasibility' && !selectedSlides.development;
+
                 return (
-                  <div 
-                    key={option.id} 
+                  <div
+                    key={option.id}
                     className={`
-                      slide-card relative p-2.5 rounded-lg border-2 transition-all duration-200
-                      ${isGenerating && !selectedSlides[option.id] ? 'opacity-50' : ''}
-                      ${isCompleted ? 'slide-card-completed border-green-200 bg-green-50' : 'border-gray-200 hover:border-blue-400'}
+                      relative p-4 rounded-lg border transition-all
                       ${isActive ? 'slide-card-active border-blue-400 shadow-lg' : ''}
-                      hover:shadow-md cursor-pointer
+                      ${isDisabled ? 'opacity-50 cursor-not-allowed group' : 'hover:shadow-md cursor-pointer'}
                     `}
                     onClick={() => {
-                      if (!isGenerating) {
-                        setSelectedSlides(prev => ({
-                          ...prev,
-                          [option.id]: !prev[option.id]
-                        }));
+                      if (!isGenerating && !isDisabled) {
+                        if (option.id === 'feasibility') {
+                          // When selecting feasibility, ensure development is also selected
+                          setSelectedSlides(prev => ({
+                            ...prev,
+                            development: true,
+                            feasibility: !prev.feasibility
+                          }));
+                        } else if (option.id === 'development' && selectedSlides.feasibility) {
+                          // If development is being deselected and feasibility is selected,
+                          // also deselect feasibility
+                          setSelectedSlides(prev => ({
+                            ...prev,
+                            development: false,
+                            feasibility: false
+                          }));
+                        } else {
+                          setSelectedSlides(prev => ({
+                            ...prev,
+                            [option.id]: !prev[option.id]
+                          }));
+                        }
                       }
                     }}
                   >
                     <div className="flex items-start justify-between mb-1.5">
                       <div className={`slide-icon p-1.5 rounded-lg ${isCompleted ? 'bg-green-100' : 'bg-gray-100'}`}>
-                        <Icon 
-                          className={`w-4 h-4 ${isCompleted ? 'text-green-600' : 'text-gray-600'}`} 
-                          strokeWidth={1.5} 
-                        />
+                        {option.id === 'feasibility' ? (
+                          <div className="flex items-center space-x-2">
+                            <Calculator 
+                              className={`w-4 h-4 ${isCompleted ? 'text-green-600' : 'text-gray-600'}`} 
+                              strokeWidth={1.5} 
+                            />
+                            <span className="px-1.5 py-0.5 text-[10px] bg-blue-100 text-blue-800 rounded">Beta</span>
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setShowFeasibilitySettings(true);
+                              }}
+                              className="flex items-center space-x-1 px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors"
+                            >
+                              <Settings2 className="w-3 h-3" />
+                              <span>Settings</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <Icon 
+                            className={`w-4 h-4 ${isCompleted ? 'text-green-600' : 'text-gray-600'}`} 
+                            strokeWidth={1.5} 
+                          />
+                        )}
                       </div>
                       <input
                         type="checkbox"
@@ -747,6 +1085,12 @@ const ReportGenerator = ({ selectedFeature }) => {
                       </div>
                     )}
 
+                    {isDisabled && (
+                      <div className="absolute invisible group-hover:visible bg-gray-900 text-white text-xs rounded py-1 px-2 -top-12 left-1/2 transform -translate-x-1/2 w-64 text-center after:content-[''] after:absolute after:top-full after:left-1/2 after:-translate-x-1/2 after:border-4 after:border-transparent after:border-t-gray-900">
+                        In order to generate feasibility slide, please select the development slide as the feasibility slide requires data to be passed from the development slide.
+                      </div>
+                    )}
+
                     {isActive && (
                       <div 
                         className="absolute inset-0 border-2 border-blue-400 rounded-lg animate-pulse pointer-events-none"
@@ -758,192 +1102,173 @@ const ReportGenerator = ({ selectedFeature }) => {
               })}
             </div>
 
-            <div className="flex gap-4">
-              <motion.div
-                className={`${isGenerating ? 'w-3/4' : 'w-full'}`}
-                layout
+            <div className="mt-6">
+              <button
+                onClick={generatePropertyReport}
+                disabled={isGenerating || !selectedFeature || Object.values(selectedSlides).every(v => !v)}
+                className={`
+                  w-full px-4 py-3 rounded-lg font-medium
+                  ${isGenerating || !selectedFeature || Object.values(selectedSlides).every(v => !v)
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'}
+                  flex items-center justify-center gap-2 transition-colors
+                `}
               >
-                <motion.button
-                  onClick={generatePropertyReport}
-                  disabled={!selectedFeature || isGenerating}
-                  className={`w-full px-4 py-3 rounded text-white font-medium relative overflow-hidden
-                    ${!selectedFeature || isGenerating 
-                      ? 'bg-gray-400' 
-                      : 'bg-blue-600 hover:bg-blue-700'
-                    } transition-all`}
-                >
-                  {isGenerating ? (
-                    <motion.div 
-                      className="flex items-center justify-center gap-3"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                    >
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <AnimatePresence mode="wait">
-                        <motion.span
-                          key={getLatestLog(generationLogs)?.id}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -10 }}
-                          className="text-sm"
-                        >
-                          {getLatestLog(generationLogs)?.message || 'Initializing...'}
-                        </motion.span>
-                      </AnimatePresence>
-                    </motion.div>
-                  ) : (
-                    'Generate Report'
-                  )}
-                </motion.button>
-              </motion.div>
-
-              {isGenerating && (
-                <motion.button
-                  initial={{ scale: 0.9, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  onClick={handleCancelGeneration}
-                  disabled={isCancelling}
-                  className="w-1/4 px-4 py-2 rounded text-white font-medium bg-red-600 hover:bg-red-700 flex items-center justify-center gap-2 transition-colors"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                  </svg>
-                  Cancel
-                </motion.button>
-              )}
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Generating Report...
+                  </>
+                ) : (
+                  <>
+                    <Calculator className="w-5 h-5" />
+                    Generate Report
+                  </>
+                )}
+              </button>
             </div>
-
-            {!isGenerating && status === 'success' && (
-              <div className="text-green-600 success-message">Report generated successfully</div>
-            )}
-            
-            {!isGenerating && status === 'error' && (
-              <div className="text-red-600">Error generating report</div>
-            )}
-
-            {!isGenerating && status === 'cancelled' && (
-              <div className="text-yellow-600">Report generation cancelled</div>
-            )}
           </div>
         </div>
       </div>
 
-      {showHowTo && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.2 }}
-            className="w-[80%] max-h-[90vh] rounded-xl border-2 border-blue-600 bg-white shadow-xl relative flex flex-col"
-          >
-            <div className="sticky top-0 z-10 bg-white p-6 border-b border-gray-200">
-              <div className="flex justify-between items-center">
-                <motion.h3 
-                  initial={{ x: -20, opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  className="text-2xl font-semibold text-gray-900"
-                >
-                  How to Generate a Report
-                </motion.h3>
-                <button 
-                  onClick={() => setShowHowTo(false)}
-                  className="rounded-full p-2 hover:bg-gray-100 transition-colors"
-                >
-                  <svg width="20" height="20" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12.8536 2.85355C13.0488 2.65829 13.0488 2.34171 12.8536 2.14645C12.6583 1.95118 12.3417 1.95118 12.1464 2.14645L7.5 6.79289L2.85355 2.14645C2.65829 1.95118 2.34171 1.95118 2.14645 2.14645C1.95118 2.34171 1.95118 2.65829 2.14645 2.85355L6.79289 7.5L2.14645 12.1464C1.95118 12.3417 1.95118 12.6583 2.14645 12.8536C2.34171 13.0488 2.65829 13.0488 2.85355 12.8536L7.5 8.20711L12.1464 12.8536C12.3417 13.0488 12.6583 13.0488 12.8536 12.8536C13.0488 12.6583 13.0488 12.3417 12.8536 12.1464L8.20711 7.5L12.8536 2.85355Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-8">
-              <div className="space-y-6">
-                {[
-                  {
-                    step: 1,
-                    title: "Disable VPN",
-                    content: "Temporarily turn off Harmony / VPN."
-                  },
-                  {
-                    step: 2,
-                    title: "Search Property",
-                    content: "Use Land iQ Site Search to identify the property of interest."
-                  },
-                  {
-                    step: 3,
-                    title: "Generate Shortlist",
-                    content: "In Site Search, select the property and generate a shortlist using that selection."
-                  },
-                  {
-                    step: 4,
-                    title: "Activate Drawing Layer",
-                    content: "Left-click on the 'Site Boundary' drawing layer to activate it."
-                  },
-                  {
-                    step: 5,
-                    title: "Create Property Boundary",
-                    content: "Right click on the property on the map and wait until you see the shortlist appear and your property highlighted - then hover over the little arrow and click 'Create'."
-                  },
-                  {
-                    step: 6,
-                    title: "Complete Property Coverage",
-                    content: "If it didn't create a polygon that covers the whole property, click on the part that was added first and then right click along the boundary of any missing parts of the property and select 'Merge'. Do this until the complete property is covered. Once complete, on the left panel change the usage to be 'Site Boundary'."
-                  },
-                  {
-                    step: 7,
-                    title: "Add Developable Area (Optional)",
-                    content: "If you want to include a developable area, left-click on the 'Developable Area' drawing layer on the left panel and use Giraffe's drawing tools to draw the boundary. Once complete, on the left panel change the usage to be 'Developable Area'."
-                  },
-                  {
-                    step: 8,
-                    title: "Select Area Type",
-                    content: "On the right panel, select the developable area to use (just the Site Boundary or the Developable Area you've just drawn)."
-                  },
-                  {
-                    step: 9,
-                    title: "Configure Visibility",
-                    content: "Confirm in the check-box if you want to show the developable area as a blue-dash line or not in the report (uncheck this if you have selected to just use the Site Boundary and not a separate Developable Area)."
-                  },
-                  {
-                    step: 10,
-                    title: "Review and Generate",
-                    content: "A preview will load of the cover slide and if everything looks good to go, select the slides you want (default is all slides) and click on the blue 'Generate Report' button."
-                  },
-                  {
-                    step: 11,
-                    title: "Wait for Generation",
-                    content: "Report will generate and for a full report should take approximately 4 minutes to produce. If any of the slides fail or you would like to produce a sub-set of the full report you can check the appropriate slides and select Generate Report again as needed."
-                  }
-                ].map((item, index) => (
-                  <motion.div
-                    key={item.step}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.1 }}
-                    className="relative pl-12 pr-4"
-                  >
-                    <div className="absolute left-0 top-0 flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 font-semibold">
-                      {item.step}
-                    </div>
-                    <div>
-                      <h4 className="text-lg font-medium text-gray-900 mb-2">{item.title}</h4>
-                      <p className="text-gray-600 leading-relaxed">{item.content}</p>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      )}
-
-      {showLeaderboard && (
+      {/* Modal Portal Container */}
+      <div className="relative z-[9999]">
         <Leaderboard 
           isOpen={showLeaderboard} 
           onClose={() => setShowLeaderboard(false)} 
         />
-      )}
+
+        <IssueModal 
+          isOpen={isIssueModalOpen} 
+          onClose={() => setIsIssueModalOpen(false)} 
+        />
+
+        <IssuesList 
+          isOpen={showIssuesList} 
+          onClose={() => setShowIssuesList(false)} 
+        />
+
+        <FeasibilityManager
+          settings={feasibilitySettings}
+          onSettingChange={handleFeasibilitySettingChange}
+          salesData={salesData}
+          open={showFeasibilitySettings}
+          onClose={() => setShowFeasibilitySettings(false)}
+          selectedFeature={selectedFeature ? {
+            ...selectedFeature,
+            properties: {
+              ...selectedFeature.properties,
+              copiedFrom: selectedFeature.properties.copiedFrom,
+              site__address: selectedFeature.properties.copiedFrom?.site__address,
+              site_suitability__LGA: selectedFeature.properties.copiedFrom?.site_suitability__LGA,
+              site_suitability__suburb: selectedFeature.properties.copiedFrom?.site_suitability__suburb
+            }
+          } : null}
+        />
+
+        {/* How To Use Modal */}
+        {showHowTo && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col"
+            >
+              <div className="flex items-center justify-between p-4 border-b">
+                <div className="flex items-center">
+                  <HelpCircle className="w-6 h-6 mr-2" />
+                  <h2 className="text-xl font-semibold">How to Use the Report Generator</h2>
+                </div>
+                <button 
+                  onClick={() => setShowHowTo(false)}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-8">
+                <div className="space-y-6">
+                  {[
+                    {
+                      step: 1,
+                      title: "Disable VPN",
+                      content: "Temporarily turn off Harmony / VPN."
+                    },
+                    {
+                      step: 2,
+                      title: "Search Property",
+                      content: "Use Land iQ Site Search to identify the property of interest."
+                    },
+                    {
+                      step: 3,
+                      title: "Generate Shortlist",
+                      content: "In Site Search, select the property and generate a shortlist using that selection."
+                    },
+                    {
+                      step: 4,
+                      title: "Activate Drawing Layer",
+                      content: "Left-click on the 'Site Boundary' drawing layer to activate it."
+                    },
+                    {
+                      step: 5,
+                      title: "Create Property Boundary",
+                      content: "Right click on the property on the map and wait until you see the shortlist appear and your property highlighted - then hover over the little arrow and click 'Create'."
+                    },
+                    {
+                      step: 6,
+                      title: "Complete Property Coverage",
+                      content: "If it didn't create a polygon that covers the whole property, click on the part that was added first and then right click along the boundary of any missing parts of the property and select 'Merge'. Do this until the complete property is covered. Once complete, on the left panel change the usage to be 'Site Boundary'."
+                    },
+                    {
+                      step: 7,
+                      title: "Add Developable Area (Optional)",
+                      content: "If you want to include a developable area, left-click on the 'Developable Area' drawing layer on the left panel and use Giraffe's drawing tools to draw the boundary. Once complete, on the left panel change the usage to be 'Developable Area'."
+                    },
+                    {
+                      step: 8,
+                      title: "Select Area Type",
+                      content: "On the right panel, select the developable area to use (just the Site Boundary or the Developable Area you've just drawn)."
+                    },
+                    {
+                      step: 9,
+                      title: "Configure Visibility",
+                      content: "Confirm in the check-box if you want to show the developable area as a blue-dash line or not in the report (uncheck this if you have selected to just use the Site Boundary and not a separate Developable Area)."
+                    },
+                    {
+                      step: 10,
+                      title: "Review and Generate",
+                      content: "A preview will load of the cover slide and if everything looks good to go, select the slides you want (default is all slides) and click on the blue 'Generate Report' button."
+                    },
+                    {
+                      step: 11,
+                      title: "Wait for Generation",
+                      content: "Report will generate and for a full report should take approximately 4 minutes to produce. If any of the slides fail or you would like to produce a sub-set of the full report you can check the appropriate slides and select Generate Report again as needed."
+                    }
+                  ].map((item, index) => (
+                    <motion.div
+                      key={item.step}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                      className="relative pl-12 pr-4"
+                    >
+                      <div className="absolute left-0 top-0 flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 font-semibold">
+                        {item.step}
+                      </div>
+                      <div>
+                        <h4 className="text-lg font-medium text-gray-900 mb-2">{item.title}</h4>
+                        <p className="text-gray-600 leading-relaxed">{item.content}</p>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
