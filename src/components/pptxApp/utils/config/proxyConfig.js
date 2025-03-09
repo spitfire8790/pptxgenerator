@@ -9,6 +9,7 @@ export const PROXY_CONFIG = {
     'www.lmbc.nsw.gov.au',
     'mapuat3.environment.nsw.gov.au',
     'spatial.industry.nsw.gov.au',
-    'sims.spatial.nsw.gov.au'
+    'sims.spatial.nsw.gov.au',
+    'spatialportalarcgis.dpie.nsw.gov.au'
   ]
 };

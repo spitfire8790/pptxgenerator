@@ -1,5 +1,6 @@
 import { convertCmValues } from '../utils/units';
 import { getAllPermissibleHousingTypes } from '../utils/lmrPermissibility';
+import { formatAddresses } from '../utils/addressFormatting';
 
 export async function addPermissibilitySlide(pptx, properties) {
   console.log('Permissibility slide data:', {
@@ -58,7 +59,7 @@ export async function addPermissibilitySlide(pptx, properties) {
     
     // Create a slide for this zone
     // Pass the index and total count for page numbering and slide titles
-    const slide = await createZoneSlide(pptx, properties, zoneIdentifier, i, uniqueZones.length);
+    const slide = await createZoneSlide(pptx, properties, zoneIdentifier, i, uniqueZones.length, isMultipleProperties);
     slides.push(slide);
   }
   
@@ -67,7 +68,7 @@ export async function addPermissibilitySlide(pptx, properties) {
 
 // Helper function to create a slide for a specific zone
 // This allows us to reuse the existing slide creation logic for each zone
-async function createZoneSlide(pptx, properties, zoneIdentifier, index, totalZones) {
+async function createZoneSlide(pptx, properties, zoneIdentifier, index, totalZones, isMultipleProperties) {
   let slide;
   try {
     console.log(`Starting to add permissibility slide for zone: ${zoneIdentifier}`);
@@ -429,11 +430,14 @@ async function createZoneSlide(pptx, properties, zoneIdentifier, index, totalZon
         return String(text);
       };
 
-      // Check Low Medium Rise (LMR) housing area status
-      let lmrStatus = 'Checking...';
-      let isInLMRArea = properties.isInLMRArea || false; // Get LMR status from properties
-
-      // Set the LMR status based on the stored value
+      // Check LMR overlap status - completely disabled
+      // let lmrStatus = 'Checking...';
+      // Force LMR status to false regardless of the stored value
+      let isInLMRArea = false; // Temporarily disable LMR functionality
+      properties.isInLMRArea = false; // Override the property value
+      
+      /* Completely disable LMR functionality
+      // Set the LMR status based on the stored value (now always false)
       if (isInLMRArea) {
         lmrStatus = '✓ Property is located within a Low Medium Rise (LMR) housing area. Additional development controls apply.';
       } else {
@@ -447,6 +451,7 @@ async function createZoneSlide(pptx, properties, zoneIdentifier, index, totalZon
         lmrDevelopmentOptions = await getAllPermissibleHousingTypes(properties);
         console.log('LMR development options:', lmrDevelopmentOptions);
       }
+      */
 
       // Helper function to format items with commas and proper styling
       const formatItemsAsText = (items) => {
@@ -629,6 +634,8 @@ async function createZoneSlide(pptx, properties, zoneIdentifier, index, totalZon
       ];
 
       // Only add LMR-related rows if the LMR status has been determined in the access slide
+      // Commented out per request to completely remove LMR references from the table
+      /*
       if (typeof properties.isInLMRArea !== 'undefined') {
         // Add LMR status row
         combinedTableRows.push([
@@ -682,6 +689,7 @@ async function createZoneSlide(pptx, properties, zoneIdentifier, index, totalZon
           }
         ]);
       }
+      */
 
       // Add the combined table
       slide.addTable(combinedTableRows, {
@@ -689,7 +697,7 @@ async function createZoneSlide(pptx, properties, zoneIdentifier, index, totalZon
           x: '5%',
           y: '18%',
           w: '90%',
-          h: properties.isInLMRArea ? '45%' : '70%'
+          h: '70%'  // Always use 70% since LMR is removed
         }),
         colW: [2.2, 9.8],
         rowH: 0.4,
@@ -708,6 +716,8 @@ async function createZoneSlide(pptx, properties, zoneIdentifier, index, totalZon
 
       // If property is in LMR area, add the LMR development options table on a new slide
       if (properties.isInLMRArea) {
+        // Temporarily disabled LMR slide creation
+        /*
         try {
           // Check again if we have permissible options
           const permissibleOptions = await getAllPermissibleHousingTypes(properties);
@@ -1214,11 +1224,16 @@ async function createZoneSlide(pptx, properties, zoneIdentifier, index, totalZon
         } catch (lmrOptionsError) {
           console.error('Error adding LMR options table:', lmrOptionsError);
         }
+        */
       }
 
       // Add title
       slide.addText([
-        { text: properties.formatted_address || properties.site__address, options: { color: styles.title.color } },
+        { text: properties.formatted_address || 
+                (isMultipleProperties && properties.site__multiple_addresses ? 
+                formatAddresses(properties.site__multiple_addresses) : 
+                properties.site__address), 
+          options: { color: styles.title.color } },
         { text: ' ', options: { breakLine: true } },
         { text: `Permissible Uses${totalZones > 1 ? ` - Zone ${index + 1} of ${totalZones}: ${zoneIdentifier}` : ''}`, options: { color: styles.subtitle.color } }
       ], convertCmValues({
@@ -1246,7 +1261,8 @@ async function createZoneSlide(pptx, properties, zoneIdentifier, index, totalZon
       
       // Calculate page number based on index and whether LMR slide is included
       const basePageNumber = 15;
-      const pageOffset = index * (properties.isInLMRArea ? 2 : 1); // Each zone adds 1 or 2 pages
+      // Since LMR is disabled, each zone only adds 1 page
+      const pageOffset = index; // Each zone adds 1 page now (LMR slides disabled)
       slide.addText(`${basePageNumber + pageOffset}`, convertCmValues(styles.pageNumber));
 
       return slide;

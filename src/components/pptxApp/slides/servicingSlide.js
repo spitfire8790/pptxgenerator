@@ -1,6 +1,7 @@
 import { convertCmValues } from '../utils/units';
 import { captureWaterMainsMap, captureSewerMap, capturePowerMap } from '../utils/map/services/screenshot';
 import scoringCriteria from './scoringLogic';
+import { formatAddresses } from '../utils/addressFormatting';
 
 export async function addServicingSlide(pptx, propertyData) {
   let slide;
@@ -8,9 +9,21 @@ export async function addServicingSlide(pptx, propertyData) {
     console.log('Starting to add servicing slide...');
     slide = pptx.addSlide();
 
+    // Determine if we're dealing with multiple properties
+    const isMultipleProperties = propertyData.isMultipleProperties || 
+                               (propertyData.site__multiple_addresses && 
+                               Array.isArray(propertyData.site__multiple_addresses) && 
+                               propertyData.site__multiple_addresses.length > 1);
+    
+    // Use the pre-formatted address if available, otherwise fall back to the old logic
+    const addressText = propertyData.formatted_address || 
+                       (isMultipleProperties 
+                         ? formatAddresses(propertyData.site__multiple_addresses)
+                         : propertyData.site__address);
+
     // Add title
     slide.addText([
-      { text: propertyData.formatted_address || propertyData.site__address, options: { color: styles.title.color } },
+      { text: addressText, options: { color: styles.title.color } },
       { text: ' ', options: { breakLine: true } },
       { text: 'Servicing', options: { color: styles.subtitle.color } }
     ], convertCmValues(styles.title));

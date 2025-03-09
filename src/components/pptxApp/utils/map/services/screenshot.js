@@ -221,25 +221,34 @@ function drawFeatureBoundaries(ctx, feature, centerX, centerY, size, canvasWidth
     feature.features && 
     feature.features.length > 1;
   
+  let isVisible = false;
+  
   if (feature.type === 'FeatureCollection' && feature.features) {
     // Draw each feature in the collection separately
     feature.features.forEach((featureItem, index) => {
       if (featureItem.geometry?.coordinates?.[0]) {
         // Draw boundary for all features
-        drawBoundary(ctx, featureItem.geometry.coordinates[0], centerX, centerY, size, canvasWidth, {
+        const featureVisible = drawBoundary(ctx, featureItem.geometry.coordinates[0], centerX, centerY, size, canvasWidth, {
           strokeStyle: mergedOptions.strokeStyle,
-          lineWidth: mergedOptions.lineWidth
+          lineWidth: mergedOptions.lineWidth,
+          fillStyle: mergedOptions.fillStyle
         });
+        
+        // If any feature is visible, set isVisible to true
+        if (featureVisible) {
+          isVisible = true;
+        }
         
         // Add label on centroid ONLY if there are multiple features AND showLabels is true
         if (hasMultipleFeatures && mergedOptions.showLabels) {
           const label = String.fromCharCode(65 + index); // A=65, B=66, etc.
           try {
             const polygon = turf.polygon([featureItem.geometry.coordinates[0]]);
-            const centroid = turf.centroid(polygon);
+            // Use visual center instead of centroid for better label placement
+            const visualCenter = calculateVisualCenter(featureItem.geometry.coordinates[0]);
             
-            if (centroid && centroid.geometry && centroid.geometry.coordinates) {
-              const [lon, lat] = centroid.geometry.coordinates;
+            if (visualCenter && visualCenter.geometry && visualCenter.geometry.coordinates) {
+              const [lon, lat] = visualCenter.geometry.coordinates;
               const [mercX, mercY] = convertToWebMercator(lon, lat);
               const { centerMercX, centerMercY, sizeInMeters } = calculateMercatorParams(centerX, centerY, size);
               
@@ -264,18 +273,21 @@ function drawFeatureBoundaries(ctx, feature, centerX, centerY, size, canvasWidth
               ctx.fillText(label, x, y);
             }
           } catch (error) {
-            console.warn('Error adding centroid label:', error);
+            console.warn('Error adding visual center label:', error);
           }
         }
       }
     });
   } else if (feature.geometry?.coordinates?.[0]) {
     // Draw a single feature
-    drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, canvasWidth, {
+    isVisible = drawBoundary(ctx, feature.geometry.coordinates[0], centerX, centerY, size, canvasWidth, {
       strokeStyle: mergedOptions.strokeStyle,
-      lineWidth: mergedOptions.lineWidth
+      lineWidth: mergedOptions.lineWidth,
+      fillStyle: mergedOptions.fillStyle
     });
   }
+  
+  return isVisible;
 }
 
 export async function capturePrimarySiteAttributesMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
@@ -488,7 +500,7 @@ export async function capturePrimarySiteAttributesMap(feature, developableArea =
 
     // Always draw boundaries even if some layers fail
     drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width || config.size, {
-      showLabels: false
+      showLabels: !showDevelopableArea // Show property labels when developable area is hidden
     });
 
     if (developableArea?.features?.length > 0 && showDevelopableArea) {
@@ -2061,11 +2073,6 @@ export async function captureRoadsMap(feature, developableArea = null, showDevel
       lineWidth: 3  // Thicker line
     });
 
-    if (developableArea?.features?.length > 0 && showDevelopableArea) {
-      // Draw developable areas without labels
-      drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width, false);
-    }
-
     // Add legend with adjusted spacing and formatting
     const legendHeight = 500; // Reduced height to be more compact
     const legendWidth = 300; // Slightly reduced width
@@ -2488,45 +2495,73 @@ export async function captureBushfireMap(feature, developableArea = null, showDe
 }
 
 // Add helper function for drawing rounded rectangle text boxes
-function drawRoundedTextBox(ctx, text, x, y, padding = 10, cornerRadius = 5) {
-  // Offset the y position up by half the box height to center on point
-  const yOffset = -15; // Half of box height (30/2)
-  y = y + yOffset;
-
-  // Measure text width
-  const textMetrics = ctx.measureText(text);
-  const boxWidth = textMetrics.width + (padding * 2);
-  const boxHeight = 30; // Fixed height for consistency
+function drawRoundedTextBox(ctx, text, x, y, padding = 10, cornerRadius = 5, options = {}) {
+  const defaultOptions = {
+    backgroundFill: 'white',
+    borderColor: 'black',
+    textColor: 'black',
+    font: '16px Arial',
+    canvasWidth: 2048, // Default canvas size
+    canvasHeight: 2048
+  };
   
-  // Center the box horizontally on the point
-  x = x - (boxWidth / 2);
+  const mergedOptions = { ...defaultOptions, ...options };
+  
+  ctx.font = mergedOptions.font;
+  const textMetrics = ctx.measureText(text);
+  const textWidth = textMetrics.width;
+  const textHeight = parseInt(mergedOptions.font.split('px')[0]) * 1.2; // Approximate text height
+  
+  const boxWidth = textWidth + (padding * 2);
+  const boxHeight = textHeight + (padding * 2);
+  
+  // Adjust position to ensure the label is fully visible within canvas boundaries
+  let adjustedX = x;
+  let adjustedY = y;
+  
+  // Check horizontal boundaries
+  if (x - boxWidth/2 < 10) {
+    // Too close to left edge, move right
+    adjustedX = boxWidth/2 + 10;
+  } else if (x + boxWidth/2 > mergedOptions.canvasWidth - 10) {
+    // Too close to right edge, move left
+    adjustedX = mergedOptions.canvasWidth - boxWidth/2 - 10;
+  }
+  
+  // Check vertical boundaries
+  if (y - boxHeight/2 < 10) {
+    // Too close to top edge, move down
+    adjustedY = boxHeight/2 + 10;
+  } else if (y + boxHeight/2 > mergedOptions.canvasHeight - 10) {
+    // Too close to bottom edge, move up
+    adjustedY = mergedOptions.canvasHeight - boxHeight/2 - 10;
+  }
   
   // Draw rounded rectangle background
+  ctx.fillStyle = mergedOptions.backgroundFill;
   ctx.beginPath();
-  ctx.moveTo(x + cornerRadius, y);
-  ctx.lineTo(x + boxWidth - cornerRadius, y);
-  ctx.quadraticCurveTo(x + boxWidth, y, x + boxWidth, y + cornerRadius);
-  ctx.lineTo(x + boxWidth, y + boxHeight - cornerRadius);
-  ctx.quadraticCurveTo(x + boxWidth, y + boxHeight, x + boxWidth - cornerRadius, y + boxHeight);
-  ctx.lineTo(x + cornerRadius, y + boxHeight);
-  ctx.quadraticCurveTo(x, y + boxHeight, x, y + boxHeight - cornerRadius);
-  ctx.lineTo(x, y + cornerRadius);
-  ctx.quadraticCurveTo(x, y, x + cornerRadius, y);
+  ctx.moveTo(adjustedX - boxWidth/2 + cornerRadius, adjustedY - boxHeight/2);
+  ctx.lineTo(adjustedX + boxWidth/2 - cornerRadius, adjustedY - boxHeight/2);
+  ctx.quadraticCurveTo(adjustedX + boxWidth/2, adjustedY - boxHeight/2, adjustedX + boxWidth/2, adjustedY - boxHeight/2 + cornerRadius);
+  ctx.lineTo(adjustedX + boxWidth/2, adjustedY + boxHeight/2 - cornerRadius);
+  ctx.quadraticCurveTo(adjustedX + boxWidth/2, adjustedY + boxHeight/2, adjustedX + boxWidth/2 - cornerRadius, adjustedY + boxHeight/2);
+  ctx.lineTo(adjustedX - boxWidth/2 + cornerRadius, adjustedY + boxHeight/2);
+  ctx.quadraticCurveTo(adjustedX - boxWidth/2, adjustedY + boxHeight/2, adjustedX - boxWidth/2, adjustedY + boxHeight/2 - cornerRadius);
+  ctx.lineTo(adjustedX - boxWidth/2, adjustedY - boxHeight/2 + cornerRadius);
+  ctx.quadraticCurveTo(adjustedX - boxWidth/2, adjustedY - boxHeight/2, adjustedX - boxWidth/2 + cornerRadius, adjustedY - boxHeight/2);
   ctx.closePath();
-  
-  // Fill white background
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
   ctx.fill();
   
-  // Draw orange stroke
-  ctx.strokeStyle = 'rgba(255, 165, 0, 0.8)';
+  // Draw border
+  ctx.strokeStyle = mergedOptions.borderColor;
   ctx.lineWidth = 2;
   ctx.stroke();
   
   // Draw text
-  ctx.fillStyle = '#000000';
+  ctx.fillStyle = mergedOptions.textColor;
+  ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, x + padding, y + (boxHeight / 2));
+  ctx.fillText(text, adjustedX, adjustedY);
 }
 
 // Add helper function for bushfire legend
@@ -2565,282 +2600,212 @@ function drawBushfireLegend(ctx, canvasWidth, canvasHeight) {
   ctx.fillText('Bushfire Prone Land', legendX + 50, legendY + 48);
 }
 
-/**
- * Checks if a feature overlaps with LMR areas by directly querying the mapservers
- * @param {Object} feature - The GeoJSON feature to check
- * @returns {Promise<Object>} - Overlap information
- */
-export async function checkLMROverlap(feature) {
-  console.log('Checking LMR overlap for feature using direct mapserver query...');
-  
-  if (!feature || !feature.geometry) {
-    console.warn('Invalid feature for LMR overlap check:', feature);
-    return { hasOverlap: false, overlaps: {}, primaryOverlap: null };
-  }
+// Helper function to check if a property overlaps with LMR areas by directly querying the LMR layers
+export async function checkLMROverlap(feature, centerX, centerY, size) {
+  console.log('Checking LMR overlap for feature using direct query...');
   
   try {
-    // Define the LMR layers to check with their respective mapserver details
+    // Create a temporary canvas for checking overlaps
+    const canvas = createCanvas(2048, 2048);
+    const ctx = canvas.getContext('2d');
+    
+    // Define the LMR layers to check
     const lmrLayers = [
-      { 
-        id: 4, 
-        name: 'Indicative LMR Housing Area',
-        url: 'https://spatialportalarcgis.dpie.nsw.gov.au/sarcgis/rest/services/LMR/LMR/MapServer'
-      },
-      { 
-        id: 2, 
-        name: 'TOD Accelerated Rezoning Area',
-        url: 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/SEPP_Housing_2021/MapServer'
-      },
-      { 
-        id: 3, 
-        name: 'TOD Area',
-        url: 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/SEPP_Housing_2021/MapServer'
-      }
+      { id: 4, name: 'Indicative LMR Housing Area' },
+      { id: 2, name: 'TOD Accelerated Rezoning Area' },
+      { id: 3, name: 'TOD Area' }
     ];
     
-    // Convert feature to ESRI JSON format for the query
-    const esriGeometry = featureToEsriGeometry(feature);
-    if (!esriGeometry) {
-      console.warn('Failed to convert feature to ESRI geometry');
-      return { hasOverlap: false, overlaps: {}, primaryOverlap: null };
-    }
-    
-    // Track overlap results for each layer
-    const results = {
-      hasOverlap: false,
-      overlaps: {},
-      primaryOverlap: null,
-      featureCounts: {}
+    // Define the LMR area colors to check for
+    const lmrColors = {
+      'Indicative LMR Housing Area': [239, 216, 175], // rgb(239, 216, 175)
+      'TOD Accelerated Rezoning Area': [182, 154, 177], // rgb(182, 154, 177)
+      'TOD Area': [208, 181, 204] // rgb(208, 181, 204)
     };
     
-    // Initialize overlap status for each layer
-    lmrLayers.forEach(layer => {
-      results.overlaps[layer.name] = false;
-      results.featureCounts[layer.name] = 0;
+    // Convert feature coordinates to canvas coordinates
+    const coordinates = feature.geometry.coordinates[0];
+    const canvasCoords = coordinates.map(coord => {
+      const x = ((coord[0] - (centerX - size/2)) / size) * canvas.width;
+      const y = canvas.height - ((coord[1] - (centerY - size/2)) / size) * canvas.height;
+      return [x, y];
     });
     
-    // Query each LMR layer for intersection
-    const queryPromises = lmrLayers.map(async layer => {
-      try {
-        console.log(`Querying ${layer.name} (Layer ID: ${layer.id}) for overlap...`);
+    // Draw the property boundary as a filled shape
+    ctx.beginPath();
+    canvasCoords.forEach((coord, i) => {
+      if (i === 0) ctx.moveTo(coord[0], coord[1]);
+      else ctx.lineTo(coord[0], coord[1]);
+    });
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(255, 255, 255, 1)';
+    ctx.fill();
+    
+    // Get the bounding box of the property
+    const bounds = canvasCoords.reduce((acc, coord) => ({
+      minX: Math.min(acc.minX, coord[0]),
+      minY: Math.min(acc.minY, coord[1]),
+      maxX: Math.max(acc.maxX, coord[0]),
+      maxY: Math.max(acc.maxY, coord[1])
+    }), {
+      minX: Infinity,
+      minY: Infinity,
+      maxX: -Infinity,
+      maxY: -Infinity
+    });
+    
+    // Add a small buffer to ensure we check pixels that might be on the edge
+    const buffer = 5;
+    const minX = Math.max(0, Math.floor(bounds.minX) - buffer);
+    const minY = Math.max(0, Math.floor(bounds.minY) - buffer);
+    const maxX = Math.min(canvas.width, Math.ceil(bounds.maxX) + buffer);
+    const maxY = Math.min(canvas.height, Math.ceil(bounds.maxY) + buffer);
+    
+    // Load and draw the LMR layer
+    const { bbox } = calculateMercatorParams(centerX, centerY, size);
+    const lmrConfig = {
+      url: 'https://spatialportalarcgis.dpie.nsw.gov.au/sarcgis/rest/services/LMR/LMR/MapServer',
+      size: canvas.width,
+      padding: 0.2
+    };
+    
+    const lmrParams = new URLSearchParams({
+      f: 'image',
+      format: 'png32',
+      transparent: 'true',
+      size: `${lmrConfig.size},${lmrConfig.size}`,
+      bbox: bbox,
+      bboxSR: 3857,
+      imageSR: 3857,
+      layers: 'show:0,1,2,3,4',
+      dpi: 300
+    });
+
+    const lmrUrl = `${lmrConfig.url}/export?${lmrParams.toString()}`;
+    const lmrProxyUrl = await proxyRequest(lmrUrl);
+    
+    if (!lmrProxyUrl) {
+      throw new Error('Failed to get proxy URL for LMR layer');
+    }
+    
+    const lmrLayer = await loadImage(lmrProxyUrl);
+    ctx.drawImage(lmrLayer, 0, 0, canvas.width, canvas.height);
+    
+    // Get the image data from the canvas
+    const imageData = ctx.getImageData(minX, minY, maxX - minX, maxY - minY);
+    
+    // Check for overlaps
+    const overlaps = {};
+    const pixelCounts = {};
+    
+    // Initialize pixel counts
+    Object.keys(lmrColors).forEach(key => {
+      overlaps[key] = false;
+      pixelCounts[key] = 0;
+    });
+    
+    // Sample pixels at regular intervals to improve performance
+    const sampleRate = 2; // Check every 2nd pixel
+    const significantPixelThreshold = 50; // Require more pixels to confirm overlap
+    
+    // Check each pixel
+    for (let y = 0; y < maxY - minY; y += sampleRate) {
+      for (let x = 0; x < maxX - minX; x += sampleRate) {
+        const i = (y * (maxX - minX) + x) * 4;
         
-        const queryParams = new URLSearchParams({
-          f: 'json',
-          where: '1=1',
-          geometry: JSON.stringify(esriGeometry),
-          geometryType: 'esriGeometryPolygon',
-          inSR: 4326,  // WGS84
-          outSR: 4283, // GDA94 - as per the user's note
-          spatialRel: 'esriSpatialRelIntersects',
-          outFields: '*',
-          returnCountOnly: true
-        });
-        
-        const queryUrl = `${layer.url}/${layer.id}/query?${queryParams.toString()}`;
-        console.log('Query URL:', queryUrl);
-        
-        const response = await proxyRequest(queryUrl, { timeout: 120000 });
-        console.log(`${layer.name} overlap response:`, response);
-        
-        if (response && response.count !== undefined) {
-          const hasLayerOverlap = response.count > 0;
-          results.overlaps[layer.name] = hasLayerOverlap;
-          results.featureCounts[layer.name] = response.count;
+        // Check if this pixel matches any of the LMR colors
+        Object.entries(lmrColors).forEach(([key, color]) => {
+          // Use stricter color matching to avoid false positives
+          const colorMatch = 
+            Math.abs(imageData.data[i] - color[0]) < 20 && 
+            Math.abs(imageData.data[i + 1] - color[1]) < 20 && 
+            Math.abs(imageData.data[i + 2] - color[2]) < 20 && 
+            imageData.data[i + 3] > 100; // Higher alpha threshold
           
-          if (hasLayerOverlap) {
-            results.hasOverlap = true;
+          if (colorMatch) {
+            pixelCounts[key]++;
           }
-        }
-      } catch (layerError) {
-        console.warn(`Error querying ${layer.name}:`, layerError);
-        // Don't fail the whole process if one layer query fails
+        });
+      }
+    }
+    
+    // Determine which areas have significant overlap
+    Object.entries(pixelCounts).forEach(([key, count]) => {
+      // Set overlap to true only if we have a significant number of matching pixels
+      overlaps[key] = count > significantPixelThreshold;
+    });
+    
+    console.log('LMR overlap check results:', overlaps);
+    console.log('LMR pixel counts:', pixelCounts);
+    
+    // Determine which area has the most overlap
+    let maxPixels = 0;
+    let primaryOverlap = null;
+    
+    Object.entries(pixelCounts).forEach(([key, count]) => {
+      if (count > maxPixels && count > significantPixelThreshold) {
+        maxPixels = count;
+        primaryOverlap = key;
       }
     });
     
-    // Wait for all queries to complete
-    await Promise.all(queryPromises);
-    
-    // Determine which area has the most overlap (by feature count)
-    let maxCount = 0;
-    
-    Object.entries(results.featureCounts).forEach(([name, count]) => {
-      if (count > maxCount) {
-        maxCount = count;
-        results.primaryOverlap = name;
-      }
-    });
-    
-    console.log('LMR overlap results:', results);
-    return results;
+    // Return the results
+    return {
+      hasOverlap: Object.values(overlaps).some(v => v),
+      overlaps,
+      primaryOverlap,
+      pixelCounts
+    };
   } catch (error) {
     console.error('Error checking LMR overlap:', error);
     return {
       hasOverlap: false,
       overlaps: {},
       primaryOverlap: null,
-      featureCounts: {}
+      pixelCounts: {}
     };
   }
-}
-
-/**
- * Helper function to convert a GeoJSON feature to ESRI JSON format
- * @param {Object} feature - GeoJSON feature
- * @returns {Object} - ESRI JSON geometry
- */
-function featureToEsriGeometry(feature) {
-  try {
-    if (!feature || !feature.geometry) {
-      return null;
-    }
-    
-    let rings = [];
-    
-    // Extract coordinates based on geometry type
-    if (feature.geometry.type === 'Polygon' && feature.geometry.coordinates?.[0]) {
-      // For Polygon geometry
-      rings = feature.geometry.coordinates.map(ring => [...ring]);
-    } else if (feature.geometry.type === 'MultiPolygon' && feature.geometry.coordinates?.[0]?.[0]) {
-      // For MultiPolygon geometry, flatten all rings
-      feature.geometry.coordinates.forEach(polygon => {
-        polygon.forEach(ring => {
-          rings.push([...ring]);
-        });
-      });
-    } else {
-      console.warn('Unsupported geometry type for ESRI conversion:', feature.geometry.type);
-      return null;
-    }
-    
-    // Check if we have valid rings
-    if (rings.length === 0) {
-      console.warn('No valid rings found in the feature geometry');
-      return null;
-    }
-    
-    // Create ESRI JSON format geometry
-    return {
-      rings: rings,
-      spatialReference: { wkid: 4326 }  // WGS84
-    };
-  } catch (error) {
-    console.error('Error converting feature to ESRI geometry:', error);
-    return null;
-  }
-}
-
-/**
- * Helper function to check if a feature overlaps with ArcGIS features
- * Updated to use spatial queries instead of simple presence checks
- * @param {Object} feature - The GeoJSON feature to check for overlap
- * @param {Array} arcgisFeatures - The ArcGIS features (for backward compatibility)
- * @param {Object} options - Optional params like layerUrl and layerId for direct query
- * @returns {Boolean} - Whether the feature overlaps with any of the ArcGIS features
- */
-async function checkFeatureOverlap(feature, arcgisFeatures, options = {}) {
-  // First, check if we have the feature and arcgisFeatures as a fallback
-  if (!feature) {
-    console.warn('Invalid feature for overlap check');
-    return false;
-  }
-  
-  // If we have direct query options, use them
-  if (options.layerUrl && options.layerId !== undefined) {
-    try {
-      // Convert feature to ESRI JSON format
-      const esriGeometry = featureToEsriGeometry(feature);
-      if (!esriGeometry) {
-        console.warn('Failed to convert feature to ESRI geometry');
-        return false;
-      }
-      
-      // Build query parameters for spatial intersection
-      const queryParams = new URLSearchParams({
-        f: 'json',
-        where: '1=1',
-        geometry: JSON.stringify(esriGeometry),
-        geometryType: 'esriGeometryPolygon',
-        inSR: 4326,  // WGS84
-        outSR: 4283, // GDA94
-        spatialRel: 'esriSpatialRelIntersects',
-        returnCountOnly: true
-      });
-      
-      const queryUrl = `${options.layerUrl}/${options.layerId}/query?${queryParams.toString()}`;
-      console.log(`Checking feature overlap with layer ${options.layerId}...`);
-      
-      const response = await proxyRequest(queryUrl, { timeout: 60000 });
-      console.log(`Layer ${options.layerId} overlap response:`, response);
-      
-      return response && response.count > 0;
-    } catch (error) {
-      console.warn(`Error checking direct feature overlap for layer ${options.layerId}:`, error);
-      // Fall back to the backup method if direct query fails
-    }
-  }
-  
-  // Fallback to the old method if direct query is not possible or fails
-  if (!arcgisFeatures || arcgisFeatures.length === 0) return false;
-  
-  console.log('Using fallback overlap detection method - presence check only');
-  return arcgisFeatures.length > 0;
-}
-
-/**
- * Helper function to check if a feature is within any isochrone
- * Updated to use spatial queries instead of simple presence checks
- * @param {Object} feature - The GeoJSON feature to check for overlap
- * @param {Array} isochrones - The isochrone features (for backward compatibility)
- * @param {Object} options - Optional params like layerUrl and layerId for direct query
- * @returns {Boolean} - Whether the feature is within any isochrone
- */
-async function checkIschroneOverlap(feature, isochrones, options = {}) {
-  // Reuse the checkFeatureOverlap function with isochrone-specific defaults
-  return await checkFeatureOverlap(feature, isochrones, {
-    layerUrl: options.layerUrl || 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/SEPP_Housing_2021/MapServer',
-    layerId: options.layerId || 6,
-    ...options
-  });
 }
 
 export async function captureUDPPrecinctMap(feature, developableArea = null, showDevelopableArea = false, useDevelopableAreaForBounds = false) {
-  console.log('Capturing UDP Precinct Map...');
-  
+  if (!feature) return null;
+  console.log('Starting UDP precinct map capture...', {
+    featureType: feature.type,
+    hasMultipleFeatures: feature.type === 'FeatureCollection' && feature.features?.length > 1,
+    developableArea: developableArea ? 'provided' : 'not provided'
+  });
+
   try {
-    // Create a canvas for the map
     const config = {
       width: 2048,
-      height: 2048
+      height: 2048,
+      padding: 6
     };
     
+    // Always use feature geometry for UDP precinct map, ignoring useDevelopableAreaForBounds parameter
+    const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, false);
+    console.log('Calculated bounds:', { centerX, centerY, size });
+    
+    // Create base canvas
     const canvas = createCanvas(config.width, config.height);
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: true });
     
-    // Fill the canvas with a white background
-    ctx.fillStyle = 'white';
-    ctx.fillRect(0, 0, config.width, config.height);
-    
-    // Calculate the bounds of the feature with increased padding
-    const { centerX, centerY, size } = calculateBounds(feature, 4.0, developableArea, useDevelopableAreaForBounds);
-    
-    // Calculate the bbox in Web Mercator (EPSG:3857) coordinates for querying
-    const { bbox: mercatorBbox, centerMercX, centerMercY, sizeInMeters } = calculateMercatorParams(centerX, centerY, size);
-    console.log('Mercator bbox for UDP query:', mercatorBbox);
-    
-    // Also calculate GDA94 bbox for services that require it
-    const gda94Bbox = `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`;
-    console.log('GDA94 bbox for UDP query:', gda94Bbox);
-    
-    // FIRST: Load aerial base layer with improved opacity
+    // Start with a white background to prevent transparency issues
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
     try {
+      // 1. Aerial imagery (base)
       console.log('Loading aerial base layer...');
       const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];
+      const { bbox } = calculateMercatorParams(centerX, centerY, size);
+      console.log('Calculated Mercator bbox:', bbox);
       
-      const aerialParams = new URLSearchParams({
+      const params = new URLSearchParams({
         SERVICE: 'WMS',
         VERSION: '1.3.0',
         REQUEST: 'GetMap',
-        BBOX: mercatorBbox,
+        BBOX: bbox,
         CRS: 'EPSG:3857',
         WIDTH: config.width,
         HEIGHT: config.height,
@@ -2852,628 +2817,280 @@ export async function captureUDPPrecinctMap(feature, developableArea = null, sho
         FORMAT_OPTIONS: 'dpi:300'
       });
 
-      const aerialUrl = `${aerialConfig.url}?${aerialParams.toString()}`;
-      try {
-        const baseMap = await loadImage(aerialUrl);
-        drawImage(ctx, baseMap, canvas.width, canvas.height, 0.4);
-        console.log('Aerial base layer loaded successfully');
-      } catch (aerialError) {
-        console.error('Failed to load aerial layer:', aerialError);
-        // Continue with white background
-      }
+      const url = `${aerialConfig.url}?${params.toString()}`;
+      console.log('Requesting aerial base layer:', url);
+      const baseMap = await loadImage(url);
+      drawImage(ctx, baseMap, canvas.width, canvas.height, 0.5);
+      console.log('Aerial base layer loaded and drawn');
     } catch (error) {
-      console.error('Failed to setup aerial layer:', error);
+      console.error('Failed to load aerial layer:', error);
+      // Continue with white background
     }
-    
-    // Layer configuration - keep all existing layer configs
-    const layerConfig = {
-      todAreas: {
-        url: 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/SEPP_Housing_2021/MapServer',
-        layerId: 3,
-        color: 'rgba(0, 77, 168, 0.5)',
-        strokeColor: 'rgba(0, 77, 168, 0.8)',
-        label: 'TOD Area'
-      },
-      todAcceleratedAreas: {
-        url: 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/SEPP_Housing_2021/MapServer',
-        layerId: 2,
-        color: 'rgba(128, 0, 128, 0.5)',
-        strokeColor: 'rgba(128, 0, 128, 0.8)',
-        label: 'TOD Accelerated Rezoning Area'
-      },
-      townCentres: {
-        url: 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/SEPP_Housing_2021/MapServer',
-        layerId: 6,
-        color: 'transparent',
-        strokeColor: 'rgba(0, 0, 255, 0.8)',
-        label: 'Town Centre'
-      },
-      railLines: {
-        url: 'https://portal.spatial.nsw.gov.au/server/rest/services/NSW_Transport_Theme/MapServer',
-        layerId: 7,
-        color: 'transparent',
-        strokeColor: 'rgba(128, 0, 0, 0.8)',
-        lineWidth: 3,
-        label: 'Rail Line'
-      },
-      trainStations: {
-        url: 'https://portal.spatial.nsw.gov.au/server/rest/services/NSW_FOI_Transport_Facilities/MapServer',
-        layerId: 1,
-        iconPath: 'public/images/railIcon.png',
-        labelField: 'generalname',
-        label: 'Train Station'
-      }
-    };
-    
-    // Arrays to store the features for overlap checking
-    let todAreas = [];
-    let todAcceleratedAreas = [];
-    let isochrones = [];
-    let railLines = [];
-    let trainStations = [];
-    
-    // IMPORTANT: First fetch and render all rail lines - they're important background features
+
+    // Store feature reference for returning
+    if (!feature.properties) {
+      feature.properties = {};
+    }
+
     try {
-      console.log('Loading Rail Lines using export image...');
+      // 1.5. LMR layers from ArcGIS REST service
+      console.log('Loading LMR layers...');
+      const lmrConfig = {
+        url: 'https://spatialportalarcgis.dpie.nsw.gov.au/sarcgis/rest/services/LMR/LMR/MapServer',
+        size: config.width,
+        padding: config.padding
+      };
       
-      const railLinesParams = new URLSearchParams({
+      // Create GDA94 bbox for the LMR service
+      const gda94Bbox = `${centerX - size/2},${centerY - size/2},${centerX + size/2},${centerY + size/2}`;
+      console.log('Using GDA94 bbox for LMR service:', gda94Bbox);
+      
+      const lmrParams = new URLSearchParams({
         f: 'image',
         format: 'png32',
         transparent: 'true',
-        size: `${config.width},${config.height}`,
-        bbox: mercatorBbox,
-        bboxSR: 3857,
-        imageSR: 3857,
-        layers: `show:${layerConfig.railLines.layerId}`,
-        dpi: 96
-      });
-      
-      const railLinesUrl = `${layerConfig.railLines.url}/export?${railLinesParams.toString()}`;
-      console.log('Rail Lines export URL:', railLinesUrl);
-      
-      const railLinesProxyUrl = await proxyRequest(railLinesUrl, { timeout: 180000 });
-      
-      if (railLinesProxyUrl) {
-        try {
-          console.log('Loading rail lines from proxy URL...');
-          const railLinesLayer = await loadImage(railLinesProxyUrl);
-          console.log('Rail lines layer loaded successfully');
-          // Ensure full opacity and visibility for rail lines
-          drawImage(ctx, railLinesLayer, canvas.width, canvas.height, 1.0);
-        } catch (imgError) {
-          console.warn('Failed to load rail lines image:', imgError);
-        }
-      } else {
-        console.warn('Failed to get proxy URL for rail lines layer');
-      }
-      
-      // Also get the feature data for scoring
-      const railLinesQueryUrl = `${layerConfig.railLines.url}/${layerConfig.railLines.layerId}/query`;
-      const railLinesQueryParams = new URLSearchParams({
-        f: 'json',
-        where: '1=1',  // Return all features
-        outFields: '*',
-        returnGeometry: 'true',
-        outSR: '3857',  // Web Mercator
-        spatialRel: 'esriSpatialRelIntersects',
-        geometry: mercatorBbox,
-        geometryType: 'esriGeometryEnvelope',
-        geometryPrecision: 3
-      });
-      
-      // Construct the URL correctly
-      const railLinesQueryFullUrl = `${railLinesQueryUrl}?${railLinesQueryParams.toString()}`;
-      
-      const railLinesQueryProxyUrl = await proxyRequest(railLinesQueryFullUrl, { timeout: 180000 });
-      
-      if (railLinesQueryProxyUrl) {
-        try {
-          const response = await fetch(railLinesQueryProxyUrl);
-          const text = await response.text();
-          try {
-            if (!text.trim().startsWith('<!DOCTYPE') && !text.trim().startsWith('<html')) {
-              const railLinesData = JSON.parse(text);
-              console.log('Rail Lines features loaded successfully:', railLinesData);
-              
-              if (railLinesData.features && railLinesData.features.length > 0) {
-                railLines = railLinesData.features;
-              }
-            }
-          } catch (jsonError) {
-            console.warn('Failed to parse Rail Lines JSON:', jsonError);
-          }
-        } catch (dataError) {
-          console.warn('Failed to process Rail Lines data:', dataError);
-        }
-      }
-    } catch (error) {
-      console.warn('Failed to load Rail Lines:', error);
-    }
-    
-    // Get TOD Areas using export image
-    try {
-      console.log('Loading TOD Areas using export image...');
-      
-      const todExportParams = new URLSearchParams({
-        f: 'image',
-        format: 'png32',
-        transparent: 'true',
-        size: `${config.width},${config.height}`,
-        bbox: gda94Bbox, // Using GDA94 for these services
-        bboxSR: 4283,    // GDA94
-        imageSR: 3857,   
-        layers: `show:${layerConfig.todAreas.layerId}`,
+        size: `${lmrConfig.size},${lmrConfig.size}`,
+        bbox: gda94Bbox,
+        bboxSR: 4283, // GDA94
+        imageSR: 3857, // Web Mercator
+        layers: 'show:0,1,2,3,4', // Show all LMR layers
         dpi: 300
       });
+
+      // Create a POST request for the LMR service instead of GET
+      const lmrUrl = `${lmrConfig.url}/export`;
+      console.log('Requesting LMR layers through proxy...', `${lmrUrl}?${lmrParams.toString()}`);
       
-      const todExportUrl = `${layerConfig.todAreas.url}/export?${todExportParams.toString()}`;
-      console.log('TOD Areas export URL:', todExportUrl);
+      const lmrProxyUrl = await proxyRequest(lmrUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'image/png,*/*'
+        },
+        body: lmrParams.toString(),
+        timeout: 300000 // 5 minutes timeout for LMR service
+      });
       
-      const todExportProxyUrl = await proxyRequest(todExportUrl, { timeout: 180000 });
-      
-      if (todExportProxyUrl) {
-        try {
-          console.log('Loading TOD areas from proxy URL...');
-          const todLayer = await loadImage(todExportProxyUrl);
-          console.log('TOD areas layer loaded successfully');
-          drawImage(ctx, todLayer, canvas.width, canvas.height, 0.8);
-        } catch (imgError) {
-          console.warn('Failed to load TOD areas image:', imgError);
-        }
+      if (lmrProxyUrl) {
+        console.log('Loading LMR image from proxy URL...');
+        const lmrLayer = await loadImage(lmrProxyUrl);
+        console.log('LMR layers loaded successfully');
+        drawImage(ctx, lmrLayer, canvas.width, canvas.height, 0.7); // Adjust opacity as needed
       } else {
-        console.warn('Failed to get proxy URL for TOD areas layer');
-      }
-      
-      // Also get the feature data for scoring
-      const todQueryUrl = `${layerConfig.todAreas.url}/${layerConfig.todAreas.layerId}/query`;
-      const todParams = new URLSearchParams({
-        f: 'json',
-        where: '1=1',  // Return all features
-        outFields: '*',
-        returnGeometry: 'true',
-        outSR: '4283',  // GDA94
-        spatialRel: 'esriSpatialRelIntersects',
-        geometry: gda94Bbox,
-        geometryType: 'esriGeometryEnvelope'
-      });
-      
-      const todQueryFullUrl = `${todQueryUrl}?${todParams.toString()}`;
-      
-      const todQueryProxyUrl = await proxyRequest(todQueryFullUrl, { timeout: 180000 });
-      
-      if (todQueryProxyUrl) {
-        try {
-          const response = await fetch(todQueryProxyUrl);
-          const text = await response.text();
-          try {
-            if (!text.trim().startsWith('<!DOCTYPE') && !text.trim().startsWith('<html')) {
-              const todData = JSON.parse(text);
-              console.log('TOD Areas features loaded successfully:', todData);
-              
-              if (todData.features && todData.features.length > 0) {
-                todAreas = todData.features;
-              }
-            }
-          } catch (jsonError) {
-            console.warn('Failed to parse TOD Areas JSON:', jsonError);
-          }
-        } catch (dataError) {
-          console.warn('Failed to process TOD Areas data:', dataError);
-        }
-      }
-    } catch (queryError) {
-      console.warn('Failed to query TOD Areas:', queryError);
-    }
-    
-    // Get TOD Accelerated Areas using export image
-    try {
-      console.log('Loading TOD Accelerated Areas using export image...');
-      
-      const todAccExportParams = new URLSearchParams({
-        f: 'image',
-        format: 'png32',
-        transparent: 'true',
-        size: `${config.width},${config.height}`,
-        bbox: gda94Bbox, // Using GDA94 for these services
-        bboxSR: 4283,    // GDA94
-        imageSR: 3857,   // GDA94
-        layers: `show:${layerConfig.todAcceleratedAreas.layerId}`,
-        dpi: 300
-      });
-      
-      const todAccExportUrl = `${layerConfig.todAcceleratedAreas.url}/export?${todAccExportParams.toString()}`;
-      console.log('TOD Accelerated Areas export URL:', todAccExportUrl);
-      
-      const todAccExportProxyUrl = await proxyRequest(todAccExportUrl, { timeout: 120000 });
-      
-      if (todAccExportProxyUrl) {
-        try {
-          console.log('Loading TOD accelerated areas from proxy URL...');
-          const todAccLayer = await loadImage(todAccExportProxyUrl);
-          console.log('TOD accelerated areas layer loaded successfully');
-          drawImage(ctx, todAccLayer, canvas.width, canvas.height, 0.8);
-        } catch (imgError) {
-          console.warn('Failed to load TOD accelerated areas image:', imgError);
-        }
-      } else {
-        console.warn('Failed to get proxy URL for TOD accelerated areas layer');
-      }
-      
-      // Also get the feature data for scoring
-      const todAccQueryUrl = `${layerConfig.todAcceleratedAreas.url}/${layerConfig.todAcceleratedAreas.layerId}/query`;
-      const todAccParams = new URLSearchParams({
-        f: 'json',
-        where: '1=1',  // Return all features
-        outFields: '*',
-        returnGeometry: 'true',
-        outSR: '4283',  // GDA94
-        spatialRel: 'esriSpatialRelIntersects',
-        geometry: gda94Bbox,
-        geometryType: 'esriGeometryEnvelope'
-      });
-      
-      const todAccQueryFullUrl = `${todAccQueryUrl}?${todAccParams.toString()}`;
-      
-      const todAccQueryProxyUrl = await proxyRequest(todAccQueryFullUrl, { timeout: 120000 });
-      
-      if (todAccQueryProxyUrl) {
-        try {
-          const response = await fetch(todAccQueryProxyUrl);
-          const text = await response.text();
-          try {
-            if (!text.trim().startsWith('<!DOCTYPE') && !text.trim().startsWith('<html')) {
-              const todAccData = JSON.parse(text);
-              console.log('TOD Accelerated Areas features loaded successfully:', todAccData);
-              
-              if (todAccData.features && todAccData.features.length > 0) {
-                todAcceleratedAreas = todAccData.features;
-              }
-            }
-          } catch (jsonError) {
-            console.warn('Failed to parse TOD Accelerated Areas JSON:', jsonError);
-          }
-        } catch (dataError) {
-          console.warn('Failed to process TOD Accelerated Areas data:', dataError);
-        }
+        console.warn('Failed to get proxy URL for LMR layers');
       }
     } catch (error) {
-      console.warn('Failed to load TOD Accelerated Areas:', error);
+      console.warn('Failed to load LMR layers:', error);
     }
     
-    // Get Town Centres (isochrones) using export image
     try {
-      console.log('Loading Town Centres using export image...');
+      // 2. UDP Precincts layer
+      console.log('Loading UDP precincts...');
+      const udpResponse = await fetch('/UDP_Precincts.geojson');
+      const udpData = await udpResponse.json();
       
-      const townCentresExportParams = new URLSearchParams({
-        f: 'image',
-        format: 'png32',
-        transparent: 'true',
-        size: `${config.width},${config.height}`,
-        bbox: gda94Bbox, // Using GDA94 for these services
-        bboxSR: 4283,    // GDA94
-        imageSR: 4283,   // GDA94
-        layers: `show:${layerConfig.townCentres.layerId}`,
-        dpi: 300
-      });
-      
-      const townCentresExportUrl = `${layerConfig.townCentres.url}/export?${townCentresExportParams.toString()}`;
-      console.log('Town Centres export URL:', townCentresExportUrl);
-      
-      const townCentresExportProxyUrl = await proxyRequest(townCentresExportUrl, { timeout: 120000 });
-      
-      if (townCentresExportProxyUrl) {
-        try {
-          console.log('Loading town centres from proxy URL...');
-          const townCentresLayer = await loadImage(townCentresExportProxyUrl);
-          console.log('Town centres layer loaded successfully');
-          drawImage(ctx, townCentresLayer, canvas.width, canvas.height, 1.0);
-        } catch (imgError) {
-          console.warn('Failed to load town centres image:', imgError);
-        }
-      } else {
-        console.warn('Failed to get proxy URL for town centres layer');
-      }
-      
-      // Also get the feature data for scoring
-      const townCentresQueryUrl = `${layerConfig.townCentres.url}/${layerConfig.townCentres.layerId}/query`;
-      const townCentresParams = new URLSearchParams({
-        f: 'json',
-        where: '1=1',  // Return all features
-        outFields: '*',
-        returnGeometry: 'true',
-        outSR: '4283',  // GDA94
-        spatialRel: 'esriSpatialRelIntersects',
-        geometry: gda94Bbox,
-        geometryType: 'esriGeometryEnvelope'
-      });
-      
-      const townCentresQueryFullUrl = `${townCentresQueryUrl}?${townCentresParams.toString()}`;
-      
-      const townCentresQueryProxyUrl = await proxyRequest(townCentresQueryFullUrl, { timeout: 120000 });
-      
-      if (townCentresQueryProxyUrl) {
-        try {
-          const response = await fetch(townCentresQueryProxyUrl);
-          const text = await response.text();
-          try {
-            if (!text.trim().startsWith('<!DOCTYPE') && !text.trim().startsWith('<html')) {
-              const townCentresData = JSON.parse(text);
-              console.log('Town Centres features loaded successfully:', townCentresData);
-              
-              if (townCentresData.features && townCentresData.features.length > 0) {
-                isochrones = townCentresData.features;
-              }
+      if (udpData.features?.length > 0) {
+        console.log(`Drawing ${udpData.features.length} UDP precinct features...`);
+        
+        // Set font for labels before drawing features
+        ctx.font = 'bold 24px Public Sans';
+
+        // Create a Set to track already labeled precinct names to avoid duplicates
+        const labeledPrecincts = new Set();
+        
+        // Define the visible bounds of the map for label visibility check
+        const mapBounds = {
+          minX: centerX - size/2,
+          minY: centerY - size/2,
+          maxX: centerX + size/2,
+          maxY: centerY + size/2
+        };
+
+        udpData.features.forEach((precinctFeature, index) => {
+          console.log(`Drawing UDP precinct feature ${index + 1}...`);
+          if (precinctFeature.geometry?.coordinates) {
+            // For MultiPolygon, draw each polygon
+            if (precinctFeature.geometry.type === 'MultiPolygon') {
+              precinctFeature.geometry.coordinates.forEach(polygonCoords => {
+                polygonCoords.forEach(coords => {
+                  drawBoundary(ctx, coords, centerX, centerY, size, config.width, {
+                    fill: true,
+                    strokeStyle: 'rgba(4, 170, 229, 0.8)',
+                    fillStyle: 'rgba(4, 170, 229, 0.3)',
+                    lineWidth: 2
+                  });
+                });
+              });
+            } else if (precinctFeature.geometry.type === 'Polygon') {
+              // For single Polygon
+              precinctFeature.geometry.coordinates.forEach(coords => {
+                drawBoundary(ctx, coords, centerX, centerY, size, config.width, {
+                  fill: true,
+                  strokeStyle: 'rgba(4, 170, 229, 0.8)',
+                  fillStyle: 'rgba(4, 170, 229, 0.3)',
+                  lineWidth: 2
+                });
+              });
             }
-          } catch (jsonError) {
-            console.warn('Failed to parse Town Centres JSON:', jsonError);
+
+            // Get precinct name
+            const precinctName = precinctFeature.properties?.precinct_name || precinctFeature.properties?.Precinct_Name;
+            
+            // Skip if this precinct has already been labeled or has no name
+            if (!precinctName || labeledPrecincts.has(precinctName)) {
+              return;
+            }
+
+            // Calculate centroid for label placement
+            let bounds = {
+              minX: Infinity,
+              minY: Infinity,
+              maxX: -Infinity,
+              maxY: -Infinity
+            };
+
+            const updateBounds = (coords) => {
+              coords.forEach(coord => {
+                bounds.minX = Math.min(bounds.minX, coord[0]);
+                bounds.minY = Math.min(bounds.minY, coord[1]);
+                bounds.maxX = Math.max(bounds.maxX, coord[0]);
+                bounds.maxY = Math.max(bounds.maxY, coord[1]);
+              });
+            };
+
+            if (precinctFeature.geometry.type === 'MultiPolygon') {
+              precinctFeature.geometry.coordinates.forEach(polygonCoords => {
+                polygonCoords.forEach(coords => {
+                  updateBounds(coords);
+                });
+              });
+            } else {
+              precinctFeature.geometry.coordinates.forEach(coords => {
+                updateBounds(coords);
+              });
+            }
+
+            // Calculate centroid from bounds
+            const centroidX = (bounds.minX + bounds.maxX) / 2;
+            const centroidY = (bounds.minY + bounds.maxY) / 2;
+
+            // Check if centroid is within map bounds before drawing label
+            if (centroidX >= mapBounds.minX && centroidX <= mapBounds.maxX && 
+                centroidY >= mapBounds.minY && centroidY <= mapBounds.maxY) {
+              
+              // Convert centroid to canvas coordinates
+              const canvasX = ((centroidX - (centerX - size/2)) / size) * config.width;
+              const canvasY = config.height - ((centroidY - (centerY - size/2)) / size) * config.height;
+
+              // Draw label
+              console.log(`Drawing label for ${precinctName} at (${canvasX}, ${canvasY})`);
+              drawRoundedTextBox(ctx, `${precinctName} UDP Precinct`, canvasX, canvasY);
+              
+              // Add to set of labeled precincts to avoid duplicates
+              labeledPrecincts.add(precinctName);
+            }
           }
-        } catch (dataError) {
-          console.warn('Failed to process Town Centres data:', dataError);
-        }
+        });
+        
+        // Store UDP precincts in feature properties for reference only
+        feature.properties.udpPrecincts = udpData.features;
       }
     } catch (error) {
-      console.warn('Failed to load Town Centres:', error);
+      console.error('Failed to load UDP precincts:', error);
     }
-    
-    // Get train stations using export image
-    try {
-      console.log('Loading Train Stations using export image...');
-      
-      const trainStationsParams = new URLSearchParams({
-        f: 'image',
-        format: 'png32',
-        transparent: 'true',
-        size: `${config.width},${config.height}`,
-        bbox: mercatorBbox,
-        bboxSR: 3857,
-        imageSR: 3857,
-        layers: `show:${layerConfig.trainStations.layerId}`,
-        dpi: 300
-      });
-      
-      const trainStationsUrl = `${layerConfig.trainStations.url}/export?${trainStationsParams.toString()}`;
-      console.log('Train Stations export URL:', trainStationsUrl);
-      
-      const trainStationsProxyUrl = await proxyRequest(trainStationsUrl, { timeout: 120000 });
-      
-      if (trainStationsProxyUrl) {
-        try {
-          console.log('Loading train stations from proxy URL...');
-          const trainStationsLayer = await loadImage(trainStationsProxyUrl);
-          console.log('Train stations layer loaded successfully');
-          drawImage(ctx, trainStationsLayer, canvas.width, canvas.height, 1.0);
-        } catch (imgError) {
-          console.warn('Failed to load train stations image:', imgError);
-        }
-      } else {
-        console.warn('Failed to get proxy URL for train stations layer');
-      }
-      
-      // Also get the feature data for scoring
-      const trainStationsQueryUrl = `${layerConfig.trainStations.url}/${layerConfig.trainStations.layerId}/query`;
-      const trainStationsQueryParams = new URLSearchParams({
-        f: 'json',
-        where: '1=1',  // Return all features
-        outFields: '*',
-        returnGeometry: 'true',
-        outSR: '3857',  // Web Mercator
-        spatialRel: 'esriSpatialRelIntersects',
-        geometry: mercatorBbox,
-        geometryType: 'esriGeometryEnvelope'
-      });
-      
-      const trainStationsQueryFullUrl = `${trainStationsQueryUrl}?${trainStationsQueryParams.toString()}`;
-      
-      const trainStationsQueryProxyUrl = await proxyRequest(trainStationsQueryFullUrl, { timeout: 120000 });
-      
-      if (trainStationsQueryProxyUrl) {
-        try {
-          const response = await fetch(trainStationsQueryProxyUrl);
-          const text = await response.text();
-          try {
-            if (!text.trim().startsWith('<!DOCTYPE') && !text.trim().startsWith('<html')) {
-              const trainStationsData = JSON.parse(text);
-              console.log('Train Stations features loaded successfully:', trainStationsData);
-              
-              if (trainStationsData.features && trainStationsData.features.length > 0) {
-                trainStations = trainStationsData.features;
-              }
-            }
-          } catch (jsonError) {
-            console.warn('Failed to parse Train Stations JSON:', jsonError);
-          }
-        } catch (dataError) {
-          console.warn('Failed to process Train Stations data:', dataError);
-        }
-      }
-    } catch (error) {
-      console.warn('Failed to load Train Stations:', error);
-    }
-    
-    // Draw developable area if provided and requested
-    if (developableArea && showDevelopableArea) {
-      drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width);
-    }
-    
-    // Draw the feature boundary
-    if (feature.type === 'FeatureCollection') {
-      feature.features.forEach(f => {
+
+    // Draw all features
+    if (feature.type === 'FeatureCollection' && feature.features?.length > 0) {
+      console.log('Drawing multiple features:', feature.features.length);
+      feature.features.forEach((f, index) => {
         drawFeatureBoundaries(ctx, f, centerX, centerY, size, config.width, {
-          strokeStyle: 'rgba(255, 0, 0, 0.8)',
-          lineWidth: 3
+          showLabels: true, // Always show labels for multiple features
+          strokeStyle: '#FF0000',
+          lineWidth: 6
         });
       });
     } else {
-      drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, {
-        strokeStyle: 'rgba(255, 0, 0, 0.8)',
-        lineWidth: 3
-      });
-    }
-    
-    // Check if features overlap with TOD areas, TOD Accelerated areas, or isochrones
-    // This is for scoring purposes
-    if (feature.type === 'FeatureCollection') {
-      // Process each feature in the collection
-      const lmrOverlapPromises = feature.features.map(async (f, index) => {
-        try {
-          if (!f.properties) f.properties = {};
-          
-          // Use LMR overlap check for comprehensive overlap information
-          console.log(`Checking LMR overlaps for feature ${index}...`);
-          const lmrOverlapResults = await checkLMROverlap(f);
-          
-          // Update the feature properties with the results
-          f.properties.inTOD = lmrOverlapResults.overlaps['TOD Area'] || false;
-          f.properties.inTODAccelerated = lmrOverlapResults.overlaps['TOD Accelerated Rezoning Area'] || false;
-          f.properties.inLMRHousingArea = lmrOverlapResults.overlaps['Indicative LMR Housing Area'] || false;
-          
-          // Store the LMR overlap information
-          f.properties.lmrOverlap = {
-            hasOverlap: lmrOverlapResults.hasOverlap,
-            primaryOverlap: lmrOverlapResults.primaryOverlap,
-            overlaps: lmrOverlapResults.overlaps
-          };
-          
-          // Store train station information - using direct query if we have this data
-          // This is a lightweight approach as the full LMR check already does most of the heavy lifting
-          if (trainStations.length > 0) {
-            f.properties.nearbyTrainStations = trainStations
-              .map(station => ({
-                name: station.attributes[layerConfig.trainStations.labelField] || 'Unknown Station',
-                x: station.geometry.x,
-                y: station.geometry.y
-              }));
-          } else {
-            // If we don't have train stations data from earlier loading, 
-            // we could query it directly here if needed
-            f.properties.nearbyTrainStations = [];
-          }
-            
-          return f;
-        } catch (error) {
-          console.error(`Error processing feature ${index} overlaps:`, error);
-          return f; // Return the original feature if there's an error
-        }
-      });
-      
-      // Wait for all overlap checks to complete
-      await Promise.all(lmrOverlapPromises);
-      
-    } else {
       // Single feature case
-      if (!feature.properties) feature.properties = {};
-      
-      // Use LMR overlap check for comprehensive overlap information
-      console.log('Checking LMR overlaps for single feature...');
-      const lmrOverlapResults = await checkLMROverlap(feature);
-      
-      // Update the feature properties with the results
-      feature.properties.inTOD = lmrOverlapResults.overlaps['TOD Area'] || false;
-      feature.properties.inTODAccelerated = lmrOverlapResults.overlaps['TOD Accelerated Rezoning Area'] || false;
-      feature.properties.inLMRHousingArea = lmrOverlapResults.overlaps['Indicative LMR Housing Area'] || false;
-      
-      // Store the LMR overlap information
-      feature.properties.lmrOverlap = {
-        hasOverlap: lmrOverlapResults.hasOverlap,
-        primaryOverlap: lmrOverlapResults.primaryOverlap,
-        overlaps: lmrOverlapResults.overlaps
-      };
-      
-      // Store train station information - using direct query if we have this data
-      if (trainStations.length > 0) {
-        feature.properties.nearbyTrainStations = trainStations
-          .map(station => ({
-            name: station.attributes[layerConfig.trainStations.labelField] || 'Unknown Station',
-            x: station.geometry.x,
-            y: station.geometry.y
-          }));
-      } else {
-        // If we don't have train stations data from earlier loading, 
-        // we could query it directly here if needed
-        feature.properties.nearbyTrainStations = [];
-      }
+      console.log('Drawing single feature');
+      drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, {
+        showLabels: false
+      });
     }
-    
-    // Add a legend with better styling
-    ctx.font = '24px Arial';
-    ctx.fillStyle = 'black';
-    
-    // Create a semi-transparent background for the legend
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.fillRect(40, 40, 400, 220); // Increased height for additional items
-    ctx.strokeStyle = 'black';
+
+    // Add legend - increased size to accommodate all items
+    const legendHeight = 380; // Increased height
+    const legendWidth = 450; // Increased width
+    const padding = 20;
+    const legendX = canvas.width - legendWidth - padding;
+    const legendY = canvas.height - legendHeight - padding;
+
+    // Calculate icon size and spacing
+    const iconSize = 20;
+    const iconTextGap = 30; // Increased from 15 to 30 to prevent text overlap with icons
+    const itemVerticalSpacing = 45; // Space between legend items
+
+    // Draw legend background with border
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.strokeStyle = '#002664';
     ctx.lineWidth = 2;
-    ctx.strokeRect(40, 40, 400, 220);
-    
-    // Title for legend
-    ctx.font = 'bold 26px Public Sans';
+    ctx.fillRect(legendX, legendY, legendWidth, legendHeight);
+    ctx.strokeRect(legendX, legendY, legendWidth, legendHeight);
+
+    // Define text position for all legend items including title
+    const textX = legendX + padding + iconSize + iconTextGap;
+
+    // Legend title
+    ctx.font = 'bold 28px Public Sans';
     ctx.fillStyle = '#002664';
-    ctx.fillText('Proximity to Strategic Centre', 60, 75);
-    
-    // TOD Areas
-    ctx.font = '20px Public Sans';
-    ctx.fillStyle = layerConfig.todAreas.color;
-    ctx.fillRect(60, 90, 30, 30);
-    ctx.strokeStyle = layerConfig.todAreas.strokeColor;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(60, 90, 30, 30);
-    ctx.fillStyle = 'black';
-    ctx.fillText(layerConfig.todAreas.label, 110, 110);
-    
-    // TOD Accelerated Areas
-    ctx.fillStyle = layerConfig.todAcceleratedAreas.color;
-    ctx.fillRect(60, 130, 30, 30);
-    ctx.strokeStyle = layerConfig.todAcceleratedAreas.strokeColor;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(60, 130, 30, 30);
-    ctx.fillStyle = 'black';
-    ctx.fillText(layerConfig.todAcceleratedAreas.label, 110, 150);
-    
-    // Town Centres
-    ctx.strokeStyle = layerConfig.townCentres.strokeColor;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(60, 170, 30, 30);
-    ctx.fillStyle = 'blue';
-    ctx.beginPath();
-    ctx.arc(75, 185, 8, 0, 2 * Math.PI);
-    ctx.fill();
-    ctx.fillStyle = 'black';
-    ctx.fillText(layerConfig.townCentres.label, 110, 190);
-    
-    // Rail Lines
-    ctx.beginPath();
-    ctx.moveTo(60, 225);
-    ctx.lineTo(90, 225);
-    ctx.strokeStyle = layerConfig.railLines.strokeColor;
-    ctx.lineWidth = layerConfig.railLines.lineWidth || 3;
-    ctx.stroke();
-    ctx.fillStyle = 'black';
-    ctx.fillText(layerConfig.railLines.label, 110, 230);
-    
-    // Collect all the UDP data for scoring
-    const udpData = {
-      todAreas,
-      todAcceleratedAreas,
-      isochrones,
-      railLines,
-      trainStations,
-      lmrOverlap: feature.properties?.lmrOverlap || null,
-      nearbyTrainStations: feature.properties?.nearbyTrainStations || []
-    };
-    
-    // Return both the image and the data for property scoring
-    try {
-      const dataURL = canvas.toDataURL('image/png');
-      return {
-        dataURL: dataURL,
-        udpFeatures: udpData
-      };
-    } catch (canvasError) {
-      console.error('Error converting canvas to data URL:', canvasError);
-      return null;
-    }
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    ctx.fillText('Planning Precincts', textX, legendY + padding);
+
+    // Legend items - include both UDP and LMR layers
+    const legendItems = [
+      { color: 'rgba(4, 170, 229, 0.5)', label: 'UDP Growth Precinct' },
+      { color: 'rgb(118, 117, 114)', label: 'LMR Station', type: 'point' },
+      { color: 'rgb(209, 225, 240)', label: 'LMR Centre', type: 'point' },
+      { color: 'rgb(182, 154, 177)', label: 'TOD Accelerated Rezoning Area', type: 'area' },
+      { color: 'rgb(208, 181, 204)', label: 'TOD Area', type: 'area' },
+      { color: 'rgb(239, 216, 175)', label: 'Indicative LMR Housing Area', type: 'area' }
+    ];
+
+    ctx.textBaseline = 'middle';
+    ctx.font = '22px Public Sans';
+
+    legendItems.forEach((item, index) => {
+      const y = legendY + padding + 60 + (index * itemVerticalSpacing);
+      
+      if (item.type === 'point') {
+        // Draw circle for point features
+        ctx.beginPath();
+        ctx.arc(legendX + padding + (iconSize/2), y, iconSize/2, 0, 2 * Math.PI);
+        ctx.fillStyle = item.color;
+        ctx.fill();
+        ctx.strokeStyle = '#363636';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      } else {
+        // Draw color box for area features
+        ctx.fillStyle = item.color;
+        ctx.fillRect(legendX + padding, y - (iconSize/2), iconSize, iconSize);
+        ctx.strokeStyle = '#363636';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(legendX + padding, y - (iconSize/2), iconSize, iconSize);
+      }
+      
+      // Draw label with more space between icon and text
+      ctx.fillStyle = '#363636';
+      ctx.textAlign = 'left'; // Ensure text alignment is explicitly set to left
+      ctx.fillText(item.label, legendX + padding + iconSize + iconTextGap, y);
+    });
+
+    // Return the screenshot
+    return canvas.toDataURL('image/png', 1.0);
   } catch (error) {
-    console.error('Error capturing UDP Precinct Map:', error);
+    console.error('Failed to capture UDP precinct map:', error);
+    console.error('Error stack:', error.stack);
     return null;
   }
 }
@@ -3942,10 +3559,11 @@ function drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, s
         const label = String.fromCharCode(65 + index); // A=65, B=66, etc.
         try {
           const polygon = turf.polygon([feature.geometry.coordinates[0]]);
-          const centroid = turf.centroid(polygon);
+          // Use visual center instead of centroid for better label placement
+          const visualCenter = calculateVisualCenter(feature.geometry.coordinates[0]);
           
-          if (centroid && centroid.geometry && centroid.geometry.coordinates) {
-            const [lon, lat] = centroid.geometry.coordinates;
+          if (visualCenter && visualCenter.geometry && visualCenter.geometry.coordinates) {
+            const [lon, lat] = visualCenter.geometry.coordinates;
             const [mercX, mercY] = convertToWebMercator(lon, lat);
             const { centerMercX, centerMercY, sizeInMeters } = calculateMercatorParams(centerX, centerY, size);
             
@@ -3970,7 +3588,7 @@ function drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, s
             ctx.fillText(label, x, y);
           }
         } catch (error) {
-          console.warn('Error adding developable area centroid label:', error);
+          console.warn('Error adding developable area visual center label:', error);
         }
       }
     }
@@ -4724,4 +4342,77 @@ function generateCirclePoints(centerX, centerY, radius, numPoints = 60) {
   points.push([...points[0]]);
   
   return points;
+}
+
+/**
+ * Calculate the Pole of Inaccessibility (visual center) of a polygon
+ * This finds the most distant internal point from the polygon boundary
+ * @param {Array} coordinates - Array of polygon coordinates [lon, lat]
+ * @returns {Object} Point with coordinates in [lon, lat] format
+ */
+function calculateVisualCenter(coordinates) {
+  try {
+    // First try to use turf.pointOnFeature which often gives better results than centroid
+    const polygon = turf.polygon([coordinates]);
+    
+    // Use pointOnFeature which finds a point guaranteed to be inside the polygon
+    // This is often more visually appealing than centroid for irregular shapes
+    const point = turf.pointOnFeature(polygon);
+    
+    // Further improve the point by running a simple pole of inaccessibility algorithm
+    // This tries to find a point that's as far from the boundary as possible
+    const boundaryDistance = (pt) => {
+      // Calculate minimum distance to any segment of the boundary
+      let minDistance = Infinity;
+      
+      for (let i = 0; i < coordinates.length - 1; i++) {
+        const start = coordinates[i];
+        const end = coordinates[i + 1];
+        const distance = turf.pointToLineDistance(
+          turf.point(pt.geometry.coordinates),
+          turf.lineString([start, end])
+        );
+        minDistance = Math.min(minDistance, distance);
+      }
+      
+      return minDistance;
+    };
+    
+    // Start from the point inside the polygon
+    let bestPoint = point;
+    let bestDistance = boundaryDistance(bestPoint);
+    
+    // Try some small adjustments to find better placement
+    const delta = 0.0001; // Small coordinate adjustment
+    const directions = [
+      [delta, 0], [-delta, 0], [0, delta], [0, -delta],
+      [delta, delta], [-delta, delta], [delta, -delta], [-delta, -delta]
+    ];
+    
+    // Try each direction to see if we get a better point
+    for (let i = 0; i < directions.length; i++) {
+      const [dx, dy] = directions[i];
+      const newCoords = [
+        bestPoint.geometry.coordinates[0] + dx,
+        bestPoint.geometry.coordinates[1] + dy
+      ];
+      
+      // Make sure the new point is inside the polygon
+      if (turf.booleanPointInPolygon(turf.point(newCoords), polygon)) {
+        const newPoint = turf.point(newCoords);
+        const distance = boundaryDistance(newPoint);
+        
+        if (distance > bestDistance) {
+          bestPoint = newPoint;
+          bestDistance = distance;
+        }
+      }
+    }
+    
+    return bestPoint;
+  } catch (error) {
+    console.warn('Error calculating visual center, falling back to centroid:', error);
+    const polygon = turf.polygon([coordinates]);
+    return turf.centroid(polygon);
+  }
 }

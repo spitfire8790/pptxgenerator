@@ -1,0 +1,176 @@
+/* Email notification toggle styles */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 24px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: .4s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .4s;
+}
+
+input:checked + .slider {
+  background-color: #2196F3;
+}
+
+input:focus + .slider {
+  box-shadow: 0 0 1px #2196F3;
+}
+
+input:checked + .slider:before {
+  transform: translateX(24px);
+}
+
+/* Rounded sliders */
+.slider.round {
+  border-radius: 24px;
+}
+
+.slider.round:before {
+  border-radius: 50%;
+}
+
+/* Notifications panel animation */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.notification-panel {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.notification-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: #ff4757;
+  color: white;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+}
+
+/* Slide option cards enhancements */
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.slide-card-active {
+  animation: pulse 1.5s infinite ease-in-out;
+  box-shadow: 0 0 0 2px rgba(75, 85, 99, 0.5);
+}
+
+.slide-icon {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Apply a staggered animation to the slide option cards */
+.grid > div {
+  animation: slideIn 0.3s ease-out backwards;
+}
+
+.grid > div:nth-child(1) { animation-delay: 0.05s; }
+.grid > div:nth-child(2) { animation-delay: 0.1s; }
+.grid > div:nth-child(3) { animation-delay: 0.15s; }
+.grid > div:nth-child(4) { animation-delay: 0.2s; }
+.grid > div:nth-child(5) { animation-delay: 0.25s; }
+.grid > div:nth-child(6) { animation-delay: 0.3s; }
+.grid > div:nth-child(7) { animation-delay: 0.35s; }
+.grid > div:nth-child(8) { animation-delay: 0.4s; }
+.grid > div:nth-child(9) { animation-delay: 0.45s; }
+.grid > div:nth-child(10) { animation-delay: 0.5s; }
+.grid > div:nth-child(11) { animation-delay: 0.55s; }
+.grid > div:nth-child(12) { animation-delay: 0.6s; }
+.grid > div:nth-child(13) { animation-delay: 0.65s; }
+.grid > div:nth-child(14) { animation-delay: 0.7s; }
+.grid > div:nth-child(15) { animation-delay: 0.75s; }
+.grid > div:nth-child(16) { animation-delay: 0.8s; }
+.grid > div:nth-child(17) { animation-delay: 0.85s; }
+
+/* Animated checkbox */
+@keyframes checkboxPulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+.checkbox-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.checkbox-animated {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px !important;
+  height: 16px !important;
+  border: 2px solid #888;
+  border-radius: 6px;
+  outline: none;
+  cursor: pointer;
+  background-color: white;
+  transition: all 0.2s ease;
+}
+
+.checkbox-animated:checked {
+  background-color: #2563eb;
+  border-color: #2563eb;
+  animation: checkboxPulse 0.3s ease-in-out;
+}
+
+.checkbox-animated:checked::after {
+  content: '';
+  position: absolute;
+  width: 5px;
+  height: 10px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  top: 2px;
+  left: 6px;
+  transform: rotate(45deg);
+}
+
+.selected-card {
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+  transition: background-color 0.3s ease;
+} 

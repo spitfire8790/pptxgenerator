@@ -1,6 +1,7 @@
 import { convertCmValues } from '../utils/units';
 import { supabase } from '../utils/supabaseClient';
 import { lgaMapping } from '../utils/map/utils/councilLgaMapping';
+import { formatAddresses } from '../utils/addressFormatting';
 
 // Default values for configurable inputs
 const DEFAULT_SETTINGS = {
@@ -234,7 +235,14 @@ export async function addFeasibilitySlide(pptx, properties, userSettings = {}) {
 
       // Add title
       slide.addText([
-        { text: properties.formatted_address || properties.site__address, options: { color: styles.title.color } },
+        { text: properties.formatted_address || 
+                (properties.isMultipleProperties || 
+                (properties.site__multiple_addresses && 
+                Array.isArray(properties.site__multiple_addresses) && 
+                properties.site__multiple_addresses.length > 1)
+                ? formatAddresses(properties.site__multiple_addresses)
+                : properties.site__address), 
+          options: { color: styles.title.color } },
         { text: ' ', options: { breakLine: true } },
         { text: `Development Feasibility - ${densityType}`, options: { color: styles.subtitle.color } }
       ], convertCmValues(styles.title));

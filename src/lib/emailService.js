@@ -1,6 +1,6 @@
 /**
  * Email service for sending report notifications
- * This implementation provides a fallback approach that works without Supabase Edge Functions
+ * This implementation provides a localStorage-based notification system
  */
 
 import supabase from './supabase';
@@ -29,28 +29,31 @@ export const saveNotificationPreference = (email, enabled) => {
  * @returns {boolean} - Whether notifications are enabled for this user
  */
 export const getNotificationPreference = (email) => {
-  if (!email) return false;
+  if (!email) return true; // Default to true even if no email
   
   try {
     const preferences = JSON.parse(localStorage.getItem('emailNotificationPreferences') || '{}');
-    return preferences[email] === true;
+    // Check if the email has a specific preference set
+    if (email in preferences) {
+      // Return the stored preference
+      return preferences[email] === true;
+    }
+    // Default to true for new users
+    return true;
   } catch (error) {
     console.error('Error getting notification preference:', error);
-    return false;
+    return true; // Default to true on error
   }
 };
 
 /**
- * Log email notifications while we wait for a real email service
- * @param {Object} options - Email options
+ * Save notification to localStorage instead of sending email
+ * @param {Object} options - Notification options
  * @param {string} options.to - Recipient email address
- * @param {string} options.subject - Email subject
- * @param {string} options.text - Plain text email content
- * @param {string} options.html - HTML email content
  * @param {string} options.reportName - Name of the generated report
  * @param {string} options.status - Status of the report generation (success/error)
  * @param {string} options.userName - Name of the user who generated the report
- * @returns {Promise<Object>} - Response from the email sending operation
+ * @returns {Promise<Object>} - Response from the notification operation
  */
 export const sendReportNotificationEmail = async (options) => {
   try {
@@ -67,45 +70,86 @@ export const sendReportNotificationEmail = async (options) => {
       `Generated at: ${new Date().toLocaleString()}\n\n` +
       `Thank you for using our Report Generator!`;
     
-    // While we wait for real email service, log the email content
-    console.log('==========EMAIL NOTIFICATION==========');
-    console.log(`TO: ${to}`);
+    // Log the notification content
+    console.log('==========NOTIFICATION SAVED==========');
+    console.log(`FOR USER: ${to}`);
     console.log(`SUBJECT: ${subject}`);
     console.log('BODY:');
     console.log(text);
-    console.log('====================================');
+    console.log('=====================================');
     
-    // Store this in the browser's session storage for demo purposes
+    // Store notifications in localStorage for persistence between sessions
     try {
-      const sentEmails = JSON.parse(sessionStorage.getItem('sentEmailNotifications') || '[]');
-      sentEmails.push({
+      const notifications = JSON.parse(localStorage.getItem('userNotifications') || '[]');
+      notifications.push({
+        id: Date.now().toString(), // Unique ID for the notification
         to,
         subject,
         text,
         timestamp: new Date().toISOString(),
         reportName,
-        status
+        status,
+        read: false // Track read status
       });
-      sessionStorage.setItem('sentEmailNotifications', JSON.stringify(sentEmails));
+      localStorage.setItem('userNotifications', JSON.stringify(notifications));
     } catch (error) {
-      console.warn('Could not store email in session storage:', error);
+      console.warn('Could not store notification in localStorage:', error);
     }
     
-    // In a real implementation, we would call an email API here
-    // For now, we'll simulate a successful email send
-    return { success: true, message: 'Email notification logged (no actual email sent)' };
+    return { 
+      success: true, 
+      message: 'Notification saved (will be displayed when user returns to the application)'
+    };
   } catch (error) {
-    console.error('Error logging email notification:', error);
+    console.error('Error saving notification:', error);
     return { success: false, error: error.message };
   }
 };
 
 /**
- * Check if email notifications are configured and available
- * @returns {Promise<boolean>} - Whether email sending is available
+ * Get all notifications for a user
+ * @param {string} email - User's email
+ * @returns {Array} - Array of notifications
+ */
+export const getUserNotifications = (email) => {
+  if (!email) return [];
+  
+  try {
+    const notifications = JSON.parse(localStorage.getItem('userNotifications') || '[]');
+    return notifications.filter(notification => notification.to === email);
+  } catch (error) {
+    console.error('Error getting user notifications:', error);
+    return [];
+  }
+};
+
+/**
+ * Mark a notification as read
+ * @param {string} notificationId - ID of the notification to mark as read
+ * @returns {boolean} - Whether the operation was successful
+ */
+export const markNotificationAsRead = (notificationId) => {
+  try {
+    const notifications = JSON.parse(localStorage.getItem('userNotifications') || '[]');
+    const updatedNotifications = notifications.map(notification => {
+      if (notification.id === notificationId) {
+        return { ...notification, read: true };
+      }
+      return notification;
+    });
+    localStorage.setItem('userNotifications', JSON.stringify(updatedNotifications));
+    return true;
+  } catch (error) {
+    console.error('Error marking notification as read:', error);
+    return false;
+  }
+};
+
+/**
+ * Check if notification system is available
+ * @returns {Promise<boolean>} - Whether notifications are available
  */
 export const isEmailServiceAvailable = async () => {
-  // In this implementation, we'll always return true
-  // In a real implementation, we would check if the email service is configured
+  // Always return true since we're using localStorage
   return true;
 };

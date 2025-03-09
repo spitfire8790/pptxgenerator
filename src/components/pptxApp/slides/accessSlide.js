@@ -2,6 +2,7 @@ import { convertCmValues } from '../utils/units';
 import scoringCriteria from './scoringLogic';
 import { proxyRequest } from '../utils/services/proxyService';
 import { captureRoadsMap, captureUDPPrecinctMap, capturePTALMap } from '../utils/map/services/screenshot';
+import { formatAddresses } from '../utils/addressFormatting';
 
 const styles = {
   title: {
@@ -113,7 +114,7 @@ export async function addAccessSlide(pptx, propertyData) {
     const roadsResult = await captureRoadsMap(
       featureToUse, 
       formattedDevelopableArea, 
-      true, // Always show developable areas for roads map
+      false, // Always show developable areas for roads map
       false
     );
 
@@ -162,11 +163,25 @@ export async function addAccessSlide(pptx, propertyData) {
         false
       )
     ]);
-
+    
     // Store the map screenshots
     screenshots.roadsScreenshot = roadsResult?.dataURL;
     screenshots.udpScreenshot = udpScreenshot?.dataURL || udpScreenshot;
     screenshots.ptalScreenshot = ptalScreenshot?.dataURL || ptalScreenshot;
+    
+    // Store UDP features data for scoring
+    if (udpScreenshot?.udpFeatures) {
+      propertyData.udpFeatures = udpScreenshot.udpFeatures;
+      
+      // If we have LMR overlap data from UDP map, update property data
+      if (featureToUse.properties?.lmrOverlap) {
+        propertyData.lmrOverlap = featureToUse.properties.lmrOverlap;
+      }
+    }
+    
+    // Calculate strategic centre score with town centre buffer data if available
+    const strategicCentreScore = scoringCriteria.strategicCentre.calculateScore(propertyData);
+    const strategicCentreDescription = scoringCriteria.strategicCentre.getScoreDescription(strategicCentreScore);
     
     // Ensure we have valid image data for each map
     const roadsImageData = roadsResult?.dataURL || roadsResult;
@@ -213,7 +228,7 @@ export async function addAccessSlide(pptx, propertyData) {
         : `${Math.round(udpScoreResult.minDistance)} metres`;
       
       if (udpScoreResult.score === 1) {
-        udpScoreResult.description = `All developable areas are greater than 1.6 kilometres from a UDP precinct. Additionally, the site is not in a TOD area or LMR area.`;
+        udpScoreResult.description = `All developable areas are greater than 1.6 kilometres from a UDP precinct.`;
       } else if (udpScoreResult.lmrOverlap?.hasOverlap) {
         udpScoreResult.description = `The site is in proximity to a ${udpScoreResult.lmrOverlap.primaryOverlap || 'strategic center'}.`;
       } else {
@@ -240,9 +255,21 @@ export async function addAccessSlide(pptx, propertyData) {
     // Create slide
     const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
 
+    // Determine if we're dealing with multiple properties
+    const isMultipleProperties = propertyData.isMultipleProperties || 
+                               (propertyData.site__multiple_addresses && 
+                               Array.isArray(propertyData.site__multiple_addresses) && 
+                               propertyData.site__multiple_addresses.length > 1);
+    
+    // Use the pre-formatted address if available, otherwise fall back to the old logic
+    const addressText = propertyData.formatted_address || 
+                      (isMultipleProperties 
+                        ? formatAddresses(propertyData.site__multiple_addresses)
+                        : propertyData.site__address);
+
     // Add title
     slide.addText([
-      { text: propertyData.site__address, options: { color: styles.title.color } },
+      { text: addressText, options: { color: styles.title.color } },
       { text: ' ', options: { breakLine: true } },
       { text: 'Access and Proximity to Strategic Centres', options: { color: styles.subtitle.color } }
     ], convertCmValues({
@@ -413,26 +440,27 @@ export async function addAccessSlide(pptx, propertyData) {
       y: '75%',
       w: '28%',
       h: '12%',
-      fill: scoringCriteria.udpPrecincts.getScoreColor(udpScoreResult.score).replace('#', ''),
+      fill: scoringCriteria.udpPrecincts.getScoreColor(3).replace('#', ''),
       line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
     }));
 
     // UDP Precincts description text
-    slide.addText(udpDescription, convertCmValues({
+    slide.addText("Please update commentary and score based on screenshot.", convertCmValues({
       x: '36%',
       y: '75%',
       w: '28%',
       h: '8%',
       fontSize: 7,
-      color: '363636',
+      color: 'FF0000',  // Red color
       fontFace: 'Public Sans',
       align: 'left',
       valign: 'top',
-      wrap: true
+      wrap: true,
+      italic: true  // Italics
     }));
 
-    // UDP Precincts score text
-    slide.addText(`Score: ${udpScoreResult.score}/3`, convertCmValues({
+    // UDP Precincts score text - hardcoded to 3/3 as placeholder 
+    slide.addText(`Score: 3/3`, convertCmValues({
       x: '36%',
       y: '80%',
       w: '28%',
@@ -454,7 +482,7 @@ export async function addAccessSlide(pptx, propertyData) {
     }));
 
     // UDP Precincts source text
-    slide.addText('Source: Urban Development Program, DPHI, 2024', convertCmValues({
+    slide.addText('Source: Department of Planning, Housing and Infrastructure, 2025', convertCmValues({
       x: '36%',
       y: '83%',
       w: '28%',

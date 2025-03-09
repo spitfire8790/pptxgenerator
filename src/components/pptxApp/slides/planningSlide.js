@@ -1,6 +1,7 @@
 import { convertCmValues } from '../utils/units';
 import DevelopableAreaSelector from '../DevelopableAreaSelector';
 import scoringCriteria from './scoringLogic';
+import { formatAddresses } from '../utils/addressFormatting';
 
 // Helper function to parse and combine zoning data
 const parseZoning = (zoningString, developableAreaZones = []) => {
@@ -386,10 +387,22 @@ export async function addPlanningSlide(pptx, properties) {
     // Now add all slide elements
     console.log('Starting to add slide elements...');
 
+    // Determine if we're dealing with multiple properties
+    const isMultipleProperties = properties.isMultipleProperties || 
+                              (properties.site__multiple_addresses && 
+                              Array.isArray(properties.site__multiple_addresses) && 
+                              properties.site__multiple_addresses.length > 1);
+    
+    // Use the pre-formatted address if available, otherwise fall back to the logic for multiple addresses
+    const addressText = properties.formatted_address || 
+                      (isMultipleProperties 
+                        ? formatAddresses(properties.site__multiple_addresses)
+                        : properties.site__address);
+
     // Add ONLY title (address and 'Planning')
     console.log('Adding title...');
     slide.addText([
-      { text: properties.formatted_address || properties.site__address, options: { color: styles.title.color } },
+      { text: addressText, options: { color: styles.title.color } },
       { text: ' ', options: { breakLine: true } },
       { text: 'Planning', options: { color: styles.subtitle.color } }
     ], convertCmValues(styles.title));

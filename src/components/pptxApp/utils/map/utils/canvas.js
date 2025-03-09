@@ -30,7 +30,7 @@ export function drawImage(ctx, image, width, height, opacity = 1.0) {
 export function drawBoundary(ctx, coordinates, centerX, centerY, size, canvasSize, style = {}) {
   if (!coordinates || !Array.isArray(coordinates)) {
     console.error('Invalid coordinates:', coordinates);
-    return;
+    return false;
   }
 
   const { scale = 1, offsetX = 0, offsetY = 0 } = style;
@@ -61,6 +61,9 @@ export function drawBoundary(ctx, coordinates, centerX, centerY, size, canvasSiz
   // Begin drawing the boundary path
   ctx.beginPath();
 
+  // Flag to track if any point is inside the canvas
+  let isVisible = false;
+  
   // Process each coordinate pair
   coordinates.forEach((coord, i) => {
     if (!Array.isArray(coord) || coord.length < 2) {
@@ -76,6 +79,11 @@ export function drawBoundary(ctx, coordinates, centerX, centerY, size, canvasSiz
     const x = ((mercX - (centerMercX - sizeInMeters/2)) / sizeInMeters) * canvasSize;
     const y = ((centerMercY + sizeInMeters/2 - mercY) / sizeInMeters) * canvasSize;
     
+    // Check if point is within canvas bounds (with some margin)
+    if (x >= -50 && x <= canvasSize + 50 && y >= -50 && y <= canvasSize + 50) {
+      isVisible = true;
+    }
+    
     // First point starts the path, subsequent points connect to previous point
     if (i === 0) {
       ctx.moveTo(x, y);
@@ -87,8 +95,8 @@ export function drawBoundary(ctx, coordinates, centerX, centerY, size, canvasSiz
   // Close the path
   ctx.closePath();
   
-  // Fill if fillStyle is specified
-  if (style.fill && style.fillStyle) {
+  // Fill if fillStyle is specified (removing the style.fill requirement)
+  if (style.fillStyle) {
     ctx.fill();
   }
   
@@ -97,9 +105,12 @@ export function drawBoundary(ctx, coordinates, centerX, centerY, size, canvasSiz
   
   // Reset dash pattern
   ctx.setLineDash([]);
-
-  // Restore context state
+  
+  // Restore context to previous state
   ctx.restore();
+  
+  // Return whether any part of the boundary was visible
+  return isVisible;
 }
 
 export function drawPolyline(ctx, coordinates, centerX, centerY, size, canvasSize, style = {}, isWebMercator = false) {

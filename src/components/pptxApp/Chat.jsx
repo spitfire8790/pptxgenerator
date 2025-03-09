@@ -14,6 +14,7 @@ const Chat = ({ isOpen, onClose }) => {
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [editingMessageId, setEditingMessageId] = useState(null);
     const [editMessageText, setEditMessageText] = useState('');
+    const [userReportCounts, setUserReportCounts] = useState({});
     const messageContainerRef = useRef(null);
     const chatSubscription = useRef(null);
     const refreshInterval = useRef(null);
@@ -23,6 +24,7 @@ const Chat = ({ isOpen, onClose }) => {
             fetchMessages();
             setupRealtimeSubscription();
             getUserNameFromGiraffe();
+            fetchUserReportCounts();
             
             // Set up refresh interval for more frequent updates (every 500ms)
             refreshInterval.current = setInterval(() => {
@@ -46,6 +48,33 @@ const Chat = ({ isOpen, onClose }) => {
             messageContainerRef.current.scrollTop = messageContainerRef.current.scrollHeight;
         }
     }, [messages]);
+
+    const fetchUserReportCounts = async () => {
+        try {
+            if (!supabase) {
+                throw new Error('Supabase client is not initialized.');
+            }
+
+            const { data, error: supabaseError } = await supabase
+                .from('report_stats')
+                .select('*');
+
+            if (supabaseError) throw supabaseError;
+
+            // Process user statistics
+            const userStatsMap = data.reduce((acc, record) => {
+                if (!acc[record.user_name]) {
+                    acc[record.user_name] = 0;
+                }
+                acc[record.user_name]++;
+                return acc;
+            }, {});
+
+            setUserReportCounts(userStatsMap);
+        } catch (error) {
+            console.error('Error fetching report counts:', error);
+        }
+    };
 
     const getUserNameFromGiraffe = async () => {
         try {
@@ -263,6 +292,15 @@ const Chat = ({ isOpen, onClose }) => {
             from { transform: translateX(-20px); opacity: 0; }
             to { transform: translateX(0); opacity: 1; }
         }
+        @keyframes starPulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.3); }
+            100% { transform: scale(1); }
+        }
+        .admin-star {
+            display: inline-block;
+            animation: starPulse 1.5s infinite ease-in-out;
+        }
         .message-animate-in-right {
             animation: slideInRight 0.3s ease-out forwards;
         }
@@ -285,6 +323,27 @@ const Chat = ({ isOpen, onClose }) => {
         }
     `;
 
+    const renderUserWithReportCount = (userName) => {
+        const reportCount = userReportCounts[userName] || 0;
+        
+        // Special handling for the admin user
+        if (userName === "James Strutt") {
+            return (
+                <span className="flex items-center">
+                    {userName} <span className="ml-1 text-blue-600 font-semibold">(Admin</span> 
+                    <span className="admin-star ml-0.5 mr-1">⭐</span>
+                    <span className="text-blue-600 font-semibold">)</span>
+                </span>
+            );
+        }
+        
+        return (
+            <span>
+                {userName} {reportCount > 0 && <span className="text-gray-500">({reportCount} Reports)</span>}
+            </span>
+        );
+    };
+
     if (!isOpen) return null;
 
     return (
@@ -302,7 +361,7 @@ const Chat = ({ isOpen, onClose }) => {
                             onClick={handleChangeUserName}
                         >
                             <User className="w-4 h-4" />
-                            <span>{userName}</span>
+                            <span>{renderUserWithReportCount(userName)}</span>
                         </div>
                         <button 
                             onClick={onClose}
@@ -341,7 +400,7 @@ const Chat = ({ isOpen, onClose }) => {
                                     return (
                                         <div key={index} className={`mb-4 last:mb-0 ${isCurrentUser ? 'flex flex-col items-end' : 'flex flex-col items-start'}`}>
                                             <div className="flex items-center gap-2 mb-1">
-                                                <span className="font-medium text-sm text-gray-700">{msg.user_name}</span>
+                                                <span className="font-medium text-sm text-gray-700">{renderUserWithReportCount(msg.user_name)}</span>
                                                 <span className="text-xs text-gray-500">{formatDate(msg.created_at)}</span>
                                             </div>
                                             <div className="flex items-start gap-2 max-w-[80%]">

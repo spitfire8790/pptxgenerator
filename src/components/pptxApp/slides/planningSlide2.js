@@ -1,6 +1,7 @@
 import { convertCmValues } from '../utils/units';
 import scoringCriteria from './scoringLogic';
 import { proxyRequest } from '../utils/services/proxyService';
+import { formatAddresses } from '../utils/addressFormatting';
 
 const makeGeometryRequest = async (url, params) => {
     try {
@@ -204,9 +205,21 @@ export async function addPlanningSlide2(pptx, properties) {
   const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
 
   try {
+    // Determine if we're dealing with multiple properties
+    const isMultipleProperties = properties.isMultipleProperties || 
+                               (properties.site__multiple_addresses && 
+                               Array.isArray(properties.site__multiple_addresses) && 
+                               properties.site__multiple_addresses.length > 1);
+    
+    // Use the pre-formatted address if available, otherwise fall back to the old logic
+    const addressText = properties.formatted_address || 
+                       (isMultipleProperties 
+                         ? formatAddresses(properties.site__multiple_addresses)
+                         : properties.site__address);
+    
     // Add title
     slide.addText([
-      { text: properties.formatted_address || properties.site__address, options: { color: styles.title.color } },
+      { text: addressText, options: { color: styles.title.color } },
       { text: ' ', options: { breakLine: true } },
       { text: 'Heritage & Acid Sulfate Soils', options: { color: styles.subtitle.color } }
     ], convertCmValues(styles.title));

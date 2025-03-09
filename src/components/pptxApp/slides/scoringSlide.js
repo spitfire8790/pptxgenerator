@@ -1,6 +1,7 @@
 import scoringCriteria from './scoringLogic';
 import { convertCmValues } from '../utils/units';
 import nswLogo from '../../../../public/images/NSW-Government-official-logo.jpg';
+import { formatAddresses } from '../utils/addressFormatting';
 
 const styles = {
   title: {
@@ -83,9 +84,21 @@ export async function createScoringSlide(pres, propertyData) {
   const slide = pres.addSlide({ masterName: 'NSW_MASTER' });
 
   try {
+    // Determine if we're dealing with multiple properties
+    const isMultipleProperties = propertyData.isMultipleProperties || 
+                               (propertyData.site__multiple_addresses && 
+                               Array.isArray(propertyData.site__multiple_addresses) && 
+                               propertyData.site__multiple_addresses.length > 1);
+    
+    // Use the pre-formatted address if available, otherwise fall back to the old logic
+    const addressText = propertyData?.formatted_address || 
+                       (isMultipleProperties 
+                         ? formatAddresses(propertyData.site__multiple_addresses)
+                         : propertyData?.site__address || 'Address not available');
+    
     // Add title
     slide.addText([
-      { text: propertyData?.formatted_address || propertyData?.site__address || 'Address not available', options: { color: styles.title.color } },
+      { text: addressText, options: { color: styles.title.color } },
       { text: ' ', options: { breakLine: true } },
       { text: 'Site Scoring', options: { color: styles.subtitle.color } }
     ], convertCmValues(styles.title));

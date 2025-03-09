@@ -736,6 +736,20 @@ const scoringCriteria = {
                         if (overlapsFeature) {
                           // Calculate the actual intersection area for overlapping features
                           try {
+                            // Check if both geometries are valid before attempting intersection
+                            if (!developablePolygon || !featurePolygon) {
+                              console.warn(`Skipping intersection for feature ${index + 1} - invalid geometry`);
+                              continue;
+                            }
+                            
+                            // Ensure both geometries have coordinates
+                            if (!developablePolygon.geometry || !featurePolygon.geometry ||
+                                !developablePolygon.geometry.coordinates || !featurePolygon.geometry.coordinates ||
+                                developablePolygon.geometry.coordinates.length === 0 || featurePolygon.geometry.coordinates.length === 0) {
+                              console.warn(`Skipping intersection for feature ${index + 1} - missing coordinates`);
+                              continue;
+                            }
+                            
                             const intersection = turf.intersect(developablePolygon, featurePolygon);
                             
                             if (intersection) {
@@ -1368,15 +1382,27 @@ const scoringCriteria = {
     calculateScore: (roadFeatures, developableArea, allProperties = null) => {
       console.log('=== Roads Score Calculation Start ===');
       console.log('Raw road features:', JSON.stringify(roadFeatures, null, 2));
-      console.log('Raw developable area:', JSON.stringify(developableArea, null, 2));
-      console.log('All properties:', allProperties ? allProperties.length : 'none');
-
-      if (!developableArea?.[0]) {
-        console.log('No developable area - returning score 0');
-        return { score: 0, nearbyRoads: [] };
-      }
+      
+      // Helper function to convert text to title case (e.g., "COLES STREET" to "Coles Street")
+      const toTitleCase = (text) => {
+        if (!text) return 'Unnamed Road';
+        return text.toLowerCase()
+          .split(' ')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+      };
 
       try {
+        // Create proxy for properties to handle empty values
+        const roadFeaturesProxy = new Proxy(roadFeatures, {
+          get: (target, prop) => target[prop] || {},
+        });
+
+        if (!developableArea?.[0]) {
+          console.log('No developable area - returning score 0');
+          return { score: 0, nearbyRoads: [] };
+        }
+
         // Process all developable areas
         const nearbyRoadsForAllAreas = [];
         
@@ -1422,8 +1448,9 @@ const scoringCriteria = {
                   console.log(`Buffer distance used: ${bufferDistance}m`);
                   
                   if (intersects) {
+                    // Remove this local definition since we already have toTitleCase at the function level
                     const roadInfo = {
-                      name: feature.properties?.ROADNAMEST || 'Unnamed Road',
+                      name: toTitleCase(feature.properties?.ROADNAMEST) || 'Unnamed Road',
                       function: feature.properties?.FUNCTION || 'Unknown',
                       laneCount: parseInt(feature.properties?.LANECOUNT) || 0
                     };
@@ -1468,7 +1495,7 @@ const scoringCriteria = {
                     
                     if (intersects) {
                       const roadInfo = {
-                        name: feature.properties?.ROADNAMEST || 'Unnamed Road',
+                        name: toTitleCase(feature.properties?.ROADNAMEST) || 'Unnamed Road',
                         function: feature.properties?.FUNCTION || 'Unknown',
                         laneCount: parseInt(feature.properties?.LANECOUNT) || 0
                       };
@@ -2815,4 +2842,64 @@ scoringCriteria.tec = {
   getScoreColor: (score) => {
     return scoreColors[score] || scoreColors[0];
   }
+};
+
+// Strategic centre
+// This criterion considers proximity to strategic centres and TOD areas
+scoringCriteria.strategicCentre = {
+  calculateScore: (properties) => {
+    console.log('Calculating strategic centre score for properties:', properties);
+    
+    // Default to score 1 if no data available
+    if (!properties || !properties.lmrOverlap) {
+      console.warn('No LMR overlap data found in properties');
+      return 1;
+    }
+    
+    try {
+      // Check if any LMR overlaps exist
+      const { hasOverlap, overlaps, primaryOverlap } = properties.lmrOverlap;
+      
+      if (!hasOverlap) {
+        console.log('No strategic centre overlaps found');
+        return 0;
+      }
+      
+      // Prioritize overlaps in this order
+      const overlapScores = {
+        'TOD Accelerated Rezoning Area': 5, // Highest score
+        'TOD Area': 4,
+        'Indicative LMR Housing Area': 3,
+        'Town Centre 800m Buffer': 2, // New score for town centre buffer
+        default: 0
+      };
+      
+      // Determine the highest applicable score based on overlaps
+      let highestScore = 0;
+      
+      Object.entries(overlaps).forEach(([name, hasOverlap]) => {
+        if (hasOverlap && overlapScores[name] > highestScore) {
+          highestScore = overlapScores[name];
+        }
+      });
+      
+      console.log(`Strategic centre score: ${highestScore}`);
+      return highestScore;
+    } catch (error) {
+      console.error('Error calculating strategic centre score:', error);
+      return 0;
+    }
+  },
+  getScoreDescription: (score) => {
+    const descriptions = {
+      0: 'Not within a strategic centre area',
+      1: 'Limited strategic centre proximity',
+      2: 'Within 800m of a town centre',
+      3: 'Within an indicative LMR housing area',
+      4: 'Within a TOD area',
+      5: 'Within a TOD accelerated rezoning area'
+    };
+    
+    return descriptions[score] || 'Unknown strategic centre score';
+  },
 };

@@ -56,15 +56,44 @@ export async function proxyRequest(url, options = {}) {
         console.log('Added Referer header for ArcGIS service');
       }
       
-      // Add specific timeout for ArcGIS services
-      if (!options.timeout) {
-        // Special handling for SIX Maps services which need longer timeouts
-        if (url.includes('maps.six.nsw.gov.au')) {
-          options.timeout = 240000; // 4 minutes for SIX Maps services
-          console.log('Set extended timeout (2 minutes) for SIX Maps service');
-        } else {
-          options.timeout = 240000; // 4 minutes for other ArcGIS services
-          console.log('Set extended timeout (90 seconds) for ArcGIS service');
+      // Special handling for spatialportalarcgis.dpie.nsw.gov.au
+      if (url.includes('spatialportalarcgis.dpie.nsw.gov.au')) {
+        console.log('Special handling for spatialportalarcgis.dpie.nsw.gov.au');
+        
+        // Check if this is an export request
+        if (url.includes('/export')) {
+          // Force to use POST with form data for export requests
+          options.method = 'POST';
+          
+          // Set proper content type for ArcGIS REST API
+          options.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+          
+          // Move all query parameters to the body for POST request
+          if (url.includes('?')) {
+            const [baseUrl, queryString] = url.split('?');
+            url = baseUrl;
+            options.body = queryString;
+            console.log('Modified request: Moved query params to body for spatialportalarcgis');
+          }
+          
+          // Add additional headers that might help
+          options.headers['Accept'] = 'image/png,*/*';
+          
+          // Set a longer timeout for these specific requests
+          options.timeout = 300000; // 5 minutes
+          console.log('Set extended timeout (5 minutes) for spatialportalarcgis service');
+        }
+      } else {
+        // Add specific timeout for ArcGIS services
+        if (!options.timeout) {
+          // Special handling for SIX Maps services which need longer timeouts
+          if (url.includes('maps.six.nsw.gov.au')) {
+            options.timeout = 240000; // 4 minutes for SIX Maps services
+            console.log('Set extended timeout (4 minutes) for SIX Maps service');
+          } else {
+            options.timeout = 240000; // 4 minutes for other ArcGIS services
+            console.log('Set extended timeout (4 minutes) for ArcGIS service');
+          }
         }
       }
       
@@ -118,58 +147,93 @@ export async function proxyRequest(url, options = {}) {
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     
     try {
-      const response = await fetch(proxyUrl, {
-        ...requestOptions,
-        signal: controller.signal
-      });
+      // If we're requesting from spatialportalarcgis.dpie.nsw.gov.au and it's an export operation,
+      // we'll try up to 3 times with a small delay between attempts
+      let maxRetries = 0;
+      if (url.includes('spatialportalarcgis.dpie.nsw.gov.au') && url.includes('/export')) {
+        maxRetries = 2; // Will try 3 times total (initial + 2 retries)
+      }
       
-      // Clear the timeout
-      clearTimeout(timeoutId);
-  
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Proxy request failed:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorText
-        });
-        throw new Error(`Proxy request failed: ${response.statusText}. ${errorText}`);
-      }
-  
-      const contentType = response.headers.get('content-type');
-      console.log('Response content type:', contentType);
+      let lastError = null;
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          if (attempt > 0) {
+            console.log(`Retry attempt ${attempt} for spatialportalarcgis.dpie.nsw.gov.au export request`);
+            // Wait a bit before retrying
+            await new Promise(resolve => setTimeout(resolve, 3000 * attempt));
+          }
+          
+          const response = await fetch(proxyUrl, {
+            ...requestOptions,
+            signal: controller.signal
+          });
+          
+          // Clear the timeout
+          clearTimeout(timeoutId);
       
-      // Handle binary responses (images, etc.)
-      if (contentType?.includes('image') || url.includes('/export') || url.includes('GetMap')) {
-        const arrayBuffer = await response.arrayBuffer();
-        const blob = new Blob([arrayBuffer], { type: contentType });
-        return URL.createObjectURL(blob);
-      }
-  
-      // Handle text responses
-      if (contentType?.includes('text') || url.includes('maps.google.com/maps') || url.includes('google.com/maps')) {
-        return await response.text();
-      }
-  
-      // Try to parse as JSON, fallback to text if that fails
-      try {
-        const jsonResponse = await response.json();
-        console.log('Successfully parsed JSON response');
-        return jsonResponse;
-      } catch (e) {
-        console.warn('Failed to parse response as JSON, falling back to text:', e.message);
-        const text = await response.text();
-        if (!text) {
-          throw new Error('Empty response from proxy server');
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Proxy request failed:', {
+              status: response.status,
+              statusText: response.statusText,
+              error: errorText
+            });
+            
+            // If we have retries left, throw an error to trigger retry
+            if (attempt < maxRetries) {
+              throw new Error(`Proxy request failed (will retry): ${response.statusText}. ${errorText}`);
+            }
+            
+            // If no retries left or not a retryable request, throw final error
+            throw new Error(`Proxy request failed: ${response.statusText}. ${errorText}`);
+          }
+      
+          const contentType = response.headers.get('content-type');
+          console.log('Response content type:', contentType);
+          
+          // Handle binary responses (images, etc.)
+          if (contentType?.includes('image') || url.includes('/export') || url.includes('GetMap')) {
+            const arrayBuffer = await response.arrayBuffer();
+            const blob = new Blob([arrayBuffer], { type: contentType || 'image/png' });
+            return URL.createObjectURL(blob);
+          }
+      
+          // Handle text responses
+          if (contentType?.includes('text') || url.includes('maps.google.com/maps') || url.includes('google.com/maps')) {
+            return await response.text();
+          }
+      
+          // Try to parse as JSON, fallback to text if that fails
+          try {
+            const jsonResponse = await response.json();
+            console.log('Successfully parsed JSON response');
+            return jsonResponse;
+          } catch (e) {
+            console.warn('Failed to parse response as JSON, falling back to text:', e.message);
+            const text = await response.text();
+            if (!text) {
+              throw new Error('Empty response from proxy server');
+            }
+            
+            // If the text looks like JSON but couldn't be parsed, log it for debugging
+            if (text.startsWith('{') || text.startsWith('[')) {
+              console.log('Response looks like JSON but could not be parsed:', text.substring(0, 200) + '...');
+            }
+            
+            return text;
+          }
+        } catch (retryError) {
+          lastError = retryError;
+          // If this is the last attempt, don't continue
+          if (attempt === maxRetries) {
+            throw retryError;
+          }
+          console.warn(`Attempt ${attempt + 1} failed, retrying...`, retryError.message);
         }
-        
-        // If the text looks like JSON but couldn't be parsed, log it for debugging
-        if (text.startsWith('{') || text.startsWith('[')) {
-          console.log('Response looks like JSON but could not be parsed:', text.substring(0, 200) + '...');
-        }
-        
-        return text;
       }
+      
+      // This should never be reached due to the throw in the loop
+      throw lastError || new Error('Unknown error occurred during retry logic');
     } catch (fetchError) {
       // Clear the timeout
       clearTimeout(timeoutId);
