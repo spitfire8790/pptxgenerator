@@ -28,8 +28,9 @@ import {
 } from 'lucide-react';
 import FeasibilityCalculation from './FeasibilityCalculation';
 import FeasibilitySummary from './FeasibilitySummary';
+import ConstructionDataModal from './ConstructionDataModal';
 
-const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructionData, selectedFeature, onShowMedianPrices, lmrOptions, onLMROptionChange, calculationResults }) => {
+const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructionData, selectedFeature, onShowMedianPrices, onShowConstructionData, onShowDwellingSizeData, lmrOptions, onLMROptionChange, calculationResults }) => {
   // Define property type descriptions
   const densityDescriptions = {
     lowMidDensity: "Includes: Dual OccupancyDuplex/Semi-detached, House, Manor House, Terrace, Townhouse, Villa",
@@ -62,7 +63,7 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
     mixedAffordablePercentage: 15
   });
 
-  // Define settings configuration
+  // Define settings configuration with the new showConstructionButton property
   const settingsConfig = [
     // Development Metrics section
     { id: 'section-development', label: 'Development Metrics', isSection: true },
@@ -75,12 +76,20 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
     { id: 'section-construction', label: 'Construction Metrics', isSection: true },
     { 
       id: 'constructionCostM2', 
-      label: 'Construction Cost per m² GFA', 
+      label: 'Median Construction Cost per m² GFA', 
       unit: '$/m²', 
       icon: HardHat, 
-      isEditable: true,
-      hasRevert: true,
-      tooltip: density => `Default based on ${constructionData?.certificateCounts?.[density] || 0} approved DAs`
+      isCalculated: true,
+      hasRevert: false,
+      tooltip: density => `Based on ${constructionData?.certificateCounts?.[density] || 0} approved DAs`,
+      showConstructionButton: true
+    },
+    { 
+      id: 'assumedConstructionCostM2', 
+      label: 'Assumed Construction Cost per m² GFA', 
+      unit: '$/m²', 
+      icon: HardHat, 
+      isEditable: true
     },
 
     // Dwelling Metrics section
@@ -90,9 +99,17 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
       label: 'Median Dwelling Size', 
       unit: 'm²', 
       icon: Maximize2, 
-      isEditable: true,
-      hasRevert: true,
-      tooltip: density => `Default based on 2 bedroom dwellings from ${constructionData?.certificateCounts?.[density] || 0} approved DAs`
+      isCalculated: true,
+      hasRevert: false,
+      tooltip: density => `Based on 2 bedroom dwellings from ${constructionData?.certificateCounts?.[density] || 0} approved DAs`,
+      showConstructionButton: true
+    },
+    { 
+      id: 'assumedDwellingSize', 
+      label: 'Assumed Dwelling Size', 
+      unit: 'm²', 
+      icon: Maximize2, 
+      isEditable: true
     },
     { 
       id: 'dwellingPrice', 
@@ -160,12 +177,20 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
         hob = propertyData?.properties?.copiedFrom?.site_suitability__height_of_building || 0;
       }
 
-      // Calculate GFA under FSR and HOB
+      // Calculate GFA under FSR
       const gfaUnderFsr = siteArea * fsr;
       
       // Calculate GFA under HOB
-      const maxStoreys = Math.floor(hob / settings.floorToFloorHeight);
+      let maxStoreys = Math.floor(hob / settings.floorToFloorHeight);
+      
+      // Limit Low-Mid Density to maximum 3 storeys
+      if (density === 'lowMidDensity' && maxStoreys > 3) {
+        maxStoreys = 3;
+      }
+      
       const siteCoverage = developableArea * settings.siteEfficiencyRatio;
+      // For high-density: GFA = Site Area × 50% (building footprint) × HOB/3.1 (storeys) × 75% (efficiency)
+      // For low-density: GFA = Site Area × 60% (building footprint) × HOB/3.1 (max 3 storeys) × 90% (efficiency)
       const gfaUnderHob = siteCoverage * maxStoreys * settings.gbaToGfaRatio;
 
       // Use FSR value if no HoB exists, otherwise use the lower of the two
@@ -179,7 +204,18 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
 
       // Calculate NSA and development yield
       const nsa = gfa * settings.gfaToNsaRatio;
-      const dwellingSize = constructionData?.dwellingSizes?.[density] || 80; // Default fallback
+      
+      // Use the appropriate dwelling size based on density
+      let dwellingSize;
+      if (density === 'highDensity') {
+        // Use fixed 75m² for high-density
+        dwellingSize = 75;
+      } else {
+        // Use the rounded down to nearest 10m² value for low-density
+        const medianSize = constructionData?.dwellingSizes?.[density] || 80;
+        dwellingSize = Math.floor(medianSize / 10) * 10;
+      }
+      
       const developmentYield = Math.floor(nsa / dwellingSize);
 
       // Calculate total gross realisation
@@ -196,8 +232,8 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
       const profitAndRisk = netRealisation * settings.profitAndRisk;
       const netRealisationAfterProfitAndRisk = netRealisation - profitAndRisk;
 
-      // Get construction cost
-      const constructionCostPerGfa = constructionData?.[density] || 3500; // Default fallback
+      // Get construction cost - use the assumed cost from settings
+      const constructionCostPerGfa = settings.assumedConstructionCostM2;
       
       // Calculate development costs
       const constructionCosts = constructionCostPerGfa * gfa;
@@ -299,6 +335,8 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
     }
     
     const siteCoverage = developableArea * settings[density].siteEfficiencyRatio;
+    // For high-density: GFA = Site Area × 50% (building footprint) × HOB/3.1 (storeys) × 75% (efficiency)
+    // For low-density: GFA = Site Area × 60% (building footprint) × HOB/3.1 (max 3 storeys) × 90% (efficiency)
     const gfaUnderHob = siteCoverage * maxStoreys * settings[density].gbaToGfaRatio;
 
     // Use FSR value if no HoB exists, otherwise use the lower of the two
@@ -335,23 +373,33 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
       dwellingSize = constructionData?.dwellingSizes?.[density] || 0;
     }
 
-  // Filter sales data by property type based on density
-  const LOW_MID_DENSITY_TYPES = ['duplex/semi-detached', 'duplex-semi-detached', 'house', 'terrace', 'townhouse', 'villa'];
-  const HIGH_DENSITY_TYPES = ['apartment', 'studio', 'unit'];
+    // Calculate assumed dwelling size based on density
+    let assumedDwellingSize = 0;
+    if (density === 'highDensity') {
+      // Fixed at 75m² for high-density
+      assumedDwellingSize = 75;
+    } else {
+      // Round down to nearest 10m² for low-density
+      assumedDwellingSize = Math.floor(dwellingSize / 10) * 10;
+    }
 
-  const relevantSales = salesData?.filter(sale => {
-    const propertyType = sale.property_type?.toLowerCase().trim();
-    const propertyTypes = density === 'lowMidDensity' ? LOW_MID_DENSITY_TYPES : HIGH_DENSITY_TYPES;
-    
-    // Check if property type matches
-    const typeMatches = propertyTypes.some(type => propertyType?.includes(type));
-    
-    // Specifically filter for 2 bedroom dwellings
-    const bedroomCount = sale.bedrooms ? parseInt(sale.bedrooms, 10) : null;
-    const isTwoBedroom = bedroomCount === 2;
-    
-    return typeMatches && isTwoBedroom;
-  }) || [];
+    // Filter sales data by property type based on density
+    const LOW_MID_DENSITY_TYPES = ['duplex/semi-detached', 'duplex-semi-detached', 'house', 'terrace', 'townhouse', 'villa'];
+    const HIGH_DENSITY_TYPES = ['apartment', 'studio', 'unit'];
+
+    const relevantSales = salesData?.filter(sale => {
+      const propertyType = sale.property_type?.toLowerCase().trim();
+      const propertyTypes = density === 'lowMidDensity' ? LOW_MID_DENSITY_TYPES : HIGH_DENSITY_TYPES;
+      
+      // Check if property type matches
+      const typeMatches = propertyTypes.some(type => propertyType?.includes(type));
+      
+      // Specifically filter for 2 bedroom dwellings
+      const bedroomCount = sale.bedrooms ? parseInt(sale.bedrooms, 10) : null;
+      const isTwoBedroom = bedroomCount === 2;
+      
+      return typeMatches && isTwoBedroom;
+    }) || [];
 
     // Get median price from filtered sales data
     const medianPrice = relevantSales.length > 0 
@@ -361,16 +409,21 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
     // Get construction cost from construction data
     const constructionCostM2 = constructionData[density === 'lowMidDensity' ? 'lowMidDensity' : 'highDensity'];
 
+    // Calculate assumed construction cost (rounded down to nearest 10)
+    const assumedConstructionCostM2 = Math.floor(constructionCostM2 / 10) * 10;
+
     // Use custom dwelling price if set, otherwise use median price
     const dwellingPrice = customDwellingPrice[density] 
-      ? settings[density].dwellingPrice 
+      ? settings[density][setting.id] 
       : medianPrice;
 
     return {
       dwellingSize: Math.round(dwellingSize),
+      assumedDwellingSize: assumedDwellingSize,
       dwellingPrice: dwellingPrice,
       pricePerM2: dwellingPrice && dwellingSize ? Math.round(dwellingPrice / dwellingSize) : null,
-      constructionCostM2: Math.round(constructionCostM2)
+      constructionCostM2: Math.round(constructionCostM2),
+      assumedConstructionCostM2: assumedConstructionCostM2
     };
   };
 
@@ -410,9 +463,9 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
       onSettingChange('siteEfficiencyRatio', 0.6, 'lowMidDensity');
     }
     
-  if (settings.highDensity.siteEfficiencyRatio !== 0.5) {
-    onSettingChange('siteEfficiencyRatio', 0.5, 'highDensity');
-  }
+    if (settings.highDensity.siteEfficiencyRatio !== 0.5) {
+      onSettingChange('siteEfficiencyRatio', 0.5, 'highDensity');
+    }
 
     // Set floor to floor height to 3.1m for both density types
     if (settings.lowMidDensity.floorToFloorHeight !== 3.1) {
@@ -428,6 +481,11 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
       onSettingChange('gbaToGfaRatio', 0.9, 'lowMidDensity');
     }
 
+    // Set GBA to GFA ratio for High Density to 75%
+    if (settings.highDensity.gbaToGfaRatio !== 0.75) {
+      onSettingChange('gbaToGfaRatio', 0.75, 'highDensity');
+    }
+
     // Set Development Contribution to 1% of Construction Costs if not already set
     if (settings.lowMidDensity.developmentContribution !== 0.01) {
       onSettingChange('developmentContribution', 0.01, 'lowMidDensity');
@@ -441,7 +499,35 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
     if (settings.lowMidDensity.projectPeriod !== 24) {
       onSettingChange('projectPeriod', 24, 'lowMidDensity');
     }
-  }, []);
+    
+    // Initialize assumed construction costs if not set
+    if (constructionData) {
+      // Calculate low-mid density assumed construction cost
+      if (!settings.lowMidDensity.assumedConstructionCostM2) {
+        const lowMidConstructionCost = constructionData.lowMidDensity || 3500;
+        const lowMidAssumedCost = Math.floor(lowMidConstructionCost / 10) * 10;
+        onSettingChange('assumedConstructionCostM2', lowMidAssumedCost, 'lowMidDensity');
+      }
+      
+      // Calculate high density assumed construction cost
+      if (!settings.highDensity.assumedConstructionCostM2) {
+        const highConstructionCost = constructionData.highDensity || 3500;
+        const highAssumedCost = Math.floor(highConstructionCost / 10) * 10;
+        onSettingChange('assumedConstructionCostM2', highAssumedCost, 'highDensity');
+      }
+      
+      // Initialize assumed dwelling sizes if not set
+      if (!settings.lowMidDensity.assumedDwellingSize && constructionData.dwellingSizes?.lowMidDensity) {
+        const assumedSize = Math.floor(constructionData.dwellingSizes.lowMidDensity / 10) * 10;
+        onSettingChange('assumedDwellingSize', assumedSize, 'lowMidDensity');
+      }
+      
+      if (!settings.highDensity.assumedDwellingSize) {
+        // High density uses fixed 75m² size
+        onSettingChange('assumedDwellingSize', 75, 'highDensity');
+      }
+    }
+  }, [constructionData]);
 
   // Update useEffect to calculate results when settings change
   useEffect(() => {
@@ -515,8 +601,10 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
         setting === 'pricePerM2') {
       return value.toLocaleString('en-AU');
     }
-    if (setting === 'constructionCostM2' || 
-        setting === 'dwellingSize') {
+    if (setting === 'constructionCostM2' || setting === 'assumedConstructionCostM2') {
+      return '$' + Math.round(value).toLocaleString('en-AU');
+    }
+    if (setting === 'dwellingSize') {
       return Math.round(value).toLocaleString('en-AU');
     }
     if (setting === 'developmentContribution') {
@@ -597,6 +685,30 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
       );
     }
     
+    // Handle median construction cost and median dwelling size (read-only with info button)
+    if ((setting.id === 'constructionCostM2' || setting.id === 'dwellingSize') && setting.isCalculated) {
+      const derivedValues = calculateDerivedValues(density);
+      const displayValue = derivedValues[setting.id];
+      
+      return (
+        <div className="flex items-center justify-center space-x-2">
+          <div className="flex items-center space-x-1">
+            <span className="w-32 text-right">{displayValue ? formatValue(setting.id, displayValue) : 'N/A'}</span>
+            <span className="text-gray-500">{setting.unit}</span>
+          </div>
+          {setting.showConstructionButton && (
+            <button
+              onClick={setting.id === 'constructionCostM2' ? onShowConstructionData : onShowDwellingSizeData}
+              className="text-blue-500 hover:text-blue-700 ml-2"
+              title={`View ${setting.id === 'constructionCostM2' ? 'construction cost' : 'dwelling size'} data`}
+            >
+              <Info size={16} />
+            </button>
+          )}
+        </div>
+      );
+    }
+    
     // Handle calculated values (read-only)
     if (setting.isCalculated) {
       const derivedValues = calculateDerivedValues(density);
@@ -629,6 +741,29 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
       </div>
     );
   };
+
+  // Add function to revert to calculated values
+  const handleRevertToCalculated = (setting, density) => {
+    if (setting === 'dwellingSize') {
+      const defaultValue = constructionData?.dwellingSizes?.[density] || 80;
+      onSettingChange(setting, defaultValue, density);
+    } else if (setting === 'constructionCostM2') {
+      const defaultValue = constructionData?.[density] || 3500;
+      onSettingChange(setting, defaultValue, density);
+    } else if (setting === 'assumedDwellingSize') {
+      // For assumedDwellingSize, get the median and round down to nearest 10
+      const medianSize = constructionData?.dwellingSizes?.[density] || 80;
+      const assumedSize = density === 'highDensity' ? 75 : Math.floor(medianSize / 10) * 10;
+      onSettingChange(setting, assumedSize, density);
+    } else if (setting === 'assumedConstructionCostM2') {
+      // For assumedConstructionCostM2, get the median and round down to nearest 10
+      const medianCost = constructionData?.[density] || 3500;
+      const assumedCost = Math.floor(medianCost / 10) * 10;
+      onSettingChange(setting, assumedCost, density);
+    }
+  };
+
+  const showConstructionData = settings.lowMidDensity.useLMR || settings.highDensity.useLMR;
 
   return (
     <div className="p-4">
@@ -989,6 +1124,14 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
           lmrOptions={lmrOptions}
           currentResults={calculationResults.current}
           lmrResults={calculationResults.lmr}
+        />
+      )}
+
+      {showConstructionData && (
+        <ConstructionDataModal
+          open={showConstructionData}
+          onClose={() => onShowConstructionData(false)}
+          constructionData={constructionData}
         />
       )}
     </div>

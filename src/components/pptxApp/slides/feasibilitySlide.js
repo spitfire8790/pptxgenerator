@@ -101,10 +101,18 @@ export async function addFeasibilitySlide(pptx, properties, userSettings = {}) {
       // Calculate NSA and development yield
       const nsa = gfa * settings.gfaToNsaRatio;
       
-      // Get dwelling size from construction data or use default
-      const dwellingSize = properties.constructionData?.dwellingSizes?.[densityType.toLowerCase().replace('-', '')] || 80; // Default fallback
+      // Get dwelling size based on density type
+      let dwellingSize;
+      if (densityType.toLowerCase().includes('high')) {
+        // Use fixed 75m² for high-density
+        dwellingSize = 75;
+      } else {
+        // Use the rounded down to nearest 10m² value for low-density
+        const medianSize = properties.constructionData?.dwellingSizes?.[densityType.toLowerCase().replace('-', '')] || 80;
+        dwellingSize = Math.floor(medianSize / 10) * 10;
+      }
       
-      // Calculate development yield using dwelling size from construction data
+      // Calculate development yield using assumed dwelling size
       const developmentYield = Math.floor(nsa / dwellingSize);
 
       // Get dwelling price from settings
@@ -181,7 +189,9 @@ export async function addFeasibilitySlide(pptx, properties, userSettings = {}) {
             ? `FSR ${fsr}:1 (${Math.round(siteArea).toLocaleString()} m² × ${fsr} = ${Math.round(gfaUnderFsr).toLocaleString()} m²)`
             : `Minimum of two calculations:
 1) FSR approach: ${fsr}:1 (${Math.round(siteArea).toLocaleString()} m² × ${fsr} = ${Math.round(gfaUnderFsr).toLocaleString()} m²)
-2) HOB approach: ${hob}m (${Math.floor(hob / settings.floorToFloorHeight)} storeys × ${formatPercentage(settings.siteEfficiencyRatio)} building footprint × ${formatPercentage(settings.gbaToGfaRatio)} efficiency = ${Math.round(gfaUnderHob).toLocaleString()} m²)`
+2) HOB approach: ${hob}m (${Math.floor(hob / settings.floorToFloorHeight)} storeys) → ${Math.round(developableArea).toLocaleString()} m² site area × ${formatPercentage(settings.siteEfficiencyRatio)} building footprint × ${Math.floor(hob / settings.floorToFloorHeight)} storeys × ${formatPercentage(settings.gbaToGfaRatio)} efficiency = ${Math.round(gfaUnderHob).toLocaleString()} m²
+
+Final GFA = ${Math.round(gfa).toLocaleString()} m² (${gfaUnderFsr <= gfaUnderHob ? 'FSR is more restrictive' : 'Height limit is more restrictive'})`
         ],
         ['Development Yield', `${developmentYield} units`, `Total NSA (${Math.round(nsa).toLocaleString()} m²) ÷ Average Unit Size (${Math.round(dwellingSize).toLocaleString()} m²)`],
         

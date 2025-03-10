@@ -320,18 +320,39 @@ const FeasibilityCalculation = ({
               <td className="py-2 px-4 border-t border-gray-200 text-sm">
                 {!calculationResults.hob 
                   ? `FSR ${calculationResults.fsr}:1 (${Math.round(calculationResults.siteArea).toLocaleString()} m² × ${calculationResults.fsr} = ${Math.round(calculationResults.gfa).toLocaleString()} m²)`
-                  : `Minimum of two calculations:
-1) FSR approach: ${calculationResults.fsr}:1 (${Math.round(calculationResults.siteArea).toLocaleString()} m² × ${calculationResults.fsr} = ${Math.round(calculationResults.gfaUnderFsr).toLocaleString()} m²)
-2) HOB approach: ${calculationResults.hob}m (${density === 'lowMidDensity' ? `max 3 storeys @ ${Math.min(3, Math.floor(calculationResults.hob / settings[density].floorToFloorHeight))}` : `${Math.floor(calculationResults.hob / settings[density].floorToFloorHeight)}`} storeys × ${formatPercentage(settings[density].siteEfficiencyRatio)} building footprint × ${formatPercentage(settings[density].gbaToGfaRatio)} efficiency = ${Math.round(calculationResults.gfaUnderHob).toLocaleString()} m²)
-
-Final GFA = ${Math.round(calculationResults.gfa).toLocaleString()} m² (${calculationResults.gfaUnderFsr <= calculationResults.gfaUnderHob ? 'FSR is more restrictive' : 'Height limit is more restrictive'})`
+                  : (
+                    <div>
+                      <div>Minimum of two calculations:</div>
+                      <div 
+                        className="cursor-help hover:text-blue-600" 
+                        title={`${Math.round(calculationResults.siteArea).toLocaleString()} m² × ${calculationResults.fsr} = ${Math.round(calculationResults.gfaUnderFsr).toLocaleString()} m²`}
+                      >
+                        1) FSR approach: {Math.round(calculationResults.gfaUnderFsr).toLocaleString()} m²
+                      </div>
+                      <div 
+                        className="cursor-help hover:text-blue-600" 
+                        title={`${Math.round(calculationResults.developableArea).toLocaleString()} m² site area × ${formatPercentage(settings[density].siteEfficiencyRatio)} building footprint × ${Math.floor(calculationResults.hob / settings[density].floorToFloorHeight)} storeys × ${formatPercentage(settings[density].gbaToGfaRatio)} efficiency = ${Math.round(calculationResults.gfaUnderHob).toLocaleString()} m²`}
+                      >
+                        2) HOB approach: {Math.round(calculationResults.gfaUnderHob).toLocaleString()} m²
+                      </div>
+                      <div className="mt-1">
+                        Final GFA = {Math.round(calculationResults.gfa).toLocaleString()} m² 
+                        <span className="text-gray-500 ml-1">
+                          ({calculationResults.gfaUnderFsr <= calculationResults.gfaUnderHob ? 'FSR is more restrictive' : 'Height limit is more restrictive'})
+                        </span>
+                      </div>
+                    </div>
+                  )
                 }
               </td>
             </tr>
             <tr>
               <td className="py-2 px-4 border-t border-gray-200">Development Yield</td>
               <td className="py-2 px-4 border-t border-gray-200">{calculationResults.developmentYield} units</td>
-              <td className="py-2 px-4 border-t border-gray-200 text-sm">Total NSA ({Math.round(calculationResults.nsa).toLocaleString()} m²) ÷ Average Unit Size ({Math.round(calculationResults.dwellingSize).toLocaleString()} m²)</td>
+              <td className="py-2 px-4 border-t border-gray-200 text-sm">
+                Total NSA ({Math.round(calculationResults.nsa).toLocaleString()} m²) ÷ 
+                Assumed Unit Size ({density === 'highDensity' ? '75' : Math.floor(calculationResults.dwellingSize / 10) * 10} m²)
+              </td>
             </tr>
             
             {/* Sales Analysis */}

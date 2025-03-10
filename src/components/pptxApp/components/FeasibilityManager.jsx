@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Calculator, Banknote, X } from 'lucide-react';
 import FeasibilitySettings from './FeasibilitySettings';
 import MedianPriceModal from './MedianPriceModal';
+import ConstructionDataModal from './ConstructionDataModal';
+import DwellingSizeModal from './DwellingSizeModal';
 import { lgaMapping } from '../utils/map/utils/councilLgaMapping';
 import { getAllPermissibleHousingTypes } from '../utils/lmrPermissibility';
 
@@ -38,6 +40,8 @@ const hasMatchingDensityType = (developmentTypes, densityTypes) => {
 
 const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClose, selectedFeature }) => {
   const [showMedianPrices, setShowMedianPrices] = useState(false);
+  const [showConstructionData, setShowConstructionData] = useState(false);
+  const [showDwellingSizeData, setShowDwellingSizeData] = useState(false);
   const [constructionData, setConstructionData] = useState({
     lowMidDensity: null,
     highDensity: null,
@@ -332,7 +336,113 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
     }
   };
 
-  // Update useEffect to fetch LMR data
+  // Function to prepare raw data for the modal display
+  const prepareRawConstructionData = (certificates) => {
+    if (!certificates?.length) return { dwellingSizes: [], constructionCosts: [] };
+
+    // Extract dwelling size data
+    const dwellingSizes = certificates.filter(cert => 
+      cert.ProposedGrossFloorArea && 
+      cert.UnitsProposed && 
+      cert.UnitsProposed > 0 && 
+      cert.ProposedGrossFloorArea >= MIN_GFA &&
+      (hasMatchingDensityType(cert.DevelopmentType, LOW_MID_DENSITY_TYPES) || 
+       hasMatchingDensityType(cert.DevelopmentType, HIGH_DENSITY_TYPES))
+    ).flatMap(cert => {
+      // Extract the development type
+      let developmentType = 'Unknown';
+      if (cert.DevelopmentType && Array.isArray(cert.DevelopmentType) && cert.DevelopmentType.length > 0) {
+        developmentType = cert.DevelopmentType[0].DevelopmentType;
+        // Convert from UPPER_CASE to Title Case
+        developmentType = developmentType.split('_')
+          .map(word => word.charAt(0) + word.slice(1).toLowerCase())
+          .join(' ');
+      }
+      
+      // Extract the address from Location if available, fallback to SiteAddress
+      let address = 'Unknown';
+      if (cert.Location && Array.isArray(cert.Location) && cert.Location.length > 0 && cert.Location[0].FullAddress) {
+        address = cert.Location[0].FullAddress;
+      } else if (cert.SiteAddress) {
+        address = cert.SiteAddress;
+      }
+
+      // Extract bedroom distribution if available
+      if (cert.BedroomDistribution && Array.isArray(cert.BedroomDistribution)) {
+        return cert.BedroomDistribution.map(bedroom => ({
+          id: `${cert.EplanningId}-${bedroom.BedroomType}`,
+          developmentType: developmentType,
+          bedrooms: parseInt(bedroom.BedroomType.replace(/[^0-9]/g, ''), 10) || 0,
+          dwellingSize: cert.ProposedGrossFloorArea / cert.UnitsProposed,
+          lga: cert.CouncilName || 'Unknown',
+          address: address,
+          gfa: cert.ProposedGrossFloorArea,
+          units: cert.UnitsProposed
+        }));
+      } else {
+        // If no bedroom distribution, use average size
+        return [{
+          id: cert.EplanningId,
+          developmentType: developmentType,
+          bedrooms: 2, // Default to 2 bedrooms when not specified
+          dwellingSize: cert.ProposedGrossFloorArea / cert.UnitsProposed,
+          lga: cert.CouncilName || 'Unknown',
+          address: address,
+          gfa: cert.ProposedGrossFloorArea,
+          units: cert.UnitsProposed
+        }];
+      }
+    });
+
+    // Extract construction cost data
+    const constructionCosts = certificates.filter(cert => 
+      cert.CostOfDevelopment && 
+      cert.ProposedGrossFloorArea && 
+      cert.ProposedGrossFloorArea >= MIN_GFA &&
+      (hasMatchingDensityType(cert.DevelopmentType, LOW_MID_DENSITY_TYPES) || 
+       hasMatchingDensityType(cert.DevelopmentType, HIGH_DENSITY_TYPES))
+    ).map(cert => {
+      const costPerM2 = cert.CostOfDevelopment / cert.ProposedGrossFloorArea;
+      // Only include costs within reasonable range
+      if (costPerM2 < MIN_COST_PER_M2 || costPerM2 > MAX_COST_PER_M2) return null;
+      
+      // Extract the address from Location if available, fallback to SiteAddress
+      let address = 'Unknown';
+      if (cert.Location && Array.isArray(cert.Location) && cert.Location.length > 0 && cert.Location[0].FullAddress) {
+        address = cert.Location[0].FullAddress;
+      } else if (cert.SiteAddress) {
+        address = cert.SiteAddress;
+      }
+      
+      // Format the development type
+      let developmentType = 'Unknown';
+      if (cert.DevelopmentType && Array.isArray(cert.DevelopmentType) && cert.DevelopmentType.length > 0) {
+        developmentType = cert.DevelopmentType[0].DevelopmentType;
+        // Convert from UPPER_CASE to Title Case
+        developmentType = developmentType.split('_')
+          .map(word => word.charAt(0) + word.slice(1).toLowerCase())
+          .join(' ');
+      }
+      
+      return {
+        id: cert.EplanningId,
+        developmentType: developmentType,
+        costPerM2: costPerM2,
+        lga: cert.CouncilName || 'Unknown',
+        address: address,
+        totalCost: cert.CostOfDevelopment,
+        gfa: cert.ProposedGrossFloorArea,
+        landArea: cert.LandArea || 0
+      };
+    }).filter(Boolean); // Remove null entries
+
+    return {
+      dwellingSizes,
+      constructionCosts
+    };
+  };
+
+  // Update useEffect to fetch construction data
   useEffect(() => {
     const fetchConstructionData = async () => {
       if (!open || !selectedFeature) {
@@ -478,6 +588,9 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
           dwellingSizesByBedroom.highDensity[i] = calculateMedianDwellingSize(validCertificates, HIGH_DENSITY_TYPES, i);
         }
 
+        // Prepare raw data for the modal
+        const rawData = prepareRawConstructionData(validCertificates);
+
         setConstructionData({
           lowMidDensity: lowMidDensityCost,
           highDensity: highDensityCost,
@@ -486,6 +599,9 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
             highDensity: highDensitySize
           },
           dwellingSizesByBedroom,
+          dwellingSizesByBedroomRaw: rawData.dwellingSizes,
+          constructionCostsRaw: rawData.constructionCosts,
+          Application: data.Application, // Add the full API response
           loading: false,
           error: null,
           lastUpdated: new Date(),
@@ -539,6 +655,16 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
   // Function to handle showing median prices modal
   const handleShowMedianPrices = () => {
     setShowMedianPrices(true);
+  };
+  
+  // Function to handle showing construction cost data modal
+  const handleShowConstructionData = () => {
+    setShowConstructionData(true);
+  };
+  
+  // Function to handle showing dwelling size data modal
+  const handleShowDwellingSizeData = () => {
+    setShowDwellingSizeData(true);
   };
   
   // Function to handle LMR option selection
@@ -630,27 +756,38 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
         hob = propertyData?.properties?.copiedFrom?.site_suitability__height_of_building || 0;
       }
 
-      // Calculate GFA under FSR and HOB
+      // Calculate GFA under FSR
       const gfaUnderFsr = siteArea * fsr;
       
       // Calculate GFA under HOB
-      const maxStoreys = Math.floor(hob / settings.floorToFloorHeight);
+      let maxStoreys = Math.floor(hob / settings.floorToFloorHeight);
+      
+      // Limit Low-Mid Density to maximum 3 storeys
+      if (density === 'lowMidDensity' && maxStoreys > 3) {
+        maxStoreys = 3;
+      }
+      
       const siteCoverage = developableArea * settings.siteEfficiencyRatio;
+      // For high-density: GFA = Site Area × 50% (building footprint) × HOB/3.1 (storeys) × 75% (efficiency)
+      // For low-density: GFA = Site Area × 60% (building footprint) × HOB/3.1 (max 3 storeys) × 90% (efficiency)
       const gfaUnderHob = siteCoverage * maxStoreys * settings.gbaToGfaRatio;
 
       // Use FSR value if no HoB exists, otherwise use the lower of the two
       let gfa = !hob ? gfaUnderFsr : Math.min(gfaUnderFsr, gfaUnderHob);
 
-      // For Low-Mid Density, limit to 3 storeys unless using LMR controls
-      if (density === 'lowMidDensity' && !useLMR) {
-        const maxGfaFor3Storeys = siteCoverage * 3 * settings.gbaToGfaRatio;
-        gfa = Math.min(gfa, maxGfaFor3Storeys);
-      }
-
       // Calculate NSA and development yield
       const nsa = gfa * settings.gfaToNsaRatio;
-      // Use dwelling size from settings (which can now be customized)
-      const dwellingSize = settings.dwellingSize || constructionData?.dwellingSizes?.[density] || 80;
+      
+      // Use the appropriate dwelling size based on density
+      let dwellingSize;
+      if (density === 'highDensity') {
+        // Use fixed 75m² for high-density
+        dwellingSize = 75;
+      } else {
+        // Use the rounded down to nearest 10m² value for low-density
+        dwellingSize = Math.floor((settings.dwellingSize || constructionData?.dwellingSizes?.[density] || 80) / 10) * 10;
+      }
+      
       const developmentYield = Math.floor(nsa / dwellingSize);
 
       // Calculate total gross realisation
@@ -828,6 +965,8 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
                       constructionData={constructionData}
                       selectedFeature={selectedFeature}
                       onShowMedianPrices={handleShowMedianPrices}
+                      onShowConstructionData={handleShowConstructionData}
+                      onShowDwellingSizeData={handleShowDwellingSizeData}
                       lmrOptions={lmrOptions}
                       onLMROptionChange={handleLMROptionChange}
                       calculationResults={calculationResults}
@@ -846,6 +985,24 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
           open={showMedianPrices}
           salesData={salesData} 
           onClose={() => setShowMedianPrices(false)} 
+        />
+      )}
+
+      {/* Construction Data Modal */}
+      {showConstructionData && (
+        <ConstructionDataModal 
+          open={showConstructionData}
+          constructionData={constructionData} 
+          onClose={() => setShowConstructionData(false)} 
+        />
+      )}
+
+      {/* Dwelling Size Modal */}
+      {showDwellingSizeData && (
+        <DwellingSizeModal 
+          open={showDwellingSizeData}
+          constructionData={constructionData} 
+          onClose={() => setShowDwellingSizeData(false)} 
         />
       )}
     </>
