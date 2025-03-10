@@ -7,15 +7,9 @@ import DwellingSizeModal from './DwellingSizeModal';
 import { lgaMapping } from '../utils/map/utils/councilLgaMapping';
 import { getAllPermissibleHousingTypes } from '../utils/lmrPermissibility';
 
-const LOW_MID_DENSITY_TYPES = [
-  'Dwelling',
-  'Dwelling house',
-  'Dual occupancy',
-  'Dual occupancy (attached)',
-  'Dual occupancy (detached)',
+const MEDIUM_DENSITY_TYPES = [
   'Multi-dwelling housing',
   'Multi-dwelling housing (terraces)',
-  'Semi-attached dwelling',
   'Manor house',
   'Medium Density Housing',
   'Manor houses'
@@ -38,15 +32,15 @@ const hasMatchingDensityType = (developmentTypes, densityTypes) => {
   return developmentTypes.some(type => densityTypes.includes(type.DevelopmentType));
 };
 
-const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClose, selectedFeature }) => {
+const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClose, selectedFeature, map }) => {
   const [showMedianPrices, setShowMedianPrices] = useState(false);
   const [showConstructionData, setShowConstructionData] = useState(false);
   const [showDwellingSizeData, setShowDwellingSizeData] = useState(false);
   const [constructionData, setConstructionData] = useState({
-    lowMidDensity: null,
+    mediumDensity: null,
     highDensity: null,
     dwellingSizes: {
-      lowMidDensity: null,
+      mediumDensity: null,
       highDensity: null
     },
     loading: true,
@@ -56,15 +50,15 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
   // Add state for tracking customized values
   const [customizedValues, setCustomizedValues] = useState({
     dwellingPrice: {
-      lowMidDensity: false,
+      mediumDensity: false,
       highDensity: false
     },
     dwellingSize: {
-      lowMidDensity: false,
+      mediumDensity: false,
       highDensity: false
     },
     constructionCostM2: {
-      lowMidDensity: false,
+      mediumDensity: false,
       highDensity: false
     }
   });
@@ -76,7 +70,7 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
     error: null,
     housingOptions: [],
     selectedOptions: {
-      lowMidDensity: null,
+      mediumDensity: null,
       highDensity: null
     }
   });
@@ -84,11 +78,11 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
   // Add this after the state declarations
   const [calculationResults, setCalculationResults] = useState({
     current: {
-      lowMidDensity: null,
+      mediumDensity: null,
       highDensity: null
     },
     lmr: {
-      lowMidDensity: null,
+      mediumDensity: null,
       highDensity: null
     }
   });
@@ -271,7 +265,7 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
           error: null,
           housingOptions: [],
           selectedOptions: {
-            lowMidDensity: null,
+            mediumDensity: null,
             highDensity: null
           }
         });
@@ -283,7 +277,7 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
       console.log('LMR housing options:', housingOptions);
       
       // Find best options for each density type
-      const lowMidDensityOptions = housingOptions.filter(option => 
+      const mediumDensityOptions = housingOptions.filter(option => 
         ['Dual Occupancy', 'Multi Dwelling Housing', 'Multi Dwelling Housing (Terraces)']
           .includes(option.type) && option.isPermissible
       );
@@ -293,7 +287,7 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
       );
       
       // Sort by potential FSR (highest first)
-      lowMidDensityOptions.sort((a, b) => {
+      mediumDensityOptions.sort((a, b) => {
         // For RFB with ranges, use the max value
         const aFSR = a.fsrRange ? a.fsrRange.max : a.potentialFSR;
         const bFSR = b.fsrRange ? b.fsrRange.max : b.potentialFSR;
@@ -308,7 +302,7 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
       });
       
       // Select best options (highest FSR)
-      const bestLowMidOption = lowMidDensityOptions.length > 0 ? lowMidDensityOptions[0] : null;
+      const bestMediumDensityOption = mediumDensityOptions.length > 0 ? mediumDensityOptions[0] : null;
       const bestHighDensityOption = highDensityOptions.length > 0 ? highDensityOptions[0] : null;
       
       setLmrOptions({
@@ -317,11 +311,11 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
         error: null,
         housingOptions,
         allOptions: {
-          lowMidDensity: lowMidDensityOptions,
+          mediumDensity: mediumDensityOptions,
           highDensity: highDensityOptions
         },
         selectedOptions: {
-          lowMidDensity: bestLowMidOption,
+          mediumDensity: bestMediumDensityOption,
           highDensity: bestHighDensityOption
         }
       });
@@ -346,7 +340,7 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
       cert.UnitsProposed && 
       cert.UnitsProposed > 0 && 
       cert.ProposedGrossFloorArea >= MIN_GFA &&
-      (hasMatchingDensityType(cert.DevelopmentType, LOW_MID_DENSITY_TYPES) || 
+      (hasMatchingDensityType(cert.DevelopmentType, MEDIUM_DENSITY_TYPES) || 
        hasMatchingDensityType(cert.DevelopmentType, HIGH_DENSITY_TYPES))
     ).flatMap(cert => {
       // Extract the development type
@@ -359,10 +353,14 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
           .join(' ');
       }
       
-      // Extract the address from Location if available, fallback to SiteAddress
+      // Extract the address and location data
       let address = 'Unknown';
-      if (cert.Location && Array.isArray(cert.Location) && cert.Location.length > 0 && cert.Location[0].FullAddress) {
-        address = cert.Location[0].FullAddress;
+      let location = null;
+      if (cert.Location && Array.isArray(cert.Location) && cert.Location.length > 0) {
+        if (cert.Location[0].FullAddress) {
+          address = cert.Location[0].FullAddress;
+        }
+        location = cert.Location; // Preserve the entire Location array
       } else if (cert.SiteAddress) {
         address = cert.SiteAddress;
       }
@@ -377,7 +375,8 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
           lga: cert.CouncilName || 'Unknown',
           address: address,
           gfa: cert.ProposedGrossFloorArea,
-          units: cert.UnitsProposed
+          units: cert.UnitsProposed,
+          Location: location  // Include Location data
         }));
       } else {
         // If no bedroom distribution, use average size
@@ -389,7 +388,8 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
           lga: cert.CouncilName || 'Unknown',
           address: address,
           gfa: cert.ProposedGrossFloorArea,
-          units: cert.UnitsProposed
+          units: cert.UnitsProposed,
+          Location: location  // Include Location data
         }];
       }
     });
@@ -399,7 +399,7 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
       cert.CostOfDevelopment && 
       cert.ProposedGrossFloorArea && 
       cert.ProposedGrossFloorArea >= MIN_GFA &&
-      (hasMatchingDensityType(cert.DevelopmentType, LOW_MID_DENSITY_TYPES) || 
+      (hasMatchingDensityType(cert.DevelopmentType, MEDIUM_DENSITY_TYPES) || 
        hasMatchingDensityType(cert.DevelopmentType, HIGH_DENSITY_TYPES))
     ).map(cert => {
       const costPerM2 = cert.CostOfDevelopment / cert.ProposedGrossFloorArea;
@@ -527,7 +527,7 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
           cert.ProposedGrossFloorArea >= MIN_GFA && 
           cert.DevelopmentType &&
           cert.DevelopmentType.length > 0 && 
-          (hasMatchingDensityType(cert.DevelopmentType, LOW_MID_DENSITY_TYPES) || 
+          (hasMatchingDensityType(cert.DevelopmentType, MEDIUM_DENSITY_TYPES) || 
            hasMatchingDensityType(cert.DevelopmentType, HIGH_DENSITY_TYPES))
         );
 
@@ -536,23 +536,23 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
           gfa: cert.ProposedGrossFloorArea,
           units: cert.UnitsProposed,
           cost: cert.CostOfDevelopment,
-          isLowMid: hasMatchingDensityType(cert.DevelopmentType, LOW_MID_DENSITY_TYPES),
+          isMediumDensity: hasMatchingDensityType(cert.DevelopmentType, MEDIUM_DENSITY_TYPES),
           isHigh: hasMatchingDensityType(cert.DevelopmentType, HIGH_DENSITY_TYPES)
         })));
 
         // Calculate median costs and dwelling sizes for each density type
-        const lowMidDensityCost = calculateMedianCost(validCertificates, LOW_MID_DENSITY_TYPES);
+        const mediumDensityCost = calculateMedianCost(validCertificates, MEDIUM_DENSITY_TYPES);
         const highDensityCost = calculateMedianCost(validCertificates, HIGH_DENSITY_TYPES);
 
-        console.log('Calculating low-mid density dwelling size for 2 bedrooms...');
-        const lowMidDensitySize = calculateMedianDwellingSize(validCertificates, LOW_MID_DENSITY_TYPES, 2);
+        console.log('Calculating medium density dwelling size for 2 bedrooms...');
+        const mediumDensitySize = calculateMedianDwellingSize(validCertificates, MEDIUM_DENSITY_TYPES, 2);
         
         console.log('Calculating high density dwelling size for 2 bedrooms...');
         const highDensitySize = calculateMedianDwellingSize(validCertificates, HIGH_DENSITY_TYPES, 2);
 
         // Count certificates by density type
-        const lowMidDensityCount = validCertificates.filter(cert => 
-          hasMatchingDensityType(cert.DevelopmentType, LOW_MID_DENSITY_TYPES)
+        const mediumDensityCount = validCertificates.filter(cert => 
+          hasMatchingDensityType(cert.DevelopmentType, MEDIUM_DENSITY_TYPES)
         ).length;
 
         const highDensityCount = validCertificates.filter(cert => 
@@ -562,11 +562,11 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
         console.log('Construction data analysis:', {
           lga: councilName,
           totalCertificates: validCertificates.length,
-          lowMidDensity: {
-            count: lowMidDensityCount,
-            medianCost: lowMidDensityCost,
-            medianSize: lowMidDensitySize,
-            types: LOW_MID_DENSITY_TYPES
+          mediumDensity: {
+            count: mediumDensityCount,
+            medianCost: mediumDensityCost,
+            medianSize: mediumDensitySize,
+            types: MEDIUM_DENSITY_TYPES
           },
           highDensity: {
             count: highDensityCount,
@@ -578,13 +578,13 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
 
         // Store dwelling sizes by bedroom count
         const dwellingSizesByBedroom = {
-          lowMidDensity: {},
+          mediumDensity: {},
           highDensity: {}
         };
 
         // Calculate for different bedroom counts (0-4)
         for (let i = 0; i <= 4; i++) {
-          dwellingSizesByBedroom.lowMidDensity[i] = calculateMedianDwellingSize(validCertificates, LOW_MID_DENSITY_TYPES, i);
+          dwellingSizesByBedroom.mediumDensity[i] = calculateMedianDwellingSize(validCertificates, MEDIUM_DENSITY_TYPES, i);
           dwellingSizesByBedroom.highDensity[i] = calculateMedianDwellingSize(validCertificates, HIGH_DENSITY_TYPES, i);
         }
 
@@ -592,10 +592,10 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
         const rawData = prepareRawConstructionData(validCertificates);
 
         setConstructionData({
-          lowMidDensity: lowMidDensityCost,
+          mediumDensity: mediumDensityCost,
           highDensity: highDensityCost,
           dwellingSizes: {
-            lowMidDensity: lowMidDensitySize,
+            mediumDensity: mediumDensitySize,
             highDensity: highDensitySize
           },
           dwellingSizesByBedroom,
@@ -606,16 +606,16 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
           error: null,
           lastUpdated: new Date(),
           certificateCounts: {
-            lowMidDensity: lowMidDensityCount,
+            mediumDensity: mediumDensityCount,
             highDensity: highDensityCount
           }
         });
 
         // Initialize settings with calculated values if not already set
-        if (!customizedValues.constructionCostM2.lowMidDensity && 
-            lowMidDensityCost && 
-            (!settings.lowMidDensity.constructionCostM2 || settings.lowMidDensity.constructionCostM2 === 0)) {
-          onSettingChange('constructionCostM2', lowMidDensityCost, 'lowMidDensity');
+        if (!customizedValues.constructionCostM2.mediumDensity && 
+            mediumDensityCost && 
+            (!settings.mediumDensity.constructionCostM2 || settings.mediumDensity.constructionCostM2 === 0)) {
+          onSettingChange('constructionCostM2', mediumDensityCost, 'mediumDensity');
         }
         
         if (!customizedValues.constructionCostM2.highDensity && 
@@ -624,10 +624,10 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
           onSettingChange('constructionCostM2', highDensityCost, 'highDensity');
         }
         
-        if (!customizedValues.dwellingSize.lowMidDensity && 
-            lowMidDensitySize && 
-            (!settings.lowMidDensity.dwellingSize || settings.lowMidDensity.dwellingSize === 0)) {
-          onSettingChange('dwellingSize', lowMidDensitySize, 'lowMidDensity');
+        if (!customizedValues.dwellingSize.mediumDensity && 
+            mediumDensitySize && 
+            (!settings.mediumDensity.dwellingSize || settings.mediumDensity.dwellingSize === 0)) {
+          onSettingChange('dwellingSize', mediumDensitySize, 'mediumDensity');
         }
         
         if (!customizedValues.dwellingSize.highDensity && 
@@ -762,14 +762,14 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
       // Calculate GFA under HOB
       let maxStoreys = Math.floor(hob / settings.floorToFloorHeight);
       
-      // Limit Low-Mid Density to maximum 3 storeys
-      if (density === 'lowMidDensity' && maxStoreys > 3) {
+      // Limit Medium Density to maximum 3 storeys
+      if (density === 'mediumDensity' && maxStoreys > 3) {
         maxStoreys = 3;
       }
       
       const siteCoverage = developableArea * settings.siteEfficiencyRatio;
       // For high-density: GFA = Site Area × 50% (building footprint) × HOB/3.1 (storeys) × 75% (efficiency)
-      // For low-density: GFA = Site Area × 60% (building footprint) × HOB/3.1 (max 3 storeys) × 90% (efficiency)
+      // For medium-density: GFA = Site Area × 60% (building footprint) × HOB/3.1 (max 3 storeys) × 90% (efficiency)
       const gfaUnderHob = siteCoverage * maxStoreys * settings.gbaToGfaRatio;
 
       // Use FSR value if no HoB exists, otherwise use the lower of the two
@@ -784,7 +784,7 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
         // Use fixed 75m² for high-density
         dwellingSize = 75;
       } else {
-        // Use the rounded down to nearest 10m² value for low-density
+        // Use the rounded down to nearest 10m² value for medium-density
         dwellingSize = Math.floor((settings.dwellingSize || constructionData?.dwellingSizes?.[density] || 80) / 10) * 10;
       }
       
@@ -895,12 +895,12 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
 
       try {
         // Calculate results for current controls
-        const currentLowMidResults = await calculateFeasibility(settings.lowMidDensity, selectedFeature, 'lowMidDensity', false);
+        const currentMediumResults = await calculateFeasibility(settings.mediumDensity, selectedFeature, 'mediumDensity', false);
         const currentHighResults = await calculateFeasibility(settings.highDensity, selectedFeature, 'highDensity', false);
 
         // Calculate results for LMR controls if available
-        const lmrLowMidResults = lmrOptions.isInLMRArea && settings.lowMidDensity.useLMR
-          ? await calculateFeasibility(settings.lowMidDensity, selectedFeature, 'lowMidDensity', true, lmrOptions.selectedOptions.lowMidDensity)
+        const lmrMediumResults = lmrOptions.isInLMRArea && settings.mediumDensity.useLMR
+          ? await calculateFeasibility(settings.mediumDensity, selectedFeature, 'mediumDensity', true, lmrOptions.selectedOptions.mediumDensity)
           : null;
         const lmrHighResults = lmrOptions.isInLMRArea && settings.highDensity.useLMR
           ? await calculateFeasibility(settings.highDensity, selectedFeature, 'highDensity', true, lmrOptions.selectedOptions.highDensity)
@@ -908,11 +908,11 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
 
         setCalculationResults({
           current: {
-            lowMidDensity: currentLowMidResults,
+            mediumDensity: currentMediumResults,
             highDensity: currentHighResults
           },
           lmr: {
-            lowMidDensity: lmrLowMidResults,
+            mediumDensity: lmrMediumResults,
             highDensity: lmrHighResults
           }
         });
@@ -1003,6 +1003,7 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
           open={showDwellingSizeData}
           constructionData={constructionData} 
           onClose={() => setShowDwellingSizeData(false)} 
+          map={map}
         />
       )}
     </>

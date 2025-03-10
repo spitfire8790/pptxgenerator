@@ -18,7 +18,7 @@ import {
   PolarRadiusAxis,
   Radar
 } from 'recharts';
-import { Building2, Building, DollarSign, TrendingUp } from 'lucide-react';
+import { Building2, Building, DollarSign, TrendingUp, Settings2, Info } from 'lucide-react';
 
 /**
  * Helper function to format currency in AUD
@@ -62,11 +62,60 @@ const formatSqm = (value) => {
   return `${Math.round(value).toLocaleString()}m²`;
 };
 
+// Add helper function for sensitivity analysis
+const generateSensitivityMatrix = (settings, selectedFeature, density, calculateFeasibility) => {
+  const baselineFsr = selectedFeature?.properties?.copiedFrom?.site_suitability__floorspace_ratio || 0;
+  const baselineHob = selectedFeature?.properties?.copiedFrom?.site_suitability__height_of_building || 0;
+  
+  // Generate FSR range (0.5 increments)
+  const fsrRange = Array.from({ length: 7 }, (_, i) => Math.max(0.5, baselineFsr - 1.5 + (i * 0.5)));
+  
+  // Generate HOB range (5m increments)
+  const hobRange = Array.from({ length: 7 }, (_, i) => Math.max(5, baselineHob - 15 + (i * 5)));
+  
+  // Generate matrix of results
+  const matrix = fsrRange.map(fsr => {
+    return hobRange.map(hob => {
+      const customControls = {
+        enabled: true,
+        fsr: fsr,
+        hob: hob
+      };
+      
+      const result = calculateFeasibility(
+        settings[density],
+        selectedFeature,
+        density,
+        false,
+        null,
+        customControls
+      );
+      
+      return {
+        fsr,
+        hob,
+        residualLandValue: result?.residualLandValue || 0,
+        isBaseline: Math.abs(fsr - baselineFsr) < 0.01 && Math.abs(hob - baselineHob) < 0.01
+      };
+    });
+  });
+  
+  return { fsrRange, hobRange, matrix, baselineFsr, baselineHob };
+};
+
 /**
  * FeasibilitySummary component for comparing Low-Mid Density vs High Density development options
  * with animated charts for cost and residual land value sensitivity analysis
  */
-const FeasibilitySummary = ({ settings, currentResults }) => {
+const FeasibilitySummary = ({ 
+  settings, 
+  lmrOptions, 
+  currentResults, 
+  lmrResults,
+  customControls = null,
+  selectedFeature = null,
+  calculateFeasibility = null
+}) => {
   // State for animations
   const [animationProgress, setAnimationProgress] = useState(0);
   
@@ -81,9 +130,9 @@ const FeasibilitySummary = ({ settings, currentResults }) => {
   // Prepare data for the comparison chart
   const chartData = [
     {
-      name: 'Low-Mid Density',
-      ResidualLandValue: currentResults?.lowMidDensity?.residualLandValue || 0,
-      DwellingYield: currentResults?.lowMidDensity?.developmentYield || 0,
+      name: 'Medium Density',
+      ResidualLandValue: currentResults?.mediumDensity?.residualLandValue || 0,
+      DwellingYield: currentResults?.mediumDensity?.developmentYield || 0,
     },
     {
       name: 'High Density',
@@ -94,16 +143,16 @@ const FeasibilitySummary = ({ settings, currentResults }) => {
   
   // Generate sensitivity analysis data for how costs affect residual land value
   const costSensitivityData = Array.from({ length: 7 }, (_, i) => {
-    const baselineLowMidCost = (currentResults?.lowMidDensity?.costPerSqmGFA || 3000);
+    const baselineMediumCost = (currentResults?.mediumDensity?.costPerSqmGFA || 3000);
     const baselineHighCost = (currentResults?.highDensity?.costPerSqmGFA || 3500);
-    const baselineLowMidRLV = (currentResults?.lowMidDensity?.residualLandValue || 10000000);
+    const baselineMediumRLV = (currentResults?.mediumDensity?.residualLandValue || 10000000);
     const baselineHighRLV = (currentResults?.highDensity?.residualLandValue || 15000000);
     
     // Cost factor: 80%, 85%, 90%, 95%, 100%, 105%, 110%
     const factor = 0.8 + (i * 0.05);
     
     // Calculate actual cost values
-    const actualLowMidCost = Math.round(baselineLowMidCost * factor);
+    const actualMediumCost = Math.round(baselineMediumCost * factor);
     const actualHighCost = Math.round(baselineHighCost * factor);
     
     // As costs increase, residual land value decreases (inverse relationship)
@@ -114,8 +163,8 @@ const FeasibilitySummary = ({ settings, currentResults }) => {
     
     return {
       factor: `${Math.round(factor * 100)}%`,
-      actualCost: Math.round((actualLowMidCost + actualHighCost) / 2), // Average of both costs for display
-      'Low-Mid Density': Math.round(baselineLowMidRLV * rlvImpactFactor),
+      actualCost: Math.round((actualMediumCost + actualHighCost) / 2), // Average of both costs for display
+      'Medium Density': Math.round(baselineMediumRLV * rlvImpactFactor),
       'High Density': Math.round(baselineHighRLV * rlvImpactFactor),
     };
   });
@@ -123,24 +172,24 @@ const FeasibilitySummary = ({ settings, currentResults }) => {
   // Generate sensitivity analysis data for how sales/revenue affects residual land value
   const residualLandValueSensitivityData = Array.from({ length: 7 }, (_, i) => {
     // Revenue baseline and dwelling yield derived from current results
-    const baselineLowMidRevenue = (currentResults?.lowMidDensity?.totalRevenue || 25000000);
+    const baselineMediumRevenue = (currentResults?.mediumDensity?.totalRevenue || 25000000);
     const baselineHighRevenue = (currentResults?.highDensity?.totalRevenue || 40000000);
-    const lowMidDwellings = (currentResults?.lowMidDensity?.developmentYield || 50);
+    const mediumDwellings = (currentResults?.mediumDensity?.developmentYield || 50);
     const highDwellings = (currentResults?.highDensity?.developmentYield || 100);
     
-    const baselineLowMid = (currentResults?.lowMidDensity?.residualLandValue || 10000000);
+    const baselineMedium = (currentResults?.mediumDensity?.residualLandValue || 10000000);
     const baselineHigh = (currentResults?.highDensity?.residualLandValue || 15000000);
     const factor = 0.8 + (i * 0.05); // 80%, 85%, 90%, 95%, 100%, 105%, 110%
     
     // Calculate per dwelling revenue
-    const lowMidRevenuePerDwelling = baselineLowMidRevenue / lowMidDwellings;
+    const mediumRevenuePerDwelling = baselineMediumRevenue / mediumDwellings;
     const highRevenuePerDwelling = baselineHighRevenue / highDwellings;
-    const avgRevenuePerDwelling = (lowMidRevenuePerDwelling + highRevenuePerDwelling) / 2;
+    const avgRevenuePerDwelling = (mediumRevenuePerDwelling + highRevenuePerDwelling) / 2;
     
     return {
       factor: `${Math.round(factor * 100)}%`,
       revenuePerDwelling: Math.round(avgRevenuePerDwelling * factor),
-      'Low-Mid Density': Math.round(baselineLowMid * factor),
+      'Medium Density': Math.round(baselineMedium * factor),
       'High Density': Math.round(baselineHigh * factor),
     };
   });
@@ -149,33 +198,188 @@ const FeasibilitySummary = ({ settings, currentResults }) => {
   const radarData = [
     {
       metric: 'Residual Land Value',
-      'Low-Mid Density': (currentResults?.lowMidDensity?.residualLandValue || 0) / 1000000,
+      'Medium Density': (currentResults?.mediumDensity?.residualLandValue || 0) / 1000000,
       'High Density': (currentResults?.highDensity?.residualLandValue || 0) / 1000000,
     },
     {
       metric: 'GFA',
-      'Low-Mid Density': (currentResults?.lowMidDensity?.gfa || 0) / 1000,
+      'Medium Density': (currentResults?.mediumDensity?.gfa || 0) / 1000,
       'High Density': (currentResults?.highDensity?.gfa || 0) / 1000,
     },
     {
       metric: 'Yield',
-      'Low-Mid Density': (currentResults?.lowMidDensity?.developmentYield || 0),
+      'Medium Density': (currentResults?.mediumDensity?.developmentYield || 0),
       'High Density': (currentResults?.highDensity?.developmentYield || 0),
     },
     {
       metric: 'FSR',
-      'Low-Mid Density': (currentResults?.lowMidDensity?.fsr || 1),
+      'Medium Density': (currentResults?.mediumDensity?.fsr || 1),
       'High Density': (currentResults?.highDensity?.fsr || 2),
     },
     {
       metric: 'Cost',
-      'Low-Mid Density': (currentResults?.lowMidDensity?.totalCost || 0) / 1000000,
+      'Medium Density': (currentResults?.mediumDensity?.totalCost || 0) / 1000000,
       'High Density': (currentResults?.highDensity?.totalCost || 0) / 1000000,
     },
   ];
 
+  // Add custom controls info section
+  const renderCustomControlsInfo = () => {
+    if (!customControls?.enabled) return null;
+
+    return (
+      <div className="mb-8 bg-white p-4 rounded-lg shadow">
+        <h3 className="text-lg font-bold mb-4 flex items-center">
+          <Settings2 className="mr-2" /> Custom Development Controls
+        </h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="flex items-center justify-between">
+            <span className="font-medium">FSR:</span>
+            <span>
+              {customControls.fsr ?? (currentResults?.fsrCurrent || 'N/A')}
+              <span className="text-gray-500 ml-1">:1</span>
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="font-medium">HOB:</span>
+            <span>
+              {customControls.hob ?? (currentResults?.hobCurrent || 'N/A')}
+              <span className="text-gray-500 ml-1">m</span>
+            </span>
+          </div>
+        </div>
+        {(customControls.fsr !== null || customControls.hob !== null) && (
+          <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
+            <div className="flex items-start">
+              <Info size={14} className="mr-2 mt-0.5 flex-shrink-0" />
+              <div>
+                Summary is based on custom development controls.
+                {customControls.fsr === null && ' Using current FSR.'}
+                {customControls.hob === null && ' Using current HOB.'}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Add sensitivity analysis section
+  const renderSensitivityAnalysis = () => {
+    if (!selectedFeature || !calculateFeasibility) return null;
+
+    const mediumDensityMatrix = generateSensitivityMatrix(settings, selectedFeature, 'mediumDensity', calculateFeasibility);
+    const highDensityMatrix = generateSensitivityMatrix(settings, selectedFeature, 'highDensity', calculateFeasibility);
+
+    return (
+      <div className="mt-8 bg-white p-4 rounded-lg shadow">
+        <h3 className="text-lg font-bold mb-4 flex items-center">
+          <TrendingUp className="mr-2" /> FSR and HOB Sensitivity Analysis
+        </h3>
+        
+        {/* Medium Density Matrix */}
+        <div className="mb-6">
+          <h4 className="text-md font-semibold mb-3 flex items-center">
+            <Building2 className="mr-2" size={16} /> Medium Density
+          </h4>
+          <div className="overflow-x-auto">
+            <table className="min-w-full border border-gray-200">
+              <thead>
+                <tr>
+                  <th className="border bg-gray-50 px-4 py-2">FSR \ HOB</th>
+                  {mediumDensityMatrix.hobRange.map(hob => (
+                    <th key={hob} className={`border px-4 py-2 ${Math.abs(hob - mediumDensityMatrix.baselineHob) < 0.01 ? 'bg-blue-100' : 'bg-gray-50'}`}>
+                      {hob}m
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {mediumDensityMatrix.matrix.map((row, i) => (
+                  <tr key={mediumDensityMatrix.fsrRange[i]}>
+                    <td className={`border px-4 py-2 font-medium ${Math.abs(mediumDensityMatrix.fsrRange[i] - mediumDensityMatrix.baselineFsr) < 0.01 ? 'bg-blue-100' : 'bg-gray-50'}`}>
+                      {mediumDensityMatrix.fsrRange[i]}:1
+                    </td>
+                    {row.map((cell, j) => (
+                      <td 
+                        key={j} 
+                        className={`border px-4 py-2 text-right ${
+                          cell.isBaseline ? 'bg-blue-100 font-bold' : 
+                          cell.residualLandValue < 0 ? 'bg-red-50 text-red-600' : ''
+                        }`}
+                      >
+                        {formatCurrencyInMillions(cell.residualLandValue)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* High Density Matrix */}
+        <div>
+          <h4 className="text-md font-semibold mb-3 flex items-center">
+            <Building className="mr-2" size={16} /> High Density
+          </h4>
+          <div className="overflow-x-auto">
+            <table className="min-w-full border border-gray-200">
+              <thead>
+                <tr>
+                  <th className="border bg-gray-50 px-4 py-2">FSR \ HOB</th>
+                  {highDensityMatrix.hobRange.map(hob => (
+                    <th key={hob} className={`border px-4 py-2 ${Math.abs(hob - highDensityMatrix.baselineHob) < 0.01 ? 'bg-blue-100' : 'bg-gray-50'}`}>
+                      {hob}m
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {highDensityMatrix.matrix.map((row, i) => (
+                  <tr key={highDensityMatrix.fsrRange[i]}>
+                    <td className={`border px-4 py-2 font-medium ${Math.abs(highDensityMatrix.fsrRange[i] - highDensityMatrix.baselineFsr) < 0.01 ? 'bg-blue-100' : 'bg-gray-50'}`}>
+                      {highDensityMatrix.fsrRange[i]}:1
+                    </td>
+                    {row.map((cell, j) => (
+                      <td 
+                        key={j} 
+                        className={`border px-4 py-2 text-right ${
+                          cell.isBaseline ? 'bg-blue-100 font-bold' : 
+                          cell.residualLandValue < 0 ? 'bg-red-50 text-red-600' : ''
+                        }`}
+                      >
+                        {formatCurrencyInMillions(cell.residualLandValue)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="mt-4 p-3 bg-blue-50 rounded text-sm text-blue-800">
+          <div className="flex items-start">
+            <Info size={14} className="mr-2 mt-0.5 flex-shrink-0" />
+            <div>
+              This analysis shows how residual land value changes with different FSR and HOB combinations. Values are shown in millions (M).
+              <br />
+              <span className="font-medium">Baseline values (highlighted in blue):</span> FSR {mediumDensityMatrix.baselineFsr}:1, HOB {mediumDensityMatrix.baselineHob}m
+              <br />
+              <span className="text-red-600">Negative values</span> indicate scenarios where development costs exceed potential revenue.
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="p-4">
+      {/* Add Custom Controls Information Section */}
+      {renderCustomControlsInfo()}
+
       <h2 className="text-xl font-bold mb-6">Development Feasibility Summary</h2>
 
       {/* Main Comparison Chart */}
@@ -204,7 +408,7 @@ const FeasibilitySummary = ({ settings, currentResults }) => {
                     { length: 10 }, 
                     (_, i) => roundToNearest500k(
                       (Math.max(
-                        currentResults?.lowMidDensity?.residualLandValue || 0,
+                        currentResults?.mediumDensity?.residualLandValue || 0,
                         currentResults?.highDensity?.residualLandValue || 0
                       ) * 1.1) / 10 * (i + 1)
                     )
@@ -346,7 +550,7 @@ const FeasibilitySummary = ({ settings, currentResults }) => {
                     { length: 10 }, 
                     (_, i) => roundToNearest500k(
                       (Math.max(
-                        Math.max(...costSensitivityData.map(item => item['Low-Mid Density'] || 0)),
+                        Math.max(...costSensitivityData.map(item => item['Medium Density'] || 0)),
                         Math.max(...costSensitivityData.map(item => item['High Density'] || 0))
                       ) * 1.1) / 10 * (i + 1)
                     )
@@ -357,13 +561,13 @@ const FeasibilitySummary = ({ settings, currentResults }) => {
               <Legend />
               <Line 
                 type="monotone" 
-                dataKey="Low-Mid Density" 
+                dataKey="Medium Density" 
                 stroke="#8884d8" 
                 strokeWidth={2}
                 dot={{ r: 4 }}
                 activeDot={{ r: 8 }}
                 animationDuration={1500}
-                name="Low-Mid Density"
+                name="Medium Density"
               />
               <Line 
                 type="monotone" 
@@ -430,7 +634,7 @@ const FeasibilitySummary = ({ settings, currentResults }) => {
                     { length: 10 }, 
                     (_, i) => roundToNearest500k(
                       (Math.max(
-                        Math.max(...residualLandValueSensitivityData.map(item => item['Low-Mid Density'] || 0)),
+                        Math.max(...residualLandValueSensitivityData.map(item => item['Medium Density'] || 0)),
                         Math.max(...residualLandValueSensitivityData.map(item => item['High Density'] || 0))
                       ) * 1.1) / 10 * (i + 1)
                     )
@@ -441,13 +645,13 @@ const FeasibilitySummary = ({ settings, currentResults }) => {
               <Legend />
               <Line 
                 type="monotone" 
-                dataKey="Low-Mid Density" 
+                dataKey="Medium Density" 
                 stroke="#8884d8" 
                 strokeWidth={2}
                 dot={{ r: 4 }}
                 activeDot={{ r: 8 }}
                 animationDuration={1500}
-                name="Low-Mid Density"
+                name="Medium Density"
               />
               <Line 
                 type="monotone" 
@@ -467,10 +671,10 @@ const FeasibilitySummary = ({ settings, currentResults }) => {
 
       {/* Detailed Comparison Tables */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Low-Mid Density Details */}
+        {/* Medium Density Details */}
         <div className="bg-white p-4 rounded-lg shadow">
           <h3 className="text-lg font-bold mb-4 flex items-center">
-            <Building2 className="mr-2" /> Low-Mid Density Details
+            <Building2 className="mr-2" /> Medium Density Details
           </h3>
           <table className="w-full">
             <thead>
@@ -482,15 +686,15 @@ const FeasibilitySummary = ({ settings, currentResults }) => {
             <tbody>
               <tr>
                 <td className="px-4 py-2">GFA</td>
-                <td className="px-4 py-2 text-right">{currentResults?.lowMidDensity?.gfa ? formatSqm(currentResults.lowMidDensity.gfa) : 'N/A'}</td>
+                <td className="px-4 py-2 text-right">{currentResults?.mediumDensity?.gfa ? formatSqm(currentResults.mediumDensity.gfa) : 'N/A'}</td>
               </tr>
               <tr>
                 <td className="px-4 py-2">Development Yield</td>
-                <td className="px-4 py-2 text-right">{currentResults?.lowMidDensity?.developmentYield || 0} units</td>
+                <td className="px-4 py-2 text-right">{currentResults?.mediumDensity?.developmentYield || 0} units</td>
               </tr>
               <tr className="font-bold">
                 <td className="px-4 py-2">Residual Land Value</td>
-                <td className="px-4 py-2 text-right">{formatCurrency(currentResults?.lowMidDensity?.residualLandValue || 0)}</td>
+                <td className="px-4 py-2 text-right">{formatCurrency(currentResults?.mediumDensity?.residualLandValue || 0)}</td>
               </tr>
             </tbody>
           </table>
@@ -525,6 +729,9 @@ const FeasibilitySummary = ({ settings, currentResults }) => {
           </table>
         </div>
       </div>
+
+      {/* Add Sensitivity Analysis Section */}
+      {renderSensitivityAnalysis()}
     </div>
   );
 };

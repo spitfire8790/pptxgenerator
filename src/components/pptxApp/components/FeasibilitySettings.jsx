@@ -33,19 +33,19 @@ import ConstructionDataModal from './ConstructionDataModal';
 const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructionData, selectedFeature, onShowMedianPrices, onShowConstructionData, onShowDwellingSizeData, lmrOptions, onLMROptionChange, calculationResults }) => {
   // Define property type descriptions
   const densityDescriptions = {
-    lowMidDensity: "Includes: Dual OccupancyDuplex/Semi-detached, House, Manor House, Terrace, Townhouse, Villa",
+    mediumDensity: "Includes: Terrace, Townhouse, Villa, Multi-dwelling housing, Multi-dwelling housing (terraces), Manor house",
     highDensity: "Includes: Apartment, Build-to-Rent, Shop Top Housing, Studio, Unit"
   };
 
   // Track if dwelling price has been customized
   const [customDwellingPrice, setCustomDwellingPrice] = useState({
-    lowMidDensity: false,
+    mediumDensity: false,
     highDensity: false
   });
 
   // Store calculated median prices
   const [medianPrices, setMedianPrices] = useState({
-    lowMidDensity: null,
+    mediumDensity: null,
     highDensity: null
   });
 
@@ -53,7 +53,7 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
   const [activeTab, setActiveTab] = useState('settings');
   
   // Add state for active calculation sub-tab
-  const [activeCalcTab, setActiveCalcTab] = useState('lowMidDensity');
+  const [activeCalcTab, setActiveCalcTab] = useState('mediumDensity');
   
   // Add state for social and affordable housing scenarios
   const [housingScenarios, setHousingScenarios] = useState({
@@ -62,6 +62,39 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
     mixedSocialPercentage: 15,
     mixedAffordablePercentage: 15
   });
+
+  // Add state for custom controls
+  const [customControls, setCustomControls] = useState({
+    enabled: false,
+    fsr: null,
+    hob: null
+  });
+
+  // Add function to handle custom control changes
+  const handleCustomControlChange = (field, value) => {
+    setCustomControls(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  // Define property types for sales data filtering
+  const MEDIUM_DENSITY_TYPES = ['terrace', 'townhouse', 'villa'];
+  const HIGH_DENSITY_TYPES = ['apartment', 'studio', 'unit'];
+
+  // Define property types for construction certificate data filtering
+  const MEDIUM_DENSITY_CC_TYPES = [
+    'Multi-dwelling housing',
+    'Multi-dwelling housing (terraces)',
+    'Manor house',
+    'Medium Density Housing',
+    'Manor houses'
+  ];
+  const HIGH_DENSITY_CC_TYPES = [
+    'Residential flat building',
+    'Shop top housing',
+    'Build-to-rent'
+  ];
 
   // Define settings configuration with the new showConstructionButton property
   const settingsConfig = [
@@ -113,7 +146,7 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
     },
     { 
       id: 'dwellingPrice', 
-      label: 'Dwelling Price', 
+      label: 'Median Dwelling Price',
       unit: '$', 
       icon: Building, 
       isEditable: true,
@@ -136,13 +169,13 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
   ];
 
   // Function to calculate feasibility
-  const calculateFeasibility = (settings, propertyData, density, useLMR = false, lmrOption = null) => {
+  const calculateFeasibility = (settings, propertyData, density, useLMR = false, lmrOption = null, customControls = null) => {
     try {
       // Get property data
       const developableArea = propertyData?.properties?.copiedFrom?.site_suitability__area || 0;
       const siteArea = propertyData?.properties?.copiedFrom?.site_area || developableArea;
       
-      // Get FSR and HOB based on whether we're using LMR or current controls
+      // Get FSR and HOB based on whether we're using LMR, custom controls, or current controls
       let fsr, hob;
       if (useLMR && lmrOption) {
         // Use LMR values based on zone and distance to centers/stations
@@ -171,6 +204,10 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
           fsr = lmrOption.fsrRange ? lmrOption.fsrRange.max : lmrOption.potentialFSR;
           hob = lmrOption.hobRange ? lmrOption.hobRange.max : lmrOption.potentialHOB;
         }
+      } else if (customControls?.enabled) {
+        // Use custom controls if enabled, falling back to current controls if not specified
+        fsr = customControls.fsr ?? (propertyData?.properties?.copiedFrom?.site_suitability__floorspace_ratio || 0);
+        hob = customControls.hob ?? (propertyData?.properties?.copiedFrom?.site_suitability__height_of_building || 0);
       } else {
         // Use current controls
         fsr = propertyData?.properties?.copiedFrom?.site_suitability__floorspace_ratio || 0;
@@ -183,21 +220,21 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
       // Calculate GFA under HOB
       let maxStoreys = Math.floor(hob / settings.floorToFloorHeight);
       
-      // Limit Low-Mid Density to maximum 3 storeys
-      if (density === 'lowMidDensity' && maxStoreys > 3) {
+      // Limit Medium Density to maximum 3 storeys
+      if (density === 'mediumDensity' && maxStoreys > 3) {
         maxStoreys = 3;
       }
       
       const siteCoverage = developableArea * settings.siteEfficiencyRatio;
       // For high-density: GFA = Site Area × 50% (building footprint) × HOB/3.1 (storeys) × 75% (efficiency)
-      // For low-density: GFA = Site Area × 60% (building footprint) × HOB/3.1 (max 3 storeys) × 90% (efficiency)
+      // For medium-density: GFA = Site Area × 60% (building footprint) × HOB/3.1 (max 3 storeys) × 90% (efficiency)
       const gfaUnderHob = siteCoverage * maxStoreys * settings.gbaToGfaRatio;
 
       // Use FSR value if no HoB exists, otherwise use the lower of the two
       let gfa = !hob ? gfaUnderFsr : Math.min(gfaUnderFsr, gfaUnderHob);
 
-      // For Low-Mid Density, limit to 3 storeys unless using LMR controls
-      if (density === 'lowMidDensity' && !useLMR) {
+      // For Medium Density, limit to 3 storeys unless using LMR controls
+      if (density === 'mediumDensity' && !useLMR) {
         const maxGfaFor3Storeys = siteCoverage * 3 * settings.gbaToGfaRatio;
         gfa = Math.min(gfa, maxGfaFor3Storeys);
       }
@@ -211,7 +248,7 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
         // Use fixed 75m² for high-density
         dwellingSize = 75;
       } else {
-        // Use the rounded down to nearest 10m² value for low-density
+        // Use the rounded down to nearest 10m² value for medium-density
         const medianSize = constructionData?.dwellingSizes?.[density] || 80;
         dwellingSize = Math.floor(medianSize / 10) * 10;
       }
@@ -329,27 +366,30 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
     // Calculate GFA under HOB
     let maxStoreys = Math.floor(hob / settings[density].floorToFloorHeight);
     
-    // Limit Low-Mid Density to maximum 3 storeys
-    if (density === 'lowMidDensity' && maxStoreys > 3) {
+    // Limit Medium Density to maximum 3 storeys
+    if (density === 'mediumDensity' && maxStoreys > 3) {
       maxStoreys = 3;
     }
     
     const siteCoverage = developableArea * settings[density].siteEfficiencyRatio;
     // For high-density: GFA = Site Area × 50% (building footprint) × HOB/3.1 (storeys) × 75% (efficiency)
-    // For low-density: GFA = Site Area × 60% (building footprint) × HOB/3.1 (max 3 storeys) × 90% (efficiency)
+    // For medium-density: GFA = Site Area × 60% (building footprint) × HOB/3.1 (max 3 storeys) × 90% (efficiency)
     const gfaUnderHob = siteCoverage * maxStoreys * settings[density].gbaToGfaRatio;
 
     // Use FSR value if no HoB exists, otherwise use the lower of the two
     let gfa = !hob ? gfaUnderFsr : Math.min(gfaUnderFsr, gfaUnderHob);
     
-    // For Low-Mid Density, also limit the GFA to what would be possible with 3 storeys
-    if (density === 'lowMidDensity') {
+    // For Medium Density, also limit the GFA to what would be possible with 3 storeys
+    if (density === 'mediumDensity') {
       const maxGfaFor3Storeys = siteCoverage * 3 * settings[density].gbaToGfaRatio;
       gfa = Math.min(gfa, maxGfaFor3Storeys);
     }
 
-    // Get median dwelling size from construction data, filtered by bedroom count
-    let dwellingSize = 0;
+    // Get construction cost and dwelling size from construction data
+    const constructionCostM2 = constructionData[density];
+    let dwellingSize = constructionData?.dwellingSizes?.[density] || 0;
+
+    // Calculate dwelling size from bedroom-specific data if available
     if (constructionData?.dwellingSizesByBedroom?.[density]) {
       // Get sizes for properties with fewer than 4 bedrooms
       const validSizes = [];
@@ -364,32 +404,13 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
         // Sort sizes and get the median
         validSizes.sort((a, b) => a - b);
         dwellingSize = validSizes[Math.floor(validSizes.length / 2)];
-      } else {
-        // Fallback to the overall median if no bedroom-specific data
-        dwellingSize = constructionData?.dwellingSizes?.[density] || 0;
       }
-    } else {
-      // Fallback to the overall median if no bedroom-specific data
-      dwellingSize = constructionData?.dwellingSizes?.[density] || 0;
-    }
-
-    // Calculate assumed dwelling size based on density
-    let assumedDwellingSize = 0;
-    if (density === 'highDensity') {
-      // Fixed at 75m² for high-density
-      assumedDwellingSize = 75;
-    } else {
-      // Round down to nearest 10m² for low-density
-      assumedDwellingSize = Math.floor(dwellingSize / 10) * 10;
     }
 
     // Filter sales data by property type based on density
-    const LOW_MID_DENSITY_TYPES = ['duplex/semi-detached', 'duplex-semi-detached', 'house', 'terrace', 'townhouse', 'villa'];
-    const HIGH_DENSITY_TYPES = ['apartment', 'studio', 'unit'];
-
     const relevantSales = salesData?.filter(sale => {
       const propertyType = sale.property_type?.toLowerCase().trim();
-      const propertyTypes = density === 'lowMidDensity' ? LOW_MID_DENSITY_TYPES : HIGH_DENSITY_TYPES;
+      const propertyTypes = density === 'mediumDensity' ? MEDIUM_DENSITY_TYPES : HIGH_DENSITY_TYPES;
       
       // Check if property type matches
       const typeMatches = propertyTypes.some(type => propertyType?.includes(type));
@@ -406,11 +427,11 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
       ? relevantSales.map(s => s.price).sort((a, b) => a - b)[Math.floor(relevantSales.length / 2)]
       : null;
 
-    // Get construction cost from construction data
-    const constructionCostM2 = constructionData[density === 'lowMidDensity' ? 'lowMidDensity' : 'highDensity'];
-
     // Calculate assumed construction cost (rounded down to nearest 10)
     const assumedConstructionCostM2 = Math.floor(constructionCostM2 / 10) * 10;
+
+    // Calculate assumed dwelling size based on density
+    const assumedDwellingSize = density === 'highDensity' ? 75 : Math.floor(dwellingSize / 10) * 10;
 
     // Use custom dwelling price if set, otherwise use median price
     const dwellingPrice = customDwellingPrice[density] 
@@ -419,22 +440,22 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
 
     return {
       dwellingSize: Math.round(dwellingSize),
-      assumedDwellingSize: assumedDwellingSize,
-      dwellingPrice: dwellingPrice,
+      assumedDwellingSize,
+      dwellingPrice,
       pricePerM2: dwellingPrice && dwellingSize ? Math.round(dwellingPrice / dwellingSize) : null,
       constructionCostM2: Math.round(constructionCostM2),
-      assumedConstructionCostM2: assumedConstructionCostM2
+      assumedConstructionCostM2
     };
   };
 
   // Update median prices when sales data changes
   useEffect(() => {
     if (salesData) {
-      const lowMidValues = calculateDerivedValues('lowMidDensity');
+      const mediumValues = calculateDerivedValues('mediumDensity');
       const highValues = calculateDerivedValues('highDensity');
       
       setMedianPrices({
-        lowMidDensity: lowMidValues.dwellingPrice,
+        mediumDensity: mediumValues.dwellingPrice,
         highDensity: highValues.dwellingPrice
       });
     }
@@ -442,12 +463,12 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
 
   // Initialize dwelling price in settings if it doesn't exist
   useEffect(() => {
-    if (salesData && (!settings.lowMidDensity.dwellingPrice || !settings.highDensity.dwellingPrice)) {
-      const lowMidValues = calculateDerivedValues('lowMidDensity');
+    if (salesData && (!settings.mediumDensity.dwellingPrice || !settings.highDensity.dwellingPrice)) {
+      const mediumValues = calculateDerivedValues('mediumDensity');
       const highValues = calculateDerivedValues('highDensity');
       
-      if (lowMidValues.dwellingPrice && !settings.lowMidDensity.dwellingPrice) {
-        onSettingChange('dwellingPrice', lowMidValues.dwellingPrice, 'lowMidDensity');
+      if (mediumValues.dwellingPrice && !settings.mediumDensity.dwellingPrice) {
+        onSettingChange('dwellingPrice', mediumValues.dwellingPrice, 'mediumDensity');
       }
       
       if (highValues.dwellingPrice && !settings.highDensity.dwellingPrice) {
@@ -459,26 +480,26 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
   // Set default values for Building Footprint if not already set
   useEffect(() => {
     // Check if siteEfficiencyRatio needs to be updated to the new default values
-    if (settings.lowMidDensity.siteEfficiencyRatio !== 0.6) {
-      onSettingChange('siteEfficiencyRatio', 0.6, 'lowMidDensity');
+    if (settings.mediumDensity.siteEfficiencyRatio !== 0.6) {
+      onSettingChange('siteEfficiencyRatio', 0.6, 'mediumDensity');
     }
     
-    if (settings.highDensity.siteEfficiencyRatio !== 0.5) {
-      onSettingChange('siteEfficiencyRatio', 0.5, 'highDensity');
+    if (settings.highDensity.siteEfficiencyRatio !== 0.6) {
+      onSettingChange('siteEfficiencyRatio', 0.6, 'highDensity');
     }
 
     // Set floor to floor height to 3.1m for both density types
-    if (settings.lowMidDensity.floorToFloorHeight !== 3.1) {
-      onSettingChange('floorToFloorHeight', 3.1, 'lowMidDensity');
+    if (settings.mediumDensity.floorToFloorHeight !== 3.1) {
+      onSettingChange('floorToFloorHeight', 3.1, 'mediumDensity');
     }
     
     if (settings.highDensity.floorToFloorHeight !== 3.1) {
       onSettingChange('floorToFloorHeight', 3.1, 'highDensity');
     }
 
-    // Set GBA to GFA ratio for Low-Mid Density to 90%
-    if (settings.lowMidDensity.gbaToGfaRatio !== 0.9) {
-      onSettingChange('gbaToGfaRatio', 0.9, 'lowMidDensity');
+    // Set GBA to GFA ratio for Medium Density to 90%
+    if (settings.mediumDensity.gbaToGfaRatio !== 0.9) {
+      onSettingChange('gbaToGfaRatio', 0.9, 'mediumDensity');
     }
 
     // Set GBA to GFA ratio for High Density to 75%
@@ -487,26 +508,26 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
     }
 
     // Set Development Contribution to 1% of Construction Costs if not already set
-    if (settings.lowMidDensity.developmentContribution !== 0.01) {
-      onSettingChange('developmentContribution', 0.01, 'lowMidDensity');
+    if (settings.mediumDensity.developmentContribution !== 0.01) {
+      onSettingChange('developmentContribution', 0.01, 'mediumDensity');
     }
     
     if (settings.highDensity.developmentContribution !== 0.01) {
       onSettingChange('developmentContribution', 0.01, 'highDensity');
     }
 
-    // Set default project period for Low-Mid Density to 24 months
-    if (settings.lowMidDensity.projectPeriod !== 24) {
-      onSettingChange('projectPeriod', 24, 'lowMidDensity');
+    // Set default project period for Medium Density to 24 months
+    if (settings.mediumDensity.projectPeriod !== 24) {
+      onSettingChange('projectPeriod', 24, 'mediumDensity');
     }
     
     // Initialize assumed construction costs if not set
     if (constructionData) {
-      // Calculate low-mid density assumed construction cost
-      if (!settings.lowMidDensity.assumedConstructionCostM2) {
-        const lowMidConstructionCost = constructionData.lowMidDensity || 3500;
-        const lowMidAssumedCost = Math.floor(lowMidConstructionCost / 10) * 10;
-        onSettingChange('assumedConstructionCostM2', lowMidAssumedCost, 'lowMidDensity');
+      // Calculate medium density assumed construction cost
+      if (!settings.mediumDensity.assumedConstructionCostM2) {
+        const mediumConstructionCost = constructionData.mediumDensity || 3500;
+        const mediumAssumedCost = Math.floor(mediumConstructionCost / 10) * 10;
+        onSettingChange('assumedConstructionCostM2', mediumAssumedCost, 'mediumDensity');
       }
       
       // Calculate high density assumed construction cost
@@ -517,9 +538,9 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
       }
       
       // Initialize assumed dwelling sizes if not set
-      if (!settings.lowMidDensity.assumedDwellingSize && constructionData.dwellingSizes?.lowMidDensity) {
-        const assumedSize = Math.floor(constructionData.dwellingSizes.lowMidDensity / 10) * 10;
-        onSettingChange('assumedDwellingSize', assumedSize, 'lowMidDensity');
+      if (!settings.mediumDensity.assumedDwellingSize && constructionData.dwellingSizes?.mediumDensity) {
+        const assumedSize = Math.floor(constructionData.dwellingSizes.mediumDensity / 10) * 10;
+        onSettingChange('assumedDwellingSize', assumedSize, 'mediumDensity');
       }
       
       if (!settings.highDensity.assumedDwellingSize) {
@@ -529,31 +550,64 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
     }
   }, [constructionData]);
 
-  // Update useEffect to calculate results when settings change
+  // Update useEffect to calculate results when settings or custom controls change
   useEffect(() => {
     if (!selectedFeature) return;
 
     // Calculate results for current controls
-    const currentLowMidResults = calculateFeasibility(settings.lowMidDensity, selectedFeature, 'lowMidDensity', false);
-    const currentHighResults = calculateFeasibility(settings.highDensity, selectedFeature, 'highDensity', false);
+    const currentMediumResults = calculateFeasibility(
+      settings.mediumDensity, 
+      selectedFeature, 
+      'mediumDensity', 
+      false, 
+      null, 
+      customControls
+    );
+    const currentHighResults = calculateFeasibility(
+      settings.highDensity, 
+      selectedFeature, 
+      'highDensity', 
+      false, 
+      null, 
+      customControls
+    );
 
     // Calculate results for LMR controls if available
-    const lmrLowMidResults = lmrOptions.isInLMRArea && settings.lowMidDensity.useLMR
-      ? calculateFeasibility(settings.lowMidDensity, selectedFeature, 'lowMidDensity', true, lmrOptions.selectedOptions.lowMidDensity)
+    const lmrMediumResults = lmrOptions.isInLMRArea && settings.mediumDensity.useLMR
+      ? calculateFeasibility(
+          settings.mediumDensity, 
+          selectedFeature, 
+          'mediumDensity', 
+          true, 
+          lmrOptions.selectedOptions.mediumDensity, 
+          customControls
+        )
       : null;
     const lmrHighResults = lmrOptions.isInLMRArea && settings.highDensity.useLMR
-      ? calculateFeasibility(settings.highDensity, selectedFeature, 'highDensity', true, lmrOptions.selectedOptions.highDensity)
+      ? calculateFeasibility(
+          settings.highDensity, 
+          selectedFeature, 
+          'highDensity', 
+          true, 
+          lmrOptions.selectedOptions.highDensity, 
+          customControls
+        )
       : null;
 
     calculationResults.current = {
-      lowMidDensity: currentLowMidResults,
-      highDensity: currentHighResults
+      mediumDensity: currentMediumResults,
+      highDensity: currentHighResults,
+      isCustomControls: customControls.enabled,
+      customControls: customControls.enabled ? {
+        fsr: customControls.fsr,
+        hob: customControls.hob
+      } : null
     };
     calculationResults.lmr = {
-      lowMidDensity: lmrLowMidResults,
+      mediumDensity: lmrMediumResults,
       highDensity: lmrHighResults
     };
-  }, [settings, selectedFeature, lmrOptions]);
+  }, [settings, selectedFeature, lmrOptions, customControls]);
 
   const handleChange = (setting, density) => (event) => {
     let value = event.target.value;
@@ -763,7 +817,7 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
     }
   };
 
-  const showConstructionData = settings.lowMidDensity.useLMR || settings.highDensity.useLMR;
+  const showConstructionData = settings.mediumDensity.useLMR || settings.highDensity.useLMR;
 
   return (
     <div className="p-4">
@@ -795,25 +849,98 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
           {/* Property Information Section */}
           {selectedFeature && (
             <div className="mb-6 p-4 bg-blue-50 rounded-lg">
-              <h3 className="text-lg font-bold mb-2 flex items-center">
+              <h3 className="text-lg font-bold mb-4 flex items-center">
                 <Map className="mr-2" size={18} /> Property Information
               </h3>
-              <div className="grid grid-cols-3 gap-4 mb-4">
-                <div className="flex items-center">
-                  <Landmark className="mr-2" size={16} />
-                  <span className="font-medium">Zone:</span>
-                  <span className="ml-2">{selectedFeature?.properties?.copiedFrom?.site_suitability__principal_zone_identifier?.split('-')?.[0]?.trim() || 'N/A'}</span>
+              
+              {/* Development Controls Toggle */}
+              <div className="mb-4 p-3 bg-white rounded-lg shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="font-medium text-gray-700">Development Controls</span>
+                  <div className="flex items-center space-x-4">
+                    <label className={`flex items-center cursor-pointer px-3 py-1 rounded-l-md ${!customControls.enabled ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 hover:bg-gray-200'}`}>
+                      <input
+                        type="radio"
+                        className="hidden"
+                        checked={!customControls.enabled}
+                        onChange={() => setCustomControls(prev => ({ ...prev, enabled: false }))}
+                      />
+                      <span>Current Controls</span>
+                    </label>
+                    <label className={`flex items-center cursor-pointer px-3 py-1 rounded-r-md ${customControls.enabled ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 hover:bg-gray-200'}`}>
+                      <input
+                        type="radio"
+                        className="hidden"
+                        checked={customControls.enabled}
+                        onChange={() => setCustomControls(prev => ({ ...prev, enabled: true }))}
+                      />
+                      <span>Custom Controls</span>
+                    </label>
+                  </div>
                 </div>
-                <div className="flex items-center">
-                  <Building2 className="mr-2" size={16} />
-                  <span className="font-medium">FSR:</span>
-                  <span className="ml-2">{selectedFeature?.properties?.copiedFrom?.site_suitability__floorspace_ratio || 'N/A'}</span>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="flex items-center">
+                    <Landmark className="mr-2" size={16} />
+                    <span className="font-medium">Zone:</span>
+                    <span className="ml-2">{selectedFeature?.properties?.copiedFrom?.site_suitability__principal_zone_identifier?.split('-')?.[0]?.trim() || 'N/A'}</span>
+                  </div>
+                  <div className="flex items-center">
+                    <Building2 className="mr-2" size={16} />
+                    <div className="flex items-center space-x-2 w-full">
+                      <span className="font-medium">FSR:</span>
+                      {customControls.enabled ? (
+                        <div className="relative flex-1">
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            value={customControls.fsr || ''}
+                            onChange={(e) => handleCustomControlChange('fsr', e.target.value ? parseFloat(e.target.value) : null)}
+                            placeholder={selectedFeature?.properties?.copiedFrom?.site_suitability__floorspace_ratio || '0.0'}
+                            className="w-full px-2 py-1 border rounded bg-white focus:ring-2 focus:ring-blue-300 focus:border-blue-500 transition-all"
+                          />
+                          <div className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm">:1</div>
+                        </div>
+                      ) : (
+                        <span className="ml-2">{selectedFeature?.properties?.copiedFrom?.site_suitability__floorspace_ratio || 'N/A'}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center">
+                    <Ruler className="mr-2" size={16} />
+                    <div className="flex items-center space-x-2 w-full">
+                      <span className="font-medium">HOB:</span>
+                      {customControls.enabled ? (
+                        <div className="relative flex-1">
+                          <input
+                            type="number"
+                            step="0.5"
+                            min="0"
+                            value={customControls.hob || ''}
+                            onChange={(e) => handleCustomControlChange('hob', e.target.value ? parseFloat(e.target.value) : null)}
+                            placeholder={selectedFeature?.properties?.copiedFrom?.site_suitability__height_of_building || '0.0'}
+                            className="w-full px-2 py-1 border rounded bg-white focus:ring-2 focus:ring-blue-300 focus:border-blue-500 transition-all"
+                          />
+                          <div className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm">m</div>
+                        </div>
+                      ) : (
+                        <span className="ml-2">{selectedFeature?.properties?.copiedFrom?.site_suitability__height_of_building ? `${selectedFeature.properties.copiedFrom.site_suitability__height_of_building}m` : 'N/A'}</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center">
-                  <Ruler className="mr-2" size={16} />
-                  <span className="font-medium">HOB:</span>
-                  <span className="ml-2">{selectedFeature?.properties?.copiedFrom?.site_suitability__height_of_building ? `${selectedFeature.properties.copiedFrom.site_suitability__height_of_building}m` : 'N/A'}</span>
-                </div>
+
+                {customControls.enabled && (
+                  <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+                    <div className="flex items-start">
+                      <Info size={14} className="mr-2 mt-0.5 flex-shrink-0" />
+                      <div>
+                        Custom controls will be used for all feasibility calculations. Leave fields empty to use current control values.
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* LMR Options Section */}
@@ -821,17 +948,17 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
                 <div className="mt-4 border-t border-blue-200 pt-4">
                   <h4 className="font-bold mb-2">LMR Development Options</h4>
                   
-                  {/* Low-Mid Density Options */}
+                  {/* Medium Density Options */}
                   <div className="mb-4">
-                    <h5 className="font-medium mb-2">Low-Mid Density Controls</h5>
+                    <h5 className="font-medium mb-2">Medium Density Controls</h5>
                     <div className="flex items-center space-x-4">
                       <label className="flex items-center">
                         <input
                           type="radio"
-                          name="lowMidDensityControl"
+                          name="mediumDensityControl"
                           value="current"
-                          checked={!settings.lowMidDensity.useLMR}
-                          onChange={() => onSettingChange('useLMR', false, 'lowMidDensity')}
+                          checked={!settings.mediumDensity.useLMR}
+                          onChange={() => onSettingChange('useLMR', false, 'mediumDensity')}
                           className="mr-2"
                         />
                         <span>Current Controls</span>
@@ -839,25 +966,25 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
                       <label className="flex items-center">
                         <input
                           type="radio"
-                          name="lowMidDensityControl"
+                          name="mediumDensityControl"
                           value="lmr"
-                          checked={settings.lowMidDensity.useLMR}
-                          onChange={() => onSettingChange('useLMR', true, 'lowMidDensity')}
+                          checked={settings.mediumDensity.useLMR}
+                          onChange={() => onSettingChange('useLMR', true, 'mediumDensity')}
                           className="mr-2"
                         />
                         <span>LMR Controls</span>
                       </label>
                     </div>
-                    {settings.lowMidDensity.useLMR && lmrOptions.allOptions?.lowMidDensity?.length > 0 && (
+                    {settings.mediumDensity.useLMR && lmrOptions.allOptions?.mediumDensity?.length > 0 && (
                       <select
-                        value={lmrOptions.selectedOptions.lowMidDensity?.type || ''}
+                        value={lmrOptions.selectedOptions.mediumDensity?.type || ''}
                         onChange={(e) => {
-                          const option = lmrOptions.allOptions.lowMidDensity.find(opt => opt.type === e.target.value);
-                          onLMROptionChange(option, 'lowMidDensity');
+                          const option = lmrOptions.allOptions.mediumDensity.find(opt => opt.type === e.target.value);
+                          onLMROptionChange(option, 'mediumDensity');
                         }}
                         className="mt-2 w-full p-2 border rounded"
                       >
-                        {lmrOptions.allOptions.lowMidDensity.map((option) => (
+                        {lmrOptions.allOptions.mediumDensity.map((option) => (
                           <option key={option.type} value={option.type}>
                             {option.type} - FSR: {option.fsrRange ? `${option.fsrRange.min}-${option.fsrRange.max}` : option.potentialFSR} | HOB: {option.hobRange ? `${option.hobRange.min}-${option.hobRange.max}m` : `${option.potentialHOB}m`}
                           </option>
@@ -921,8 +1048,8 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
                 <th className="w-1/3 text-left py-2">Setting</th>
                 <th className="w-1/3 text-center py-2">
                   <div className="flex justify-center items-center">
-                    <span title={densityDescriptions.lowMidDensity} className="cursor-help">
-                      Low-Mid Density
+                    <span title={densityDescriptions.mediumDensity} className="cursor-help">
+                      Medium Density
                     </span>
                   </div>
                 </th>
@@ -952,7 +1079,7 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
                       </div>
                     </td>
                     <td className="py-2 px-4 text-center">
-                      {renderInput(setting, 'lowMidDensity')}
+                      {renderInput(setting, 'mediumDensity')}
                     </td>
                     <td className="py-2 px-4 text-center">
                       {renderInput(setting, 'highDensity')}
@@ -1070,10 +1197,10 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
           {/* Calculation Sub-Tabs */}
           <div className="flex border-b mb-4">
             <button
-              className={`flex items-center px-4 py-2 font-medium ${activeCalcTab === 'lowMidDensity' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-blue-500'}`}
-              onClick={() => handleCalcTabChange('lowMidDensity')}
+              className={`flex items-center px-4 py-2 font-medium ${activeCalcTab === 'mediumDensity' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-blue-500'}`}
+              onClick={() => handleCalcTabChange('mediumDensity')}
             >
-              <Building2 className="mr-2" size={16} /> Low-Mid Density
+              <Building2 className="mr-2" size={16} /> Medium Density
             </button>
             <button
               className={`flex items-center px-4 py-2 font-medium ${activeCalcTab === 'highDensity' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-blue-500'}`}
@@ -1083,19 +1210,20 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
             </button>
           </div>
           
-          {/* Low-Mid Density Calculation */}
-          {activeCalcTab === 'lowMidDensity' && (
+          {/* Medium Density Calculation */}
+          {activeCalcTab === 'mediumDensity' && (
             <FeasibilityCalculation 
               settings={settings} 
-              density="lowMidDensity" 
+              density="mediumDensity" 
               selectedFeature={selectedFeature}
               salesData={salesData}
               constructionData={constructionData}
               housingScenarios={housingScenarios}
               lmrOptions={lmrOptions}
-              useLMR={settings.lowMidDensity.useLMR}
-              calculationResults={calculationResults.current?.lowMidDensity}
-              lmrResults={calculationResults.lmr?.lowMidDensity}
+              useLMR={settings.mediumDensity.useLMR}
+              calculationResults={calculationResults.current?.mediumDensity}
+              lmrResults={calculationResults.lmr?.mediumDensity}
+              customControls={customControls.enabled ? customControls : null}
             />
           )}
           
@@ -1112,6 +1240,7 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
               useLMR={settings.highDensity.useLMR}
               calculationResults={calculationResults.current?.highDensity}
               lmrResults={calculationResults.lmr?.highDensity}
+              customControls={customControls.enabled ? customControls : null}
             />
           )}
         </div>
@@ -1124,6 +1253,9 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
           lmrOptions={lmrOptions}
           currentResults={calculationResults.current}
           lmrResults={calculationResults.lmr}
+          customControls={customControls.enabled ? customControls : null}
+          selectedFeature={selectedFeature}
+          calculateFeasibility={calculateFeasibility}
         />
       )}
 

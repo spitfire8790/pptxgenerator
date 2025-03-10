@@ -255,35 +255,45 @@ const ReportGenerator = ({
   const logCounterRef = useRef(0);
   const [userInfo, setUserInfo] = useState(null);
   const [feasibilitySettings, setFeasibilitySettings] = useState({
-    lowMidDensity: {
-      siteEfficiencyRatio: 0.80,
-      floorToFloorHeight: 3.5,
-      gbaToGfaRatio: 0.75,
+    mediumDensity: {
+      siteEfficiencyRatio: 0.60,
+      floorToFloorHeight: 3.1,
+      gbaToGfaRatio: 0.90,
       gfaToNsaRatio: 0.85,
-      unitSize: 75,
+      dwellingPrice: null,
+      assumedDwellingSize: null,
+      constructionCostM2: null,
+      assumedConstructionCostM2: null,
       agentsSalesCommission: 0.02,
       legalFeesOnSales: 0.005,
       marketingCosts: 0.0075,
       profitAndRisk: 0.20,
       daApplicationFees: 200000,
       professionalFees: 0.05,
+      developmentContribution: 0.01,
       interestRate: 0.075,
-      projectPeriod: 48
+      projectPeriod: 24,
+      useLMR: false
     },
     highDensity: {
-      siteEfficiencyRatio: 0.80,
-      floorToFloorHeight: 3.5,
+      siteEfficiencyRatio: 0.50,
+      floorToFloorHeight: 3.1,
       gbaToGfaRatio: 0.75,
       gfaToNsaRatio: 0.85,
-      unitSize: 75,
+      dwellingPrice: null,
+      assumedDwellingSize: 75,
+      constructionCostM2: null,
+      assumedConstructionCostM2: null,
       agentsSalesCommission: 0.02,
       legalFeesOnSales: 0.005,
       marketingCosts: 0.0075,
       profitAndRisk: 0.20,
       daApplicationFees: 200000,
       professionalFees: 0.05,
+      developmentContribution: 0.01,
       interestRate: 0.075,
-      projectPeriod: 48
+      projectPeriod: 48,
+      useLMR: false
     }
   });
   const [salesData, setSalesData] = useState([]);
@@ -1953,6 +1963,7 @@ const ReportGenerator = ({
               site_suitability__suburb: primaryFeature.properties.copiedFrom?.site_suitability__suburb
             }
           } : null}
+          map={planningMapRef.current}  // Pass the map ref directly
         />
 
         <Chat

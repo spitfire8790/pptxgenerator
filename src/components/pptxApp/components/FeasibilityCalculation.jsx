@@ -12,7 +12,7 @@ import {
   Bar,
   ReferenceLine
 } from 'recharts';
-import { Calculator, TrendingUp, DollarSign, HardHat, Percent, Home, Building2 } from 'lucide-react';
+import { Calculator, TrendingUp, DollarSign, HardHat, Percent, Home, Building2, Settings2, Info } from 'lucide-react';
 
 // Helper function to format currency
 const formatCurrency = (amount) => {
@@ -110,7 +110,8 @@ const FeasibilityCalculation = ({
   lmrOptions,
   useLMR = false,
   calculationResults = null,
-  lmrResults = null
+  lmrResults = null,
+  customControls = null
 }) => {
   const [sensitivityData, setSensitivityData] = useState({
     housingImpact: []
@@ -282,8 +283,52 @@ const FeasibilityCalculation = ({
     );
   };
 
+  // Add custom controls info section
+  const renderCustomControlsInfo = () => {
+    if (!customControls?.enabled) return null;
+
+    return (
+      <div className="mb-8 bg-white p-4 rounded-lg shadow">
+        <h3 className="text-lg font-bold mb-4 flex items-center">
+          <Settings2 className="mr-2" /> Custom Development Controls
+        </h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="flex items-center justify-between">
+            <span className="font-medium">FSR:</span>
+            <span>
+              {customControls.fsr ?? (selectedFeature?.properties?.copiedFrom?.site_suitability__floorspace_ratio || 'N/A')}
+              <span className="text-gray-500 ml-1">:1</span>
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="font-medium">HOB:</span>
+            <span>
+              {customControls.hob ?? (selectedFeature?.properties?.copiedFrom?.site_suitability__height_of_building || 'N/A')}
+              <span className="text-gray-500 ml-1">m</span>
+            </span>
+          </div>
+        </div>
+        {(customControls.fsr !== null || customControls.hob !== null) && (
+          <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
+            <div className="flex items-start">
+              <Info size={14} className="mr-2 mt-0.5 flex-shrink-0" />
+              <div>
+                Calculations are based on custom development controls.
+                {customControls.fsr === null && ' Using current FSR.'}
+                {customControls.hob === null && ' Using current HOB.'}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="p-4">
+      {/* Add Custom Controls Information Section */}
+      {renderCustomControlsInfo()}
+
       {/* Add LMR Information Section */}
       {renderLMRInfo()}
 
@@ -291,7 +336,7 @@ const FeasibilityCalculation = ({
       {renderComparison()}
 
       <h2 className="text-xl font-bold mb-4 flex items-center">
-        <Calculator className="mr-2" /> Development Feasibility - {density === 'lowMidDensity' ? 'Low-Mid Density' : 'High Density'}
+        <Calculator className="mr-2" /> Development Feasibility - {density === 'mediumDensity' ? 'Medium Density' : 'High Density'}
       </h2>
       
       {/* Feasibility Calculation Table */}
@@ -331,9 +376,9 @@ const FeasibilityCalculation = ({
                       </div>
                       <div 
                         className="cursor-help hover:text-blue-600" 
-                        title={`${Math.round(calculationResults.developableArea).toLocaleString()} m² site area × ${formatPercentage(settings[density].siteEfficiencyRatio)} building footprint × ${Math.floor(calculationResults.hob / settings[density].floorToFloorHeight)} storeys × ${formatPercentage(settings[density].gbaToGfaRatio)} efficiency = ${Math.round(calculationResults.gfaUnderHob).toLocaleString()} m²`}
+                        title={`${Math.round(calculationResults.developableArea).toLocaleString()} m² site area × ${formatPercentage(settings[density].siteEfficiencyRatio)} building footprint × ${density === 'mediumDensity' ? 'min(3, ' : ''}${Math.floor(calculationResults.hob / settings[density].floorToFloorHeight)}${density === 'mediumDensity' ? ')' : ''} storeys × ${formatPercentage(settings[density].gbaToGfaRatio)} efficiency = ${Math.round(calculationResults.gfaUnderHob).toLocaleString()} m²`}
                       >
-                        2) HOB approach: {Math.round(calculationResults.gfaUnderHob).toLocaleString()} m²
+                        2) HOB approach: {Math.round(calculationResults.gfaUnderHob).toLocaleString()} m² {density === 'mediumDensity' ? '(capped at 3 storeys)' : ''}
                       </div>
                       <div className="mt-1">
                         Final GFA = {Math.round(calculationResults.gfa).toLocaleString()} m² 

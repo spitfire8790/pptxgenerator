@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Bed, Bath, Car, ChevronDown, ChevronUp, ArrowUpDown } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { rpc } from '@gi-nx/iframe-sdk';
 
 const formatPrice = (price) => {
   if (price >= 1000000) {
@@ -39,7 +40,7 @@ const capitalizeFirstLetter = (string) => {
   return string.charAt(0).toUpperCase() + string.slice(1).toLowerCase();
 };
 
-const LOW_MID_DENSITY_TYPES = ['duplex/semi-detached', 'duplex-semi-detached', 'house', 'terrace', 'townhouse', 'villa'];
+const MEDIUM_DENSITY_TYPES = ['terrace', 'townhouse', 'villa'];
 const HIGH_DENSITY_TYPES = ['apartment', 'studio', 'unit'];
 
 const MedianPriceModal = ({ open = true, onClose, salesData }) => {
@@ -86,8 +87,8 @@ const MedianPriceModal = ({ open = true, onClose, salesData }) => {
     
     // Density filter
     const passesDensityFilter = selectedDensity === 'all' ? true :
-      selectedDensity === 'lowMid' ? 
-        LOW_MID_DENSITY_TYPES.some(type => propertyType?.includes(type)) :
+      selectedDensity === 'medium' ? 
+        MEDIUM_DENSITY_TYPES.some(type => propertyType?.includes(type)) :
         HIGH_DENSITY_TYPES.some(type => propertyType?.includes(type));
 
     // Property type filter
@@ -186,6 +187,29 @@ const MedianPriceModal = ({ open = true, onClose, salesData }) => {
     </th>
   );
 
+  // Add handleRowClick function
+  const handleRowClick = (sale) => {
+    console.log('Clicked sale:', sale);
+    
+    if (!sale.coordinates) {
+      console.warn('No coordinates available for this sale:', sale);
+      return;
+    }
+    
+    console.log('Flying to coordinates:', sale.coordinates);
+    
+    try {
+      rpc.invoke('flyTo', {
+        center: [sale.coordinates.x, sale.coordinates.y],
+        zoom: 18,
+        padding: { top: 50, bottom: 50, left: 50, right: 50 },
+        duration: 2000
+      });
+    } catch (error) {
+      console.error('Error in flyTo:', error);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl h-[calc(100vh-120px)] flex flex-col">
@@ -216,7 +240,7 @@ const MedianPriceModal = ({ open = true, onClose, salesData }) => {
                 className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
               >
                 <option value="all">All Types</option>
-                <option value="lowMid">Low-Mid Density</option>
+                <option value="medium">Medium Density</option>
                 <option value="high">High Density</option>
               </select>
             </div>
@@ -308,7 +332,7 @@ const MedianPriceModal = ({ open = true, onClose, salesData }) => {
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {processedSalesData.map((sale, index) => (
-                      <tr key={index} className="hover:bg-gray-50">
+                      <tr key={index} className="hover:bg-gray-50 cursor-pointer" onClick={() => handleRowClick(sale)}>
                         <td className="px-4 py-2 text-sm">{sale.address}</td>
                         <td className="px-4 py-2 text-sm">{capitalizeFirstLetter(sale.property_type)}</td>
                         <td className="px-4 py-2 text-sm font-medium">{formatPrice(sale.price)}</td>

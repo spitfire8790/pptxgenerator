@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, HardHat, ChevronDown, ChevronUp, ArrowUpDown, Search, Filter } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Legend } from 'recharts';
+import { rpc } from '@gi-nx/iframe-sdk';
 
 const formatCurrency = (value) => {
   if (!value && value !== 0) return 'N/A';
@@ -32,74 +33,75 @@ const formatChartLabel = (value) => {
 // Define standardized development type mappings matching FeasibilityManager.jsx
 // These are the standardized groupings we'll use for the chart
 const STANDARDIZED_TYPES = {
-  'Dwelling': ['DWELLING', 'DWELLING_HOUSE'],
-  'Dual Occupancy': ['DUAL_OCCUPANCY', 'DUAL_OCCUPANCY_ATTACHED', 'DUAL_OCCUPANCY_DETACHED'],
-  'Multi-dwelling Housing': ['MULTI_DWELLING_HOUSING', 'MULTI_DWELLING_HOUSING_TERRACES', 'MEDIUM_DENSITY_HOUSING'],
-  'Manor House': ['MANOR_HOUSE', 'MANOR_HOUSES'],
-  'Semi-attached Dwelling': ['SEMI_DETACHED_DWELLING', 'SEMI_ATTACHED_DWELLING'],
-  'Residential Flat Building': ['RESIDENTIAL_FLAT_BUILDING'],
-  'Shop Top Housing': ['SHOP_TOP_HOUSING'],
-  'Build-to-Rent': ['BUILD_TO_RENT']
+  'Multi-dwelling housing': ['Multi-dwelling housing'],
+  'Multi-dwelling housing (terraces)': ['Multi-dwelling housing (terraces)'],
+  'Manor house': ['Manor house'],
+  'Medium Density Housing': ['Medium Density Housing'],
+  'Manor houses': ['Manor houses'],
+  'Residential flat building': ['Residential flat building'],
+  'Shop top housing': ['Shop top housing'],
+  'Build-to-rent': ['Build-to-rent']
 };
 
 // Types to exclude from chart and data
 const EXCLUDED_TYPES = [
   'DEMOLITION',
   'ALTERATIONS',
-  'ADDITIONS'
-];
-
-// Group development types by density category
-const LOW_MID_DENSITY_TYPES = [
+  'ADDITIONS',
   'DWELLING',
   'DWELLING_HOUSE',
   'DUAL_OCCUPANCY',
   'DUAL_OCCUPANCY_ATTACHED',
   'DUAL_OCCUPANCY_DETACHED',
-  'MULTI_DWELLING_HOUSING',
-  'MULTI_DWELLING_HOUSING_TERRACES',
   'SEMI_DETACHED_DWELLING',
-  'SEMI_ATTACHED_DWELLING',
-  'MANOR_HOUSE',
-  'MANOR_HOUSES',
-  'MEDIUM_DENSITY_HOUSING'
+  'SEMI_ATTACHED_DWELLING'
+];
+
+// Group development types by density category
+const MEDIUM_DENSITY_TYPES = [
+  'Multi-dwelling housing',
+  'Multi-dwelling housing (terraces)',
+  'Manor house',
+  'Medium Density Housing',
+  'Manor houses'
 ];
 
 const HIGH_DENSITY_TYPES = [
-  'RESIDENTIAL_FLAT_BUILDING',
-  'SHOP_TOP_HOUSING',
-  'BUILD_TO_RENT'
+  'Residential flat building',
+  'Shop top housing',
+  'Build-to-rent'
 ];
 
 // Helper function to map any development type to a standardized category
 const mapToStandardizedType = (developmentType) => {
   if (!developmentType) return 'Other';
   
-  // Convert to uppercase for consistent comparison
-  const upperType = developmentType.toUpperCase();
-  
-  // Check if type matches any of our standardized categories
-  for (const [standardType, typeVariants] of Object.entries(STANDARDIZED_TYPES)) {
-    if (typeVariants.some(variant => upperType.includes(variant))) {
-      return standardType;
-    }
+  // Check if it's a valid medium or high density type
+  if (MEDIUM_DENSITY_TYPES.includes(developmentType) || HIGH_DENSITY_TYPES.includes(developmentType)) {
+    return developmentType;
   }
   
   return 'Other';
+};
+
+// Function to determine if a development type should be included
+const shouldIncludeType = (type) => {
+  if (!type) return false;
+  
+  // Only include if it's in our allowed types
+  return [...MEDIUM_DENSITY_TYPES, ...HIGH_DENSITY_TYPES].includes(type);
 };
 
 // Determine density category for a given development type
 const getDensityCategory = (developmentType) => {
   if (!developmentType) return 'unknown';
   
-  const upperType = developmentType.toUpperCase();
-  
-  // Check against exact matches from the density type arrays
-  if (LOW_MID_DENSITY_TYPES.some(type => upperType.includes(type))) {
-    return 'lowMid';
+  // Do exact matching, no case conversion
+  if (MEDIUM_DENSITY_TYPES.includes(developmentType)) {
+    return 'medium';
   } 
   
-  if (HIGH_DENSITY_TYPES.some(type => upperType.includes(type))) {
+  if (HIGH_DENSITY_TYPES.includes(developmentType)) {
     return 'high';
   }
   
@@ -108,7 +110,7 @@ const getDensityCategory = (developmentType) => {
 
 // Updated colors to match the requested blue and orange
 const DENSITY_COLORS = {
-  lowMid: '#4c6ef5', // Blue
+  medium: '#4c6ef5', // Blue
   high: '#ff9800', // Orange
   unknown: '#9ca3af' // Gray for unknown
 };
@@ -150,19 +152,6 @@ const ConstructionDataModal = ({ open = true, onClose, constructionData }) => {
       key,
       direction: prevConfig.key === key && prevConfig.direction === 'asc' ? 'desc' : 'asc'
     }));
-  };
-
-  // Function to determine if a development type should be included
-  const shouldIncludeType = (type) => {
-    if (!type) return false;
-    
-    // Check if it contains excluded terms
-    const excludedTypeMatch = EXCLUDED_TYPES.some(excludedType => 
-      type.includes(excludedType)
-    );
-    
-    // Include if it's not excluded
-    return !excludedTypeMatch;
   };
 
   // Format development type for display - maps raw types to standardized categories
@@ -231,18 +220,13 @@ const ConstructionDataModal = ({ open = true, onClose, constructionData }) => {
       const filteredData = constructionData.constructionCostsRaw.filter(item => {
         if (!item || !item.developmentType) return false;
         
-        // Convert to uppercase for consistent comparison
-        const devType = item.developmentType.toUpperCase();
-        
         // Filter by density if selected
         const densityFilter = selectedDensity === 'all' ? true :
-          selectedDensity === 'lowMid' ? LOW_MID_DENSITY_TYPES.some(type => 
-            devType.includes(type)) :
-          selectedDensity === 'high' ? HIGH_DENSITY_TYPES.some(type => 
-            devType.includes(type)) :
+          selectedDensity === 'medium' ? MEDIUM_DENSITY_TYPES.includes(item.developmentType) :
+          selectedDensity === 'high' ? HIGH_DENSITY_TYPES.includes(item.developmentType) :
           false;
           
-        return densityFilter && shouldIncludeType(devType);
+        return densityFilter && shouldIncludeType(item.developmentType);
       });
       
       data = filteredData.map(item => {
@@ -307,87 +291,56 @@ const ConstructionDataModal = ({ open = true, onClose, constructionData }) => {
   const prepareChartData = () => {
     if (data.length === 0) return [];
     
-    // Define allowed types in the format that matches the input data
-    // These match the format in FeasibilityManager.jsx
-    const allowedLowMidDensityTypes = [
-      'Dwelling',
-      'Dwelling house',
-      'Dual occupancy',
-      'Dual occupancy (attached)',
-      'Dual occupancy (detached)',
-      'Multi-dwelling housing',
-      'Multi-dwelling housing (terraces)',
-      'Semi-attached dwelling',
-      'Manor house',
-      'Medium Density Housing',
-      'Manor houses'
-    ];
-    
-    const allowedHighDensityTypes = [
-      'Residential flat building',
-      'Shop top housing',
-      'Build-to-rent'
-    ];
-    
-    // Group by original development type
+    // Group by development type
     const grouped = data.reduce((acc, curr) => {
-      if (!curr.developmentType) return acc;
+      if (!curr.developmentType || !shouldIncludeType(curr.developmentType)) return acc;
       
-      const devType = curr.developmentType;
-      
-      // Skip unwanted types like "Erection of a new structure", "Pools", "decks", "fencing"
-      // Only include types that match our defined allowed density types
-      let shouldInclude = false;
-      
-      // Check if this type contains any of our allowed density types
-      // Use case-insensitive matching
-      const lowerDevType = devType.toLowerCase();
-      
-      for (const lowMidType of allowedLowMidDensityTypes) {
-        if (lowerDevType.includes(lowMidType.toLowerCase())) {
-          shouldInclude = true;
-          break;
-        }
+      if (!acc[curr.developmentType]) {
+        acc[curr.developmentType] = [];
       }
       
-      if (!shouldInclude) {
-        for (const highType of allowedHighDensityTypes) {
-          if (lowerDevType.includes(highType.toLowerCase())) {
-            shouldInclude = true;
-            break;
-          }
-        }
-      }
-      
-      // Skip this item if it doesn't match our allowed types
-      if (!shouldInclude) return acc;
-      
-      if (!acc[devType]) {
-        acc[devType] = {
-          name: devType,
-          count: 0,
-          total: 0
-        };
-      }
-      
-      // Only include items with valid cost per m²
-      if (curr.costPerM2 && curr.costPerM2 > 0) {
-        acc[devType].count++;
-        acc[devType].total += curr.costPerM2;
+      // Only include items with valid cost per m² and GFA
+      if (curr.costPerM2 && curr.costPerM2 > 0 && curr.gfa && curr.gfa > 0) {
+        acc[curr.developmentType].push({
+          cost: curr.costPerM2,
+          gfa: curr.gfa
+        });
       }
       
       return acc;
     }, {});
     
-    // Convert to array and calculate averages
-    return Object.values(grouped)
-      .filter(group => group.count > 0)  // Only include groups with data
-      .map(group => ({
-        name: group.name,
-        value: Math.round(group.total / group.count),
-        count: group.count
-      }))
-      .sort((a, b) => b.value - a.value);  // Sort by value descending
+    // Calculate weighted median for each group
+    return Object.entries(grouped)
+      .filter(([_, items]) => items.length > 0)
+      .map(([type, items]) => {
+        // Calculate weighted median based on GFA
+        const totalGFA = items.reduce((sum, { gfa }) => sum + gfa, 0);
+        const halfTotalGFA = totalGFA / 2;
+        
+        // Sort by cost per m²
+        items.sort((a, b) => a.cost - b.cost);
+        
+        // Find weighted median
+        let cumulativeGFA = 0;
+        let medianCost = items[0].cost;
+        
+        for (const item of items) {
+          cumulativeGFA += item.gfa;
+          if (cumulativeGFA >= halfTotalGFA) {
+            medianCost = item.cost;
+            break;
+          }
+        }
+        
+        return {
+          name: type,
+          value: Math.round(medianCost),
+          count: items.length,
+          totalGFA: totalGFA
+        };
+      })
+      .sort((a, b) => b.value - a.value);  // Sort by median cost descending
   };
 
   const chartData = prepareChartData();
@@ -628,6 +581,29 @@ const ConstructionDataModal = ({ open = true, onClose, constructionData }) => {
     </th>
   );
 
+  // Add handleRowClick function
+  const handleRowClick = (item) => {
+    console.log('Clicked item:', item);
+    
+    if (!item.coordinates) {
+      console.warn('No coordinates available for this item:', item);
+      return;
+    }
+    
+    console.log('Flying to coordinates:', item.coordinates);
+    
+    try {
+      rpc.invoke('flyTo', {
+        center: [item.coordinates.x, item.coordinates.y],
+        zoom: 18,
+        padding: { top: 50, bottom: 50, left: 50, right: 50 },
+        duration: 2000
+      });
+    } catch (error) {
+      console.error('Error in flyTo:', error);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl h-[calc(100vh-120px)] flex flex-col">
@@ -655,7 +631,7 @@ const ConstructionDataModal = ({ open = true, onClose, constructionData }) => {
                 onChange={(e) => setSelectedDensity(e.target.value)}
               >
                 <option value="all">All Types</option>
-                <option value="lowMid">Low-Mid Density</option>
+                <option value="medium">Medium Density</option>
                 <option value="high">High Density</option>
               </select>
             </div>
@@ -678,14 +654,16 @@ const ConstructionDataModal = ({ open = true, onClose, constructionData }) => {
 
         <div className="flex-grow flex flex-col overflow-hidden">
           {/* Data visualization section at the top - Height doubled */}
-          <div className="p-4 flex-shrink-0" style={{ height: '420px' }}> {/* Increased height to 420px from 320px */}
+          <div className="p-4 flex-shrink-0" style={{ height: '470px' }}> {/* Increased height to 420px from 320px */}
             <h3 className="text-lg font-medium mb-4">Median Construction Cost by Development Type</h3>
-            <div style={{ height: '356px' }}> {/* Increased chart height to accommodate legend */}
+            <div style={{ height: '450px' }}> {/* Increased chart height to accommodate legend */}
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={chartData}
                   margin={{ top: 5, right: 30, left: 20, bottom: 80 }}
-                  barCategoryGap={5} // Reduce gap between bar groups to make bars wider
+                  barCategoryGap="0%" // Set to 0% to remove gap between categories
+                  barGap={8} // Set fixed gap between bars in pixels
+                  maxBarSize={120} // Set maximum bar width
                 >
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis 
@@ -704,12 +682,10 @@ const ConstructionDataModal = ({ open = true, onClose, constructionData }) => {
                     formatter={(value) => [`${formatCurrency(value)}`, 'Cost per m² GFA']}
                     labelFormatter={(value) => [`${value} (${chartData.find(d => d.name === value)?.count || 0} developments)`]}
                   />
-                  {/* All bars are blue and wider */}
                   <Bar 
                     dataKey="value" 
                     radius={[4, 4, 0, 0]}
-                    fill="#4c6ef5" // All bars are blue
-                    barSize={60} // Make bars wider (was 40)
+                    fill="#4c6ef5"
                   >
                     {/* Add data labels */}
                     <LabelList 
@@ -746,7 +722,7 @@ const ConstructionDataModal = ({ open = true, onClose, constructionData }) => {
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white text-sm">
                 {sortedData.map((item) => (
-                  <tr key={item.id} className="hover:bg-gray-50">
+                  <tr key={item.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => handleRowClick(item)}>
                     <td className="px-4 py-2">{item.address}</td>
                     <td className="px-4 py-2">
                       {/* Only show the development type in black, no grey subtext */}
