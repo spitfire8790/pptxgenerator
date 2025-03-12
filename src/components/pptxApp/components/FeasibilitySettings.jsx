@@ -233,9 +233,14 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
         maxStoreys = 3;
       }
       
-      const siteCoverage = developableArea * settings.siteEfficiencyRatio;
-      // For high-density: GFA = Site Area × 50% (building footprint) × HOB/3.1 (storeys) × 75% (efficiency)
-      // For medium-density: GFA = Site Area × 60% (building footprint) × HOB/3.1 (max 3 storeys) × 90% (efficiency)
+      // For medium density, use the full developable area for building footprint
+      // For high density, use the siteEfficiencyRatio as before
+      const siteCoverage = density === 'mediumDensity' 
+        ? developableArea
+        : developableArea * settings.siteEfficiencyRatio;
+        
+      // For high-density: GFA = Site Area × 60% (building footprint) × HOB/3.1 (storeys) × 75% (efficiency)
+      // For medium-density: GFA = Site Area × 100% (full developable area) × HOB/3.1 (max 3 storeys) × 90% (efficiency)
       const gfaUnderHob = siteCoverage * maxStoreys * settings.gbaToGfaRatio;
 
       // Use HOB value if FSR is 0, otherwise use the lower of the two
@@ -419,9 +424,14 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
       maxStoreys = 3;
     }
     
-    const siteCoverage = developableArea * settings[density].siteEfficiencyRatio;
-    // For high-density: GFA = Site Area × 50% (building footprint) × HOB/3.1 (storeys) × 75% (efficiency)
-    // For medium-density: GFA = Site Area × 60% (building footprint) × HOB/3.1 (max 3 storeys) × 90% (efficiency)
+    // For medium density, use the full developable area for building footprint
+    // For high density, use the siteEfficiencyRatio as before
+    const siteCoverage = density === 'mediumDensity' 
+      ? developableArea
+      : developableArea * settings[density].siteEfficiencyRatio;
+      
+    // For high-density: GFA = Site Area × 60% (building footprint) × HOB/3.1 (storeys) × 75% (efficiency)
+    // For medium-density: GFA = Site Area × 100% (full developable area) × HOB/3.1 (max 3 storeys) × 90% (efficiency)
     const gfaUnderHob = siteCoverage * maxStoreys * settings[density].gbaToGfaRatio;
 
     // Use FSR value if no HoB exists, otherwise use the lower of the two

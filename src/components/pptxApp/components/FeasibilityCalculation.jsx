@@ -469,8 +469,15 @@ const FeasibilityCalculation = ({
       
       // Track important row numbers for formulas
       const buildingFootprintRow = mainWs.rowCount + 1;
-      // Building footprint now references the Developable Area
-      mainWs.addRow(['Building Footprint', settings[density].siteEfficiencyRatio, { formula: `B${buildingFootprintRow}*C${developableAreaRow}` }, `${formatPercentage(settings[density].siteEfficiencyRatio)} of Developable Area`]);
+      
+      // Building footprint calculation is different for medium vs high density
+      if (density === 'mediumDensity') {
+        // For medium density, building footprint is 100% of developable area
+        mainWs.addRow(['Building Footprint', 1.0, { formula: `C${developableAreaRow}` }, '100% of Developable Area']);
+      } else {
+        // For high density, apply the site efficiency ratio
+        mainWs.addRow(['Building Footprint', settings[density].siteEfficiencyRatio, { formula: `B${buildingFootprintRow}*C${developableAreaRow}` }, `${formatPercentage(settings[density].siteEfficiencyRatio)} of Developable Area`]);
+      }
       
       const gfaRow = mainWs.rowCount + 1;
       
@@ -1193,7 +1200,9 @@ const FeasibilityCalculation = ({
             <tr>
               <td className="py-2 px-4 border-t border-gray-200">Building Footprint</td>
               <td className="py-2 px-4 border-t border-gray-200">{Math.round(calculationResults.siteCoverage).toLocaleString()} m²</td>
-              <td className="py-2 px-4 border-t border-gray-200 text-sm">{formatPercentage(settings[density].siteEfficiencyRatio)} of Developable Area ({Math.round(calculationResults.developableArea).toLocaleString()} m²)</td>
+              <td className="py-2 px-4 border-t border-gray-200 text-sm">
+                {density === 'mediumDensity' ? '100%' : formatPercentage(settings[density].siteEfficiencyRatio)} of Developable Area ({Math.round(calculationResults.developableArea).toLocaleString()} m²)
+              </td>
             </tr>
             <tr>
               <td className="py-2 px-4 border-t border-gray-200">Gross Floor Area (GFA)</td>

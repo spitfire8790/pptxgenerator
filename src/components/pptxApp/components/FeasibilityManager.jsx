@@ -815,8 +815,8 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
       }
       
       const siteCoverage = calculatedDevArea * settings.siteEfficiencyRatio;
-      // For high-density: GFA = Site Area × 50% (building footprint) × HOB/3.1 (storeys) × 75% (efficiency)
-      // For medium-density: GFA = Site Area × 60% (building footprint) × HOB/3.1 (max 3 storeys) × 90% (efficiency)
+      // For high-density: GFA = Site Area × 60% (building footprint) × HOB/3.1 (storeys) × 75% (efficiency)
+      // For medium-density: GFA = Site Area × 100% (full developable area) × HOB/3.1 (max 3 storeys) × 90% (efficiency)
       const gfaUnderHob = siteCoverage * maxStoreys * settings.gbaToGfaRatio;
 
       // Use FSR value if no HoB exists, otherwise use the lower of the two
