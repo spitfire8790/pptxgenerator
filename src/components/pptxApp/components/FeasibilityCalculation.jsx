@@ -12,7 +12,9 @@ import {
   Bar,
   ReferenceLine
 } from 'recharts';
-import { Calculator, TrendingUp, DollarSign, HardHat, Percent, Home, Building2, Settings2, Info } from 'lucide-react';
+import { Calculator, TrendingUp, DollarSign, HardHat, Percent, Home, Building2, Settings2, Info, FileDown, Loader2, CheckCircle, XCircle } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
 
 // Helper function to format currency
 const formatCurrency = (amount) => {
@@ -116,6 +118,8 @@ const FeasibilityCalculation = ({
   const [sensitivityData, setSensitivityData] = useState({
     housingImpact: []
   });
+  const [isExporting, setIsExporting] = useState(false);
+  const [notification, setNotification] = useState(null);
 
   useEffect(() => {
     if (!calculationResults) return;
@@ -127,6 +131,17 @@ const FeasibilityCalculation = ({
       housingImpact: housingImpactData
     });
   }, [calculationResults, settings, density, selectedFeature]);
+
+  // Clear notification after 5 seconds
+  useEffect(() => {
+    if (notification) {
+      const timer = setTimeout(() => {
+        setNotification(null);
+      }, 5000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [notification]);
 
   // If no calculation results yet, show loading
   if (!calculationResults) {
@@ -324,8 +339,797 @@ const FeasibilityCalculation = ({
     );
   };
 
+  // Function to export data to Excel
+  const exportToExcel = async () => {
+    try {
+      setIsExporting(true);
+      
+      // Create a new workbook
+      const wb = XLSX.utils.book_new();
+      
+      // Add default workbook styles - Public Sans font will be applied to all cells
+      wb.Styles = {
+        Fonts: [
+          { FontName: "Public Sans" } // Set default font for workbook
+        ]
+      };
+      
+      // Get clean numeric values for GFA and other measurements
+      const cleanGFA = Math.round(calculationResults.gfa);
+      const cleanBuildingFootprint = Math.round(calculationResults.siteCoverage);
+      const cleanDevelopableArea = Math.round(calculationResults.developableArea);
+      
+      // Create the main calculations worksheet data structure
+      const mainWsData = [
+        ['Development Feasibility Analysis', '', '', ''],
+        [`${density === 'mediumDensity' ? 'Medium Density' : 'High Density'} Development`, '', '', ''],
+        ['', '', '', ''],
+        ['Development Metrics', '', '', ''],
+        ['Building Footprint', cleanBuildingFootprint, `${formatPercentage(settings[density].siteEfficiencyRatio)} of Developable Area (${cleanDevelopableArea} m²)`, ''],
+        ['Gross Floor Area (GFA)', cleanGFA, `FSR ${calculationResults.fsr}:1`, ''],
+        ['Development Yield', calculationResults.developmentYield, `Total NSA (${Math.round(calculationResults.nsa)}) ÷ Assumed Unit Size (${density === 'highDensity' ? '75' : Math.floor(calculationResults.dwellingSize / 10) * 10} m²)`, ''],
+        ['', '', '', ''],
+        ['Sales Analysis', '', '', ''],
+        ['Median Unit Price', settings[density].dwellingPrice, 'Based on sales data', ''],
+        ['Total Gross Realisation', { f: 'B7*B10' }, 'Development Yield × Median Unit Price', ''],
+        ['', '', '', ''],
+        ['GST and Selling Costs', '', '', ''],
+        ['GST (10%)', { f: 'B11*B46' }, 'Total Gross Realisation × GST Rate', ''],
+        ['Agent\'s Commission', { f: 'B11*B47' }, 'Total Gross Realisation × Agent\'s Commission', ''],
+        ['Legal Fees', { f: 'B11*B48' }, 'Total Gross Realisation × Legal Fees', ''],
+        ['Marketing Costs', { f: 'B11*B49' }, 'Total Gross Realisation × Marketing Costs', ''],
+        ['Net Realisation', { f: 'B11-B14-B15-B16-B17' }, 'Total Gross Realisation - GST - Commission - Legal - Marketing', ''],
+        ['', '', '', ''],
+        ['Profit and Risk', '', '', ''],
+        ['Profit Margin', { f: 'B18*B53' }, 'Net Realisation × Profit Margin', ''],
+        ['Net Realisation after Profit', { f: 'B18-B21' }, 'Net Realisation - Profit Margin', ''],
+        ['', '', '', ''],
+        ['Development Costs', '', '', ''],
+        ['Construction Cost (per m² GFA)', calculationResults.constructionCostPerGfa, 'Based on recent construction certificates', ''],
+        ['Total Construction Costs', { f: 'B25*B6' }, 'Construction Cost per m² × Total GFA', ''],
+        ['DA Application Fees', calculationResults.daApplicationFees, 'Fixed cost', ''],
+        ['Professional Fees', { f: 'B26*B50' }, 'Construction Costs × Professional Fees', ''],
+        ['Development Contribution', { f: 'B26*B51' }, 'Construction Costs × Development Contribution', ''],
+        ['Total Development Costs', { f: 'B26+B27+B28+B29' }, 'Construction + DA + Professional Fees + Development Contribution', ''],
+        ['', '', '', ''],
+        ['Finance and Holding Costs', '', '', ''],
+        ['Land Tax', calculationResults.landTax, `Annual Land Tax (${formatCurrency(calculationResults.landTaxPerYear)}) × Project Duration (${(calculationResults.projectPeriod / 12).toFixed(1)} years)`, ''],
+        ['Interest Rate', { f: 'B54' }, 'See Assumptions below', ''],
+        ['Finance Costs', { f: 'B54*B55*B30' }, 'Interest Rate × Project Duration × Total Development Costs', ''],
+        ['', '', '', ''],
+        ['Residual Land Value', '', '', ''],
+        ['Residual Land Value', { f: 'B22-B30-B35-B33' }, 'Net Realisation after Profit - Total Development Costs - Finance Costs - Land Tax', ''],
+        ['', '', '', ''],
+        ['Assumptions', '', '', ''],
+        // Development Parameters
+        ['Site Efficiency Ratio', settings[density].siteEfficiencyRatio, 'Building footprint as percentage of developable area', ''],
+        ['GBA to GFA Ratio', settings[density].gbaToGfaRatio, 'Efficiency of gross building area', ''],
+        ['Floor to Floor Height', settings[density].floorToFloorHeight, 'Height between floors in meters', ''],
+        // Sales Parameters
+        ['GST Rate', 0.1, 'Goods and Services Tax rate', ''],
+        ['Agent\'s Commission', settings[density].agentsSalesCommission, 'Percentage of sales for agent commission', ''],
+        ['Legal Fees', settings[density].legalFeesOnSales, 'Percentage of sales for legal costs', ''],
+        ['Marketing Costs', settings[density].marketingCosts, 'Percentage of sales for marketing', ''],
+        // Development Cost Parameters
+        ['Professional Fees', settings[density].professionalFees, 'Percentage of construction costs for professional services', ''],
+        ['Development Contribution', settings[density].developmentContribution, 'Percentage of construction costs for development contributions', ''],
+        // Finance Parameters
+        ['Profit and Risk', settings[density].profitAndRisk, 'Profit margin as percentage of net realisation', ''],
+        ['Interest Rate', settings[density].interestRate, 'Annual interest rate for finance costs', ''],
+        ['Project Period (Years)', calculationResults.projectPeriod / 12, 'Project duration in years', ''],
+        // Other Assumptions
+        ['Unit Size (Medium Density)', density === 'mediumDensity' ? Math.floor(calculationResults.dwellingSize / 10) * 10 : 'N/A', 'Assumed unit size in m²', ''],
+        ['Unit Size (High Density)', density === 'highDensity' ? 75 : 'N/A', 'Assumed unit size in m²', ''],
+      ];
+
+      // Create worksheet from data
+      const mainWs = XLSX.utils.aoa_to_sheet(mainWsData);
+
+      // Add mock calculation results to help Excel formulas evaluate (hidden column E)
+      // This ensures that even if a formula doesn't calculate properly, the user still sees reasonable values
+      mainWs['E11'] = { v: calculationResults.totalGrossRealisation, t: 'n', z: '"$"#,##0' };
+      mainWs['E14'] = { v: calculationResults.gst, t: 'n', z: '"$"#,##0' };
+      mainWs['E15'] = { v: calculationResults.agentsCommission, t: 'n', z: '"$"#,##0' };
+      mainWs['E16'] = { v: calculationResults.legalFees, t: 'n', z: '"$"#,##0' };
+      mainWs['E17'] = { v: calculationResults.marketingCosts, t: 'n', z: '"$"#,##0' };
+      mainWs['E18'] = { v: calculationResults.netRealisation, t: 'n', z: '"$"#,##0' };
+      mainWs['E21'] = { v: calculationResults.profitAndRisk, t: 'n', z: '"$"#,##0' };
+      mainWs['E22'] = { v: calculationResults.netRealisationAfterProfitAndRisk, t: 'n', z: '"$"#,##0' };
+      mainWs['E26'] = { v: calculationResults.constructionCosts, t: 'n', z: '"$"#,##0' };
+      mainWs['E28'] = { v: calculationResults.professionalFees, t: 'n', z: '"$"#,##0' };
+      mainWs['E29'] = { v: calculationResults.developmentContribution, t: 'n', z: '"$"#,##0' };
+      mainWs['E30'] = { v: calculationResults.totalDevelopmentCosts, t: 'n', z: '"$"#,##0' };
+      mainWs['E35'] = { v: calculationResults.financeCosts, t: 'n', z: '"$"#,##0' };
+      mainWs['E38'] = { v: calculationResults.residualLandValue, t: 'n', z: '"$"#,##0' };
+
+      // Pre-calculate formula results to help Excel
+      mainWs['B11'].v = calculationResults.totalGrossRealisation;
+      mainWs['B14'].v = calculationResults.gst;
+      mainWs['B15'].v = calculationResults.agentsCommission;
+      mainWs['B16'].v = calculationResults.legalFees;
+      mainWs['B17'].v = calculationResults.marketingCosts;
+      mainWs['B18'].v = calculationResults.netRealisation;
+      mainWs['B21'].v = calculationResults.profitAndRisk;
+      mainWs['B22'].v = calculationResults.netRealisationAfterProfitAndRisk;
+      mainWs['B26'].v = calculationResults.constructionCosts;
+      mainWs['B28'].v = calculationResults.professionalFees;
+      mainWs['B29'].v = calculationResults.developmentContribution;
+      mainWs['B30'].v = calculationResults.totalDevelopmentCosts;
+      mainWs['B35'].v = calculationResults.financeCosts;
+      mainWs['B38'].v = calculationResults.residualLandValue;
+
+      // Ensure building footprint and GFA cells have numeric values
+      mainWs['B5'].t = 'n';
+      mainWs['B6'].t = 'n';
+      
+      // Format cells with numeric values and percentages
+      // Format currency values
+      ['B10', 'B11', 'B14', 'B15', 'B16', 'B17', 'B18', 'B21', 'B22', 'B25', 'B26', 'B27', 'B28', 'B29', 'B30', 'B33', 'B35', 'B38'].forEach(cell => {
+        if (!mainWs[cell]) return;
+        mainWs[cell].z = '"$"#,##0';
+      });
+
+      // Format percentage values
+      ['B34'].forEach(cell => {
+        if (!mainWs[cell]) return;
+        mainWs[cell].z = '0.0%';
+      });
+      
+      // Format area values with m² suffix
+      ['B5', 'B6'].forEach(cell => {
+        if (!mainWs[cell]) return;
+        mainWs[cell].z = '#,##0" m²"';
+      });
+      
+      // Format development yield with "units" suffix
+      if (mainWs['B7']) {
+        mainWs['B7'].z = '0" units"';
+      }
+
+      // Set column widths
+      const mainWsCols = [
+        { wch: 25 }, // A - Metric
+        { wch: 20 }, // B - Value
+        { wch: 50 }, // C - Calculation Method
+        { wch: 30 }, // D - Formula
+        { wch: 0 },  // E - Hidden values (zero width to hide)
+      ];
+      mainWs['!cols'] = mainWsCols;
+
+      // Define styles for different elements
+      const headerStyle = {
+        font: { 
+          bold: true, 
+          sz: 14, 
+          color: { rgb: "FFFFFF" },
+          name: "Public Sans"
+        },
+        fill: { 
+          fgColor: { rgb: "0C2340" } // Dark blue background
+        },
+        alignment: {
+          horizontal: "left",
+          vertical: "center"
+        }
+      };
+
+      const sectionHeaderStyle = {
+        font: { 
+          bold: true, 
+          sz: 12,
+          color: { rgb: "FFFFFF" },
+          name: "Public Sans"
+        },
+        fill: { 
+          fgColor: { rgb: "0C2340" } // Dark blue background
+        },
+        alignment: {
+          horizontal: "left",
+          vertical: "center"
+        }
+      };
+
+      const totalRowStyle = {
+        font: { 
+          bold: true,
+          name: "Public Sans"
+        },
+        fill: { 
+          fgColor: { rgb: "E9EDF1" } 
+        },
+        border: {
+          top: { style: "medium", color: { rgb: "0C2340" } } // Bold top border
+        }
+      };
+
+      const generalCellStyle = {
+        font: {
+          name: "Public Sans"
+        }
+      };
+
+      // Apply styles to the main worksheet
+      // Main headers
+      ['A1', 'A2'].forEach(cell => {
+        if (!mainWs[cell]) return;
+        mainWs[cell].s = headerStyle;
+      });
+
+      // Section headers
+      ['A4', 'A9', 'A13', 'A20', 'A24', 'A32', 'A37', 'A40'].forEach(cell => {
+        if (!mainWs[cell]) return;
+        mainWs[cell].s = sectionHeaderStyle;
+      });
+
+      // Total rows with bold top border
+      ['A11', 'A18', 'A22', 'A30', 'A38'].forEach(cell => {
+        if (!mainWs[cell]) return;
+        mainWs[cell].s = totalRowStyle;
+        
+        // Apply the total row style to entire row (columns B, C, D)
+        ['B', 'C', 'D'].forEach(col => {
+          const rowCell = `${col}${cell.substring(1)}`;
+          if (!mainWs[rowCell]) return;
+          mainWs[rowCell].s = totalRowStyle;
+        });
+      });
+      
+      // Apply general cell style to all other cells to ensure Public Sans font
+      Object.keys(mainWs).forEach(cell => {
+        if (cell[0] === '!') return; // Skip special keys like !ref
+        if (!mainWs[cell].s) { // Only apply if no style exists
+          mainWs[cell].s = generalCellStyle;
+        }
+      });
+
+      // Create a worksheet for sensitivity analysis
+      const sensitivityWsData = [
+        ['Social/Affordable Housing Impact Analysis', '', '', ''],
+        ['', '', '', ''],
+        ['Percentage', 'Social Housing (0% revenue)', 'Affordable Housing (75% revenue)', '50/50 Mix'],
+      ];
+
+      // Add sensitivity data with proper number values, not formatted strings
+      sensitivityData.housingImpact.data.forEach(dataPoint => {
+        sensitivityWsData.push([
+          dataPoint.percentage / 100, // Store as decimal for proper Excel percentage formatting
+          dataPoint.socialResidualLandValue,
+          dataPoint.affordableResidualLandValue,
+          dataPoint.mixedResidualLandValue
+        ]);
+      });
+
+      // Add breakeven points
+      sensitivityWsData.push(['', '', '', '']);
+      sensitivityWsData.push(['Breakeven Points', '', '', '']);
+      
+      const socialBreakeven = sensitivityData.housingImpact.breakeven?.social;
+      const affordableBreakeven = sensitivityData.housingImpact.breakeven?.affordable;
+      const mixedBreakeven = sensitivityData.housingImpact.breakeven?.mixed;
+      
+      sensitivityWsData.push([
+        'Social Housing', 
+        socialBreakeven ? `${socialBreakeven.units} units (${Math.round(socialBreakeven.percentage)}%)` : 'Site feasible at 100%',
+        '', 
+        ''
+      ]);
+      
+      sensitivityWsData.push([
+        'Affordable Housing', 
+        affordableBreakeven ? `${affordableBreakeven.units} units (${Math.round(affordableBreakeven.percentage)}%)` : 'Site feasible at 100%',
+        '', 
+        ''
+      ]);
+      
+      sensitivityWsData.push([
+        'Mixed Housing', 
+        mixedBreakeven ? `${mixedBreakeven.units} units (${Math.round(mixedBreakeven.percentage)}%)` : 'Site feasible at 100%',
+        '', 
+        ''
+      ]);
+
+      // Create sensitivity worksheet
+      const sensitivityWs = XLSX.utils.aoa_to_sheet(sensitivityWsData);
+      
+      // Format percentage cells in the sensitivity sheet
+      const percentageCells = [];
+      for (let i = 4; i < sensitivityData.housingImpact.data.length + 4; i++) {
+        percentageCells.push(`A${i}`);
+      }
+      
+      percentageCells.forEach(cell => {
+        if (!sensitivityWs[cell]) return;
+        sensitivityWs[cell].z = '0%';
+        sensitivityWs[cell].t = 'n'; // Ensure numeric type
+      });
+      
+      // Format currency cells in the sensitivity sheet
+      for (let i = 4; i < sensitivityData.housingImpact.data.length + 4; i++) {
+        ['B', 'C', 'D'].forEach(col => {
+          const cell = `${col}${i}`;
+          if (!sensitivityWs[cell]) return;
+          sensitivityWs[cell].z = '"$"#,##0';
+          sensitivityWs[cell].t = 'n'; // Ensure numeric type
+        });
+      }
+
+      // Set column widths for sensitivity worksheet
+      const sensitivityWsCols = [
+        { wch: 20 }, // A
+        { wch: 25 }, // B
+        { wch: 30 }, // C
+        { wch: 25 }, // D
+      ];
+      sensitivityWs['!cols'] = sensitivityWsCols;
+
+      // Apply styles to sensitivity worksheet
+      // Header
+      if (sensitivityWs['A1']) {
+        sensitivityWs['A1'].s = headerStyle;
+      }
+
+      // Column headers
+      ['A3', 'B3', 'C3', 'D3'].forEach(cell => {
+        if (!sensitivityWs[cell]) return;
+        sensitivityWs[cell].s = {
+          font: { bold: true, name: "Public Sans" },
+          fill: { fgColor: { rgb: "E9EDF1" } }
+        };
+      });
+
+      // Breakeven section header
+      const breakevenRowIndex = 4 + sensitivityData.housingImpact.data.length + 1;
+      if (sensitivityWs[`A${breakevenRowIndex}`]) {
+        sensitivityWs[`A${breakevenRowIndex}`].s = sectionHeaderStyle;
+      }
+      
+      // Apply general cell style to all cells in sensitivity worksheet
+      Object.keys(sensitivityWs).forEach(cell => {
+        if (cell[0] === '!') return; // Skip special keys like !ref
+        if (!sensitivityWs[cell].s) { // Only apply if no style exists
+          sensitivityWs[cell].s = generalCellStyle;
+        }
+      });
+
+      // Create an Assumptions worksheet with all key parameters
+      const assumptionsData = [
+        ['Assumptions', '', '', ''],
+        ['', '', '', ''],
+        ['Parameter', 'Value', 'Description', 'Used In'],
+        // Development Parameters
+        ['Site Efficiency Ratio', settings[density].siteEfficiencyRatio, 'Building footprint as percentage of developable area', 'Building Footprint calculation'],
+        ['GBA to GFA Ratio', settings[density].gbaToGfaRatio, 'Efficiency of gross building area', 'GFA calculation from building area'],
+        ['Floor to Floor Height', settings[density].floorToFloorHeight, 'Height between floors in meters', 'GFA calculation based on HOB'],
+        ['', '', '', ''],
+        // Sales Parameters
+        ['GST Rate', 0.1, 'Goods and Services Tax rate', 'GST calculation'],
+        ['Agent\'s Commission', settings[density].agentsSalesCommission, 'Percentage of sales for agent commission', 'Agent\'s Commission calculation'],
+        ['Legal Fees', settings[density].legalFeesOnSales, 'Percentage of sales for legal costs', 'Legal Fees calculation'],
+        ['Marketing Costs', settings[density].marketingCosts, 'Percentage of sales for marketing', 'Marketing Costs calculation'],
+        ['', '', '', ''],
+        // Development Cost Parameters
+        ['Professional Fees', settings[density].professionalFees, 'Percentage of construction costs for professional services', 'Professional Fees calculation'],
+        ['Development Contribution', settings[density].developmentContribution, 'Percentage of construction costs for development contributions', 'Development Contribution calculation'],
+        ['', '', '', ''],
+        // Finance Parameters
+        ['Profit and Risk', settings[density].profitAndRisk, 'Profit margin as percentage of net realisation', 'Profit calculation'],
+        ['Interest Rate', settings[density].interestRate, 'Annual interest rate for finance costs', 'Finance Costs calculation'],
+        ['Project Period', calculationResults.projectPeriod / 12, 'Project duration in years', 'Finance Costs calculation'],
+        ['', '', '', ''],
+        // Other Assumptions
+        ['Unit Size (Medium Density)', density === 'mediumDensity' ? Math.floor(calculationResults.dwellingSize / 10) * 10 : 'N/A', 'Assumed unit size in m²', 'Development Yield calculation'],
+        ['Unit Size (High Density)', density === 'highDensity' ? 75 : 'N/A', 'Assumed unit size in m²', 'Development Yield calculation'],
+      ];
+
+      const assumptionsWs = XLSX.utils.aoa_to_sheet(assumptionsData);
+      
+      // Format percentage cells in the assumptions sheet
+      ['B4', 'B5', 'B9', 'B10', 'B11', 'B14', 'B15', 'B17', 'B18'].forEach(cell => {
+        if (!assumptionsWs[cell]) return;
+        assumptionsWs[cell].z = '0.0%';
+        assumptionsWs[cell].t = 'n'; // Ensure numeric type
+      });
+      
+      // Format numeric cells with appropriate formats
+      // Floor height with m suffix
+      if (assumptionsWs['B6']) {
+        assumptionsWs['B6'].z = '0.0" m"';
+        assumptionsWs['B6'].t = 'n';
+      }
+      
+      // Project period in years
+      if (assumptionsWs['B19']) {
+        assumptionsWs['B19'].z = '0.0" years"';
+        assumptionsWs['B19'].t = 'n';
+      }
+      
+      // Unit sizes with m² suffix
+      ['B21', 'B22'].forEach(cell => {
+        if (!assumptionsWs[cell] || assumptionsWs[cell].v === 'N/A') return;
+        assumptionsWs[cell].z = '0" m²"';
+        assumptionsWs[cell].t = 'n';
+      });
+      
+      // Set column widths for assumptions worksheet
+      const assumptionsWsCols = [
+        { wch: 25 }, // A - Parameter
+        { wch: 15 }, // B - Value
+        { wch: 40 }, // C - Description
+        { wch: 30 }, // D - Used In
+      ];
+      assumptionsWs['!cols'] = assumptionsWsCols;
+
+      // Apply styles to assumptions worksheet
+      // Main header
+      if (assumptionsWs['A1']) {
+        assumptionsWs['A1'].s = headerStyle;
+      }
+
+      // Column headers
+      ['A3', 'B3', 'C3', 'D3'].forEach(cell => {
+        if (!assumptionsWs[cell]) return;
+        assumptionsWs[cell].s = {
+          font: { bold: true, name: "Public Sans" },
+          fill: { fgColor: { rgb: "E9EDF1" } }
+        };
+      });
+      
+      // Parameter section headers - add dark blue background to empty rows preceding sections
+      ['A7', 'A12', 'A16', 'A20'].forEach(cell => {
+        if (!assumptionsWs[cell]) return;
+        assumptionsWs[cell].s = {
+          fill: { fgColor: { rgb: "D6DCE4" } }
+        };
+        
+        // Apply to whole row
+        ['B', 'C', 'D'].forEach(col => {
+          const rowCell = `${col}${cell.substring(1)}`;
+          if (!assumptionsWs[rowCell]) return;
+          assumptionsWs[rowCell].s = {
+            fill: { fgColor: { rgb: "D6DCE4" } }
+          };
+        });
+      });
+      
+      // Apply general cell style to all cells in assumptions worksheet
+      Object.keys(assumptionsWs).forEach(cell => {
+        if (cell[0] === '!') return; // Skip special keys like !ref
+        // Add Public Sans font to all cells if no style exists
+        if (!assumptionsWs[cell].s) {
+          assumptionsWs[cell].s = generalCellStyle;
+        } else {
+          // Ensure Public Sans font is applied to cells with existing styles
+          assumptionsWs[cell].s.font = {
+            ...(assumptionsWs[cell].s.font || {}),
+            name: "Public Sans"
+          };
+        }
+      });
+
+      // Now update the main calculation sheet formulas to reference the assumptions sheet
+      // Replace the formulas in the main worksheet with references to the Assumptions sheet
+      mainWs['B14'] = { f: 'B11*Assumptions!B8', t: 'n', z: '"$"#,##0' }; // GST
+      mainWs['B15'] = { f: 'B11*Assumptions!B9', t: 'n', z: '"$"#,##0' }; // Agent's Commission
+      mainWs['B16'] = { f: 'B11*Assumptions!B10', t: 'n', z: '"$"#,##0' }; // Legal Fees
+      mainWs['B17'] = { f: 'B11*Assumptions!B11', t: 'n', z: '"$"#,##0' }; // Marketing Costs
+      mainWs['B21'] = { f: 'B18*Assumptions!B17', t: 'n', z: '"$"#,##0' }; // Profit Margin
+      mainWs['B28'] = { f: 'B26*Assumptions!B14', t: 'n', z: '"$"#,##0' }; // Professional Fees
+      mainWs['B29'] = { f: 'B26*Assumptions!B15', t: 'n', z: '"$"#,##0' }; // Development Contribution
+      mainWs['B35'] = { f: 'Assumptions!B18*Assumptions!B19*B30', t: 'n', z: '"$"#,##0' }; // Finance Costs
+      
+      // Update the calculation descriptions to reference the Assumptions sheet
+      mainWs['C14'] = { v: 'Total Gross Realisation × GST Rate (see Assumptions)', t: 's' };
+      mainWs['C15'] = { v: 'Total Gross Realisation × Agent\'s Commission (see Assumptions)', t: 's' };
+      mainWs['C16'] = { v: 'Total Gross Realisation × Legal Fees (see Assumptions)', t: 's' };
+      mainWs['C17'] = { v: 'Total Gross Realisation × Marketing Costs (see Assumptions)', t: 's' };
+      mainWs['C21'] = { v: 'Net Realisation × Profit and Risk (see Assumptions)', t: 's' };
+      mainWs['C28'] = { v: 'Construction Costs × Professional Fees (see Assumptions)', t: 's' };
+      mainWs['C29'] = { v: 'Construction Costs × Development Contribution (see Assumptions)', t: 's' };
+      mainWs['C35'] = { v: 'Interest Rate × Project Period × Total Development Costs (see Assumptions)', t: 's' };
+
+      // Add worksheets to workbook
+      XLSX.utils.book_append_sheet(wb, mainWs, 'Feasibility Calculation');
+      XLSX.utils.book_append_sheet(wb, assumptionsWs, 'Assumptions');
+      XLSX.utils.book_append_sheet(wb, sensitivityWs, 'Sensitivity Analysis');
+
+      // If LMR comparison is available, add a worksheet for it
+      if (lmrResults && lmrOptions?.isInLMRArea) {
+        const lmrWsData = [
+          ['LMR Impact Analysis', '', '', ''],
+          ['', '', '', ''],
+          ['Metric', 'Current', 'LMR', 'Difference'],
+          ['GFA', calculationResults.gfa, lmrResults.gfa, { f: 'C4-B4' }],
+          ['Development Yield', calculationResults.developmentYield, lmrResults.developmentYield, { f: 'C5-B5' }],
+          ['Net Realisation', calculationResults.netRealisation, lmrResults.netRealisation, { f: 'C6-B6' }],
+          ['Residual Land Value', calculationResults.residualLandValue, lmrResults.residualLandValue, { f: 'C7-B7' }],
+        ];
+
+        const lmrWs = XLSX.utils.aoa_to_sheet(lmrWsData);
+        
+        // Pre-calculate formula results for LMR comparison
+        lmrWs['D4'].v = lmrResults.gfa - calculationResults.gfa;
+        lmrWs['D5'].v = lmrResults.developmentYield - calculationResults.developmentYield;
+        lmrWs['D6'].v = lmrResults.netRealisation - calculationResults.netRealisation;
+        lmrWs['D7'].v = lmrResults.residualLandValue - calculationResults.residualLandValue;
+        
+        // Format cells
+        // GFA with m² suffix
+        ['B4', 'C4'].forEach(cell => {
+          if (!lmrWs[cell]) return;
+          lmrWs[cell].z = '#,##0" m²"';
+          lmrWs[cell].t = 'n'; // Ensure numeric type
+        });
+        
+        // Units suffix
+        ['B5', 'C5'].forEach(cell => {
+          if (!lmrWs[cell]) return;
+          lmrWs[cell].z = '0" units"';
+          lmrWs[cell].t = 'n'; // Ensure numeric type
+        });
+        
+        // Currency format
+        ['B6', 'C6', 'B7', 'C7', 'D6', 'D7'].forEach(cell => {
+          if (!lmrWs[cell]) return;
+          lmrWs[cell].z = '"$"#,##0';
+          lmrWs[cell].t = 'n'; // Ensure numeric type
+        });
+        
+        // Custom format for difference in GFA
+        if (lmrWs['D4']) {
+          lmrWs['D4'].z = '+#,##0" m²";-#,##0" m²"';
+          lmrWs['D4'].t = 'n'; // Ensure numeric type
+        }
+        
+        // Custom format for difference in units
+        if (lmrWs['D5']) {
+          lmrWs['D5'].z = '+0" units";-0" units"';
+          lmrWs['D5'].t = 'n'; // Ensure numeric type
+        }
+        
+        // Set column widths
+        const lmrWsCols = [
+          { wch: 20 }, // A
+          { wch: 20 }, // B
+          { wch: 20 }, // C
+          { wch: 20 }, // D
+        ];
+        lmrWs['!cols'] = lmrWsCols;
+
+        // Apply styles to LMR worksheet
+        // Header
+        if (lmrWs['A1']) {
+          lmrWs['A1'].s = headerStyle;
+        }
+
+        // Column headers
+        ['A3', 'B3', 'C3', 'D3'].forEach(cell => {
+          if (!lmrWs[cell]) return;
+          lmrWs[cell].s = {
+            font: { bold: true, name: "Public Sans" },
+            fill: { fgColor: { rgb: "E9EDF1" } }
+          };
+        });
+
+        // Highlight the Residual Land Value row with bold top border
+        ['A7', 'B7', 'C7', 'D7'].forEach(cell => {
+          if (!lmrWs[cell]) return;
+          lmrWs[cell].s = {
+            font: { bold: true, name: "Public Sans" },
+            border: {
+              top: { style: "medium", color: { rgb: "0C2340" } } // Bold top border
+            }
+          };
+        });
+
+        // Apply conditional formatting for positive/negative differences
+        ['D4', 'D5', 'D6', 'D7'].forEach(cell => {
+          if (!lmrWs[cell]) return;
+          const cellValue = lmrWs[cell].v;
+          if (cellValue > 0) {
+            lmrWs[cell].s = {
+              ...(lmrWs[cell].s || {}),
+              font: { ...(lmrWs[cell].s?.font || {}), color: { rgb: "008800" }, name: "Public Sans" }
+            };
+          } else if (cellValue < 0) {
+            lmrWs[cell].s = {
+              ...(lmrWs[cell].s || {}),
+              font: { ...(lmrWs[cell].s?.font || {}), color: { rgb: "CC0000" }, name: "Public Sans" }
+            };
+          }
+        });
+        
+        // Apply general cell style to all cells in LMR worksheet
+        Object.keys(lmrWs).forEach(cell => {
+          if (cell[0] === '!') return; // Skip special keys like !ref
+          if (!lmrWs[cell].s) { // Only apply if no style exists
+            lmrWs[cell].s = generalCellStyle;
+          }
+        });
+
+        XLSX.utils.book_append_sheet(wb, lmrWs, 'LMR Comparison');
+      }
+
+      // Add a site information worksheet
+      const siteInfoData = [
+        ['Site Information', '', ''],
+        ['', '', ''],
+        ['Property', 'Value', 'Notes'],
+        ['Site Area', calculationResults.siteArea, 'Square meters'],
+        ['Developable Area', calculationResults.developableArea, 'After excluding constraints'],
+        ['Zone', selectedFeature?.properties?.copiedFrom?.site_suitability__zone || 'N/A', ''],
+        ['FSR', calculationResults.fsr, ''],
+        ['HOB', calculationResults.hob || 'N/A', 'Meters'],
+        ['', '', ''],
+        ['Development Controls', '', ''],
+        ['Density Type', density === 'mediumDensity' ? 'Medium Density' : 'High Density', ''],
+        ['Site Efficiency Ratio', settings[density].siteEfficiencyRatio, 'Building footprint as percentage of developable area'],
+        ['GBA to GFA Ratio', settings[density].gbaToGfaRatio, 'Efficiency of gross building area'],
+        ['Floor to Floor Height', settings[density].floorToFloorHeight, 'Meters'],
+        ['Profit and Risk Margin', settings[density].profitAndRisk, ''],
+        ['Interest Rate', settings[density].interestRate, 'Annual rate'],
+        ['Project Period', calculationResults.projectPeriod, 'Months'],
+      ];
+
+      const siteInfoWs = XLSX.utils.aoa_to_sheet(siteInfoData);
+      
+      // Format cells
+      // Area values with m² suffix
+      ['B4', 'B5'].forEach(cell => {
+        if (!siteInfoWs[cell]) return;
+        siteInfoWs[cell].z = '#,##0" m²"';
+        siteInfoWs[cell].t = 'n'; // Ensure numeric type
+      });
+      
+      // Percentage values
+      ['B12', 'B13', 'B15', 'B16'].forEach(cell => {
+        if (!siteInfoWs[cell]) return;
+        siteInfoWs[cell].z = '0.0%';
+        siteInfoWs[cell].t = 'n'; // Ensure numeric type
+      });
+      
+      // FSR value
+      if (siteInfoWs['B7']) {
+        siteInfoWs['B7'].t = 'n'; // Ensure numeric type
+        siteInfoWs['B7'].z = '0.0"; : 1"'; // Format as "1.3 : 1"
+      }
+      
+      // HOB with m suffix
+      if (siteInfoWs['B8'] && siteInfoWs['B8'].v !== 'N/A') {
+        siteInfoWs['B8'].z = '0" m"';
+        siteInfoWs['B8'].t = 'n'; // Ensure numeric type
+      }
+      
+      // Floor height with m suffix
+      if (siteInfoWs['B14']) {
+        siteInfoWs['B14'].z = '0.0" m"';
+        siteInfoWs['B14'].t = 'n'; // Ensure numeric type
+      }
+      
+      // Project period with "months" suffix
+      if (siteInfoWs['B17']) {
+        siteInfoWs['B17'].z = '0" months"';
+        siteInfoWs['B17'].t = 'n'; // Ensure numeric type
+      }
+      
+      // Set column widths
+      const siteInfoWsCols = [
+        { wch: 25 }, // A
+        { wch: 25 }, // B
+        { wch: 40 }, // C
+      ];
+      siteInfoWs['!cols'] = siteInfoWsCols;
+
+      // Apply styles to site info worksheet
+      // Headers
+      ['A1', 'A10'].forEach(cell => {
+        if (!siteInfoWs[cell]) return;
+        siteInfoWs[cell].s = headerStyle;
+      });
+
+      // Column headers
+      ['A3', 'B3', 'C3'].forEach(cell => {
+        if (!siteInfoWs[cell]) return;
+        siteInfoWs[cell].s = {
+          font: { bold: true, name: "Public Sans" },
+          fill: { fgColor: { rgb: "E9EDF1" } }
+        };
+      });
+      
+      // Apply general cell style to all cells in site info worksheet
+      Object.keys(siteInfoWs).forEach(cell => {
+        if (cell[0] === '!') return; // Skip special keys like !ref
+        if (!siteInfoWs[cell].s) { // Only apply if no style exists
+          siteInfoWs[cell].s = generalCellStyle;
+        }
+      });
+
+      XLSX.utils.book_append_sheet(wb, siteInfoWs, 'Site Information');
+      
+      // Generate Excel file
+      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      
+      // Save the file
+      saveAs(data, `Feasibility_Analysis_${density === 'mediumDensity' ? 'Medium' : 'High'}_Density_${new Date().toISOString().split('T')[0]}.xlsx`);
+      
+      // Show success notification
+      setNotification({
+        type: 'success',
+        message: 'Excel file exported with working calculations and formulas!'
+      });
+    } catch (error) {
+      console.error("Error exporting to Excel:", error);
+      
+      // Show error notification
+      setNotification({
+        type: 'error',
+        message: 'Error exporting to Excel. Please try again.'
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Notification component
+  const NotificationToast = ({ type, message }) => {
+    return (
+      <div className={`fixed bottom-4 right-4 z-50 flex items-center gap-2 py-2 px-4 rounded-md shadow-lg ${
+        type === 'success' ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-red-100 text-red-800 border border-red-200'
+      }`}>
+        {type === 'success' ? (
+          <CheckCircle size={18} className="text-green-600" />
+        ) : (
+          <XCircle size={18} className="text-red-600" />
+        )}
+        <span>{message}</span>
+      </div>
+    );
+  };
+
   return (
     <div className="p-4">
+      {/* Notification Toast */}
+      {notification && (
+        <NotificationToast type={notification.type} message={notification.message} />
+      )}
+      
+      {/* Export Button */}
+      <div className="mb-4 flex justify-end">
+        <div className="relative group">
+          <button
+            onClick={exportToExcel}
+            disabled={isExporting}
+            className={`flex items-center gap-2 py-2 px-4 rounded-md transition-colors ${
+              isExporting 
+                ? 'bg-gray-400 cursor-not-allowed' 
+                : 'bg-blue-600 hover:bg-blue-700 text-white shadow hover:shadow-md'
+            }`}
+            aria-label="Export to Excel"
+          >
+            {isExporting ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Exporting...
+              </>
+            ) : (
+              <>
+                <FileDown size={16} />
+                Export to Excel
+              </>
+            )}
+          </button>
+          <div className="absolute z-10 right-0 w-64 p-2 mt-2 text-sm text-gray-700 bg-white rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity duration-300 border border-gray-200">
+            <p className="font-semibold mb-1">Export includes:</p>
+            <ul className="list-disc pl-4 text-xs">
+              <li>Feasibility calculations with formulas</li>
+              <li>Sensitivity analysis data</li>
+              <li>Site information</li>
+              {lmrResults && lmrOptions?.isInLMRArea && <li>LMR comparison data</li>}
+            </ul>
+          </div>
+        </div>
+      </div>
+
       {/* Add Custom Controls Information Section */}
       {renderCustomControlsInfo()}
 

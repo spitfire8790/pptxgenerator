@@ -67,8 +67,9 @@ const generateSensitivityMatrix = (settings, selectedFeature, density, calculate
   const baselineFsr = selectedFeature?.properties?.copiedFrom?.site_suitability__floorspace_ratio || 0;
   const baselineHob = selectedFeature?.properties?.copiedFrom?.site_suitability__height_of_building || 0;
   
-  // Generate FSR range (0.5 increments)
-  const fsrRange = Array.from({ length: 7 }, (_, i) => Math.max(0.5, baselineFsr - 1.5 + (i * 0.5)));
+  // Generate FSR range (0.5 increments), ensuring unique values
+  const fsrValues = Array.from({ length: 7 }, (_, i) => Math.max(0.5, baselineFsr - 1.5 + (i * 0.5)));
+  const fsrRange = [...new Set(fsrValues)].sort((a, b) => a - b); // Remove duplicates and sort
   
   // Generate HOB range (5m increments)
   const hobRange = Array.from({ length: 7 }, (_, i) => Math.max(5, baselineHob - 15 + (i * 5)));
@@ -296,13 +297,13 @@ const FeasibilitySummary = ({
               </thead>
               <tbody>
                 {mediumDensityMatrix.matrix.map((row, i) => (
-                  <tr key={mediumDensityMatrix.fsrRange[i]}>
+                  <tr key={`medium-${mediumDensityMatrix.fsrRange[i]}-${i}`}>
                     <td className={`border px-4 py-2 font-medium ${Math.abs(mediumDensityMatrix.fsrRange[i] - mediumDensityMatrix.baselineFsr) < 0.01 ? 'bg-blue-100' : 'bg-gray-50'}`}>
                       {mediumDensityMatrix.fsrRange[i]}:1
                     </td>
                     {row.map((cell, j) => (
                       <td 
-                        key={j} 
+                        key={`medium-${mediumDensityMatrix.fsrRange[i]}-${j}`}
                         className={`border px-4 py-2 text-right ${
                           cell.isBaseline ? 'bg-blue-100 font-bold' : 
                           cell.residualLandValue < 0 ? 'bg-red-50 text-red-600' : ''
@@ -337,13 +338,13 @@ const FeasibilitySummary = ({
               </thead>
               <tbody>
                 {highDensityMatrix.matrix.map((row, i) => (
-                  <tr key={highDensityMatrix.fsrRange[i]}>
+                  <tr key={`high-${highDensityMatrix.fsrRange[i]}-${i}`}>
                     <td className={`border px-4 py-2 font-medium ${Math.abs(highDensityMatrix.fsrRange[i] - highDensityMatrix.baselineFsr) < 0.01 ? 'bg-blue-100' : 'bg-gray-50'}`}>
                       {highDensityMatrix.fsrRange[i]}:1
                     </td>
                     {row.map((cell, j) => (
                       <td 
-                        key={j} 
+                        key={`high-${highDensityMatrix.fsrRange[i]}-${j}`}
                         className={`border px-4 py-2 text-right ${
                           cell.isBaseline ? 'bg-blue-100 font-bold' : 
                           cell.residualLandValue < 0 ? 'bg-red-50 text-red-600' : ''

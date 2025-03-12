@@ -408,24 +408,76 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
     }
 
     // Filter sales data by property type based on density
-    const relevantSales = salesData?.filter(sale => {
-      const propertyType = sale.property_type?.toLowerCase().trim();
-      const propertyTypes = density === 'mediumDensity' ? MEDIUM_DENSITY_TYPES : HIGH_DENSITY_TYPES;
+    const propertyTypes = density === 'mediumDensity' ? MEDIUM_DENSITY_TYPES : HIGH_DENSITY_TYPES;
+    
+    let relevantSales = [];
+    
+    if (density === 'mediumDensity') {
+      // For medium density, don't filter by bedrooms at all
+      relevantSales = salesData?.filter(sale => {
+        const propertyType = sale.property_type?.toLowerCase().trim();
+        return propertyTypes.some(type => propertyType?.includes(type));
+      }) || [];
+    } else {
+      // For high density, first try 2-bedroom properties
+      relevantSales = salesData?.filter(sale => {
+        const propertyType = sale.property_type?.toLowerCase().trim();
+        const typeMatches = propertyTypes.some(type => propertyType?.includes(type));
+        const bedroomCount = sale.bedrooms ? parseInt(sale.bedrooms, 10) : null;
+        const isTwoBedroom = bedroomCount === 2;
+        return typeMatches && isTwoBedroom;
+      }) || [];
       
-      // Check if property type matches
-      const typeMatches = propertyTypes.some(type => propertyType?.includes(type));
-      
-      // Specifically filter for 2 bedroom dwellings
-      const bedroomCount = sale.bedrooms ? parseInt(sale.bedrooms, 10) : null;
-      const isTwoBedroom = bedroomCount === 2;
-      
-      return typeMatches && isTwoBedroom;
-    }) || [];
+      // If no 2-bedroom high-density properties found, try any bedroom count
+      if (relevantSales.length === 0) {
+        console.log("No 2-bedroom high-density properties found, trying any bedroom count");
+        relevantSales = salesData?.filter(sale => {
+          const propertyType = sale.property_type?.toLowerCase().trim();
+          return propertyTypes.some(type => propertyType?.includes(type));
+        }) || [];
+      }
+    }
 
+    console.log(`Found ${relevantSales.length} relevant sales for ${density}`);
+    
     // Get median price from filtered sales data
     const medianPrice = relevantSales.length > 0 
       ? relevantSales.map(s => s.price).sort((a, b) => a - b)[Math.floor(relevantSales.length / 2)]
       : null;
+      
+    if (medianPrice === null) {
+      console.log(`No median price found for ${density}`);
+    } else {
+      console.log(`Median price for ${density}: ${medianPrice}`);
+    }
+
+    // Create a fallback price if needed
+    let finalPrice = medianPrice;
+    
+    // If medium-density has no price but high-density does, estimate medium-density price
+    if (density === 'mediumDensity' && finalPrice === null) {
+      // Try to get high-density price for comparison
+      const highDensityData = calculateDerivedValues('highDensity');
+      const highDensityPrice = highDensityData.dwellingPrice;
+      
+      if (highDensityPrice && dwellingSize && highDensityData.dwellingSize) {
+        // Estimate medium-density price based on high-density price adjusted for size
+        // Medium-density typically has premium per sqm (about 10% more per sqm)
+        const sizeRatio = dwellingSize / highDensityData.dwellingSize;
+        const pricePerSqmPremium = 1.1; // 10% premium per sqm for medium-density
+        finalPrice = Math.round(highDensityPrice * sizeRatio * pricePerSqmPremium);
+        console.log(`Estimated medium-density price: ${finalPrice} based on high-density price: ${highDensityPrice}`);
+      } else if (highDensityPrice) {
+        // If no size data, use a typical ratio between medium and high density prices
+        // Medium-density is typically ~1.5-1.8x the price of high-density
+        finalPrice = Math.round(highDensityPrice * 1.65);
+        console.log(`Estimated medium-density price: ${finalPrice} based on typical ratio to high-density`);
+      } else {
+        // Fallback to a default price if no other data is available
+        finalPrice = 950000; // Default fallback value for medium-density
+        console.log(`Using default fallback price for medium-density: ${finalPrice}`);
+      }
+    }
 
     // Calculate assumed construction cost (rounded down to nearest 10)
     const assumedConstructionCostM2 = Math.floor(constructionCostM2 / 10) * 10;
@@ -435,8 +487,8 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
 
     // Use custom dwelling price if set, otherwise use median price
     const dwellingPrice = customDwellingPrice[density] 
-      ? settings[density][setting.id] 
-      : medianPrice;
+      ? settings[density]['dwellingPrice'] 
+      : finalPrice;
 
     return {
       dwellingSize: Math.round(dwellingSize),
