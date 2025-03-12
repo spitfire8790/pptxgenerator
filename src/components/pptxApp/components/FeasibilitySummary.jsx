@@ -62,48 +62,6 @@ const formatSqm = (value) => {
   return `${Math.round(value).toLocaleString()}m²`;
 };
 
-// Add helper function for sensitivity analysis
-const generateSensitivityMatrix = (settings, selectedFeature, density, calculateFeasibility) => {
-  const baselineFsr = selectedFeature?.properties?.copiedFrom?.site_suitability__floorspace_ratio || 0;
-  const baselineHob = selectedFeature?.properties?.copiedFrom?.site_suitability__height_of_building || 0;
-  
-  // Generate FSR range (0.5 increments), ensuring unique values
-  const fsrValues = Array.from({ length: 7 }, (_, i) => Math.max(0.5, baselineFsr - 1.5 + (i * 0.5)));
-  const fsrRange = [...new Set(fsrValues)].sort((a, b) => a - b); // Remove duplicates and sort
-  
-  // Generate HOB range (5m increments)
-  const hobRange = Array.from({ length: 7 }, (_, i) => Math.max(5, baselineHob - 15 + (i * 5)));
-  
-  // Generate matrix of results
-  const matrix = fsrRange.map(fsr => {
-    return hobRange.map(hob => {
-      const customControls = {
-        enabled: true,
-        fsr: fsr,
-        hob: hob
-      };
-      
-      const result = calculateFeasibility(
-        settings[density],
-        selectedFeature,
-        density,
-        false,
-        null,
-        customControls
-      );
-      
-      return {
-        fsr,
-        hob,
-        residualLandValue: result?.residualLandValue || 0,
-        isBaseline: Math.abs(fsr - baselineFsr) < 0.01 && Math.abs(hob - baselineHob) < 0.01
-      };
-    });
-  });
-  
-  return { fsrRange, hobRange, matrix, baselineFsr, baselineHob };
-};
-
 /**
  * FeasibilitySummary component for comparing Low-Mid Density vs High Density development options
  * with animated charts for cost and residual land value sensitivity analysis
@@ -120,6 +78,29 @@ const FeasibilitySummary = ({
   // State for animations
   const [animationProgress, setAnimationProgress] = useState(0);
   
+  // Define colors for charts
+  const colors = {
+    residualLandValue: ['#8884d8', '#82ca9d'], // Purple for Medium Density, Green for High Density
+    background: '#ffffff',
+  };
+  
+  // Define line label renderer for charts
+  const renderLineLabel = ({ x, y, value, index }) => {
+    // Only render labels for specific points (e.g., first, middle, last)
+    if (index !== 0 && index !== 2 && index !== 5) return null;
+    return (
+      <text 
+        x={x} 
+        y={y - 10} 
+        fill="#666"
+        textAnchor="middle"
+        fontSize={12}
+      >
+        {formatCurrencyInMillions(value)}
+      </text>
+    );
+  };
+  
   // Animation effect
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -132,8 +113,86 @@ const FeasibilitySummary = ({
   const chartData = [
     {
       name: 'Medium Density',
-      ResidualLandValue: currentResults?.mediumDensity?.residualLandValue || 0,
-      DwellingYield: currentResults?.mediumDensity?.developmentYield || 0,
+      ResidualLandValue: (() => {
+        if (!currentResults?.mediumDensity) return 0;
+        
+        // For medium density, calculate based on lot size limitation
+        const minimumLotSize = 500; // 500m² per dwelling
+        const developableArea = currentResults.mediumDensity.developableArea || 0;
+        const maxDwellingsByLotSize = Math.floor(developableArea / minimumLotSize);
+        const developmentYield = currentResults.mediumDensity.developmentYield || 0;
+        const actualYield = Math.min(developmentYield, maxDwellingsByLotSize);
+        
+        // If no actual yield, return 0
+        if (!actualYield) return 0;
+        
+        // Recalculate everything from the beginning
+        // Adjusted gross realisation
+        const dwellingPrice = settings.mediumDensity.dwellingPrice || 0;
+        const adjustedGrossRealisation = actualYield * dwellingPrice;
+        
+        // Adjusted selling costs
+        const adjustedGst = adjustedGrossRealisation * 0.1;
+        const adjustedAgentsCommission = adjustedGrossRealisation * settings.mediumDensity.agentsSalesCommission;
+        const adjustedLegalFees = adjustedGrossRealisation * settings.mediumDensity.legalFeesOnSales;
+        const adjustedMarketingCosts = adjustedGrossRealisation * settings.mediumDensity.marketingCosts;
+        
+        // Adjusted net realisation
+        const adjustedNetRealisation = adjustedGrossRealisation - adjustedGst - adjustedAgentsCommission - adjustedLegalFees - adjustedMarketingCosts;
+        
+        // Adjusted profit margin
+        const adjustedProfitMargin = adjustedNetRealisation * settings.mediumDensity.profitAndRisk;
+        
+        // Adjusted net realisation after profit
+        const adjustedNetRealisationAfterProfit = adjustedNetRealisation - adjustedProfitMargin;
+        
+        // Adjusted GFA and construction costs
+        const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
+        const adjustedGfa = actualYield * dwellingSize;
+        const constructionCostPerGfa = currentResults.mediumDensity.constructionCostPerGfa || 0;
+        const adjustedConstructionCosts = adjustedGfa * constructionCostPerGfa;
+        const adjustedProfessionalFees = adjustedConstructionCosts * settings.mediumDensity.professionalFees;
+        const adjustedDevelopmentContribution = adjustedConstructionCosts * settings.mediumDensity.developmentContribution;
+        const daApplicationFees = currentResults.mediumDensity.daApplicationFees || 0;
+        const adjustedTotalDevelopmentCosts = adjustedConstructionCosts + daApplicationFees + adjustedProfessionalFees + adjustedDevelopmentContribution;
+        
+        // Land tax and finance costs
+        const landTax = currentResults.mediumDensity.landTax || 0;
+        const projectPeriod = currentResults.mediumDensity.projectPeriod || 24;
+        const projectDurationYears = projectPeriod / 12;
+        const adjustedFinanceCosts = settings.mediumDensity.interestRate * (projectDurationYears / 2) * adjustedTotalDevelopmentCosts;
+        
+        // Calculate residual land value before interest
+        const adjustedResidualBeforeInterest = adjustedNetRealisationAfterProfit - adjustedTotalDevelopmentCosts - landTax - adjustedFinanceCosts;
+        
+        // Calculate interest on purchase price
+        const adjustedInterestOnPurchase = Math.abs(
+          adjustedResidualBeforeInterest - 
+          adjustedResidualBeforeInterest / 
+          (1 + settings.mediumDensity.interestRate / 12 * projectPeriod * 0.5)
+        );
+        
+        // Calculate acquisition costs (3% of residual land value minus interest)
+        const acquisitionRate = 0.03; // 3%
+        const adjustedAcquisitionCosts = acquisitionRate * (adjustedResidualBeforeInterest - adjustedInterestOnPurchase);
+        
+        // Final residual land value
+        const adjustedResidualLandValue = adjustedResidualBeforeInterest - adjustedInterestOnPurchase - adjustedAcquisitionCosts;
+        
+        return adjustedResidualLandValue;
+      })(),
+      DwellingYield: (() => {
+        if (!currentResults?.mediumDensity) return 0;
+        
+        // For medium density, calculate based on lot size limitation
+        const minimumLotSize = 500; // 500m² per dwelling
+        const developableArea = currentResults.mediumDensity.developableArea || 0;
+        const maxDwellingsByLotSize = Math.floor(developableArea / minimumLotSize);
+        const developmentYield = currentResults.mediumDensity.developmentYield || 0;
+        const actualYield = Math.min(developmentYield, maxDwellingsByLotSize);
+        
+        return actualYield;
+      })(),
     },
     {
       name: 'High Density',
@@ -144,9 +203,45 @@ const FeasibilitySummary = ({
   
   // Generate sensitivity analysis data for how costs affect residual land value
   const costSensitivityData = Array.from({ length: 7 }, (_, i) => {
+    // Calculate the adjusted baseline Medium Density values
+    const baselineMediumRLV = (() => {
+      if (!currentResults?.mediumDensity) return 10000000;
+      
+      // For medium density, calculate based on lot size limitation
+      const minimumLotSize = 500; // 500m² per dwelling
+      const developableArea = currentResults.mediumDensity.developableArea || 0;
+      const maxDwellingsByLotSize = Math.floor(developableArea / minimumLotSize);
+      const developmentYield = currentResults.mediumDensity.developmentYield || 0;
+      const actualYield = Math.min(developmentYield, maxDwellingsByLotSize);
+      
+      // If no actual yield, return default value
+      if (!actualYield) return 10000000;
+      
+      // Calculate the adjusted residual land value using the same logic as in chartData
+      const dwellingPrice = settings.mediumDensity.dwellingPrice || 0;
+      const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
+      const constructionCostPerGfa = currentResults.mediumDensity.constructionCostPerGfa || 0;
+      
+      // Skip detailed calculation steps as they are the same as in chartData
+      // Just calculating the basic scenario for the baseline
+      const adjustedGfa = actualYield * dwellingSize;
+      const grossRealisation = actualYield * dwellingPrice;
+      
+      // Quick approximation of residual land value
+      const sellCostRate = 0.1 + settings.mediumDensity.agentsSalesCommission + settings.mediumDensity.legalFeesOnSales + settings.mediumDensity.marketingCosts;
+      const netRealisation = grossRealisation * (1 - sellCostRate);
+      const netRealisationAfterProfit = netRealisation * (1 - settings.mediumDensity.profitAndRisk);
+      
+      const constructionCosts = adjustedGfa * constructionCostPerGfa;
+      const otherDevCosts = constructionCosts * (settings.mediumDensity.professionalFees + settings.mediumDensity.developmentContribution);
+      const totalDevCosts = constructionCosts + otherDevCosts + (currentResults.mediumDensity.daApplicationFees || 0);
+      
+      // Simple estimation of residual land value
+      return netRealisationAfterProfit - totalDevCosts;
+    })();
+    
     const baselineMediumCost = (currentResults?.mediumDensity?.costPerSqmGFA || 3000);
     const baselineHighCost = (currentResults?.highDensity?.costPerSqmGFA || 3500);
-    const baselineMediumRLV = (currentResults?.mediumDensity?.residualLandValue || 10000000);
     const baselineHighRLV = (currentResults?.highDensity?.residualLandValue || 15000000);
     
     // Cost factor: 80%, 85%, 90%, 95%, 100%, 105%, 110%
@@ -170,28 +265,78 @@ const FeasibilitySummary = ({
     };
   });
   
-  // Generate sensitivity analysis data for how sales/revenue affects residual land value
-  const residualLandValueSensitivityData = Array.from({ length: 7 }, (_, i) => {
-    // Revenue baseline and dwelling yield derived from current results
-    const baselineMediumRevenue = (currentResults?.mediumDensity?.totalRevenue || 25000000);
-    const baselineHighRevenue = (currentResults?.highDensity?.totalRevenue || 40000000);
-    const mediumDwellings = (currentResults?.mediumDensity?.developmentYield || 50);
-    const highDwellings = (currentResults?.highDensity?.developmentYield || 100);
+  // Generate sensitivity data for revenue factor
+  const revenueFactorData = Array.from({ length: 6 }, (_, i) => {
+    // Revenue factor: 85%, 90%, 95%, 100%, 105%, 110%
+    const factor = 0.85 + (i * 0.05);
     
-    const baselineMedium = (currentResults?.mediumDensity?.residualLandValue || 10000000);
-    const baselineHigh = (currentResults?.highDensity?.residualLandValue || 15000000);
-    const factor = 0.8 + (i * 0.05); // 80%, 85%, 90%, 95%, 100%, 105%, 110%
+    // Calculate adjusted baseline Medium Density values
+    const mediumRevenue = (() => {
+      if (!currentResults?.mediumDensity) return 25000000;
+      
+      // For medium density, calculate based on lot size limitation
+      const minimumLotSize = 500; // 500m² per dwelling
+      const developableArea = currentResults.mediumDensity.developableArea || 0;
+      const maxDwellingsByLotSize = Math.floor(developableArea / minimumLotSize);
+      const developmentYield = currentResults.mediumDensity.developmentYield || 0;
+      const actualYield = Math.min(developmentYield, maxDwellingsByLotSize);
+      
+      const dwellingPrice = settings.mediumDensity.dwellingPrice || 0;
+      return actualYield * dwellingPrice;
+    })();
     
-    // Calculate per dwelling revenue
-    const mediumRevenuePerDwelling = baselineMediumRevenue / mediumDwellings;
-    const highRevenuePerDwelling = baselineHighRevenue / highDwellings;
-    const avgRevenuePerDwelling = (mediumRevenuePerDwelling + highRevenuePerDwelling) / 2;
+    // Calculate adjusted residual land value for medium density
+    const mediumRlv = (() => {
+      if (!currentResults?.mediumDensity) return 10000000;
+      
+      // For medium density, calculate based on lot size limitation
+      const minimumLotSize = 500; // 500m² per dwelling
+      const developableArea = currentResults.mediumDensity.developableArea || 0;
+      const maxDwellingsByLotSize = Math.floor(developableArea / minimumLotSize);
+      const developmentYield = currentResults.mediumDensity.developmentYield || 0;
+      const actualYield = Math.min(developmentYield, maxDwellingsByLotSize);
+      
+      // If no actual yield, return default value
+      if (!actualYield) return 10000000;
+      
+      // Calculate the adjusted residual land value using the same logic as before
+      const dwellingPrice = settings.mediumDensity.dwellingPrice || 0;
+      const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
+      const constructionCostPerGfa = currentResults.mediumDensity.constructionCostPerGfa || 0;
+      
+      // Apply the revenue factor to dwelling price
+      const adjustedDwellingPrice = dwellingPrice * factor;
+      
+      // Calculate GFA and costs
+      const adjustedGfa = actualYield * dwellingSize;
+      const adjustedGrossRealisation = actualYield * adjustedDwellingPrice;
+      
+      const sellCostRate = 0.1 + settings.mediumDensity.agentsSalesCommission + settings.mediumDensity.legalFeesOnSales + settings.mediumDensity.marketingCosts;
+      const netRealisation = adjustedGrossRealisation * (1 - sellCostRate);
+      const netRealisationAfterProfit = netRealisation * (1 - settings.mediumDensity.profitAndRisk);
+      
+      const constructionCosts = adjustedGfa * constructionCostPerGfa;
+      const otherDevCosts = constructionCosts * (settings.mediumDensity.professionalFees + settings.mediumDensity.developmentContribution);
+      const totalDevCosts = constructionCosts + otherDevCosts + (currentResults.mediumDensity.daApplicationFees || 0);
+      
+      // Simple estimation of residual land value
+      return netRealisationAfterProfit - totalDevCosts;
+    })();
+    
+    // Use existing high density values with simple factor application
+    const highRevenue = (currentResults?.highDensity?.totalRevenue || 40000000);
+    const highRlv = (currentResults?.highDensity?.residualLandValue || 15000000);
+    
+    // Apply revenue factor exponentially to RLV (assuming higher sensitivity of RLV to revenue)
+    // A simple model: 1% change in revenue = 1.5% change in RLV
+    const rlvImpactFactor = 1 + ((factor - 1) * 1.5);
     
     return {
       factor: `${Math.round(factor * 100)}%`,
-      revenuePerDwelling: Math.round(avgRevenuePerDwelling * factor),
-      'Medium Density': Math.round(baselineMedium * factor),
-      'High Density': Math.round(baselineHigh * factor),
+      mediumRevenue: Math.round(mediumRevenue * factor),
+      highRevenue: Math.round(highRevenue * factor),
+      mediumRlv: Math.round(mediumRlv), // Already calculated with the factor
+      highRlv: Math.round(highRlv * rlvImpactFactor),
     };
   });
   
@@ -199,17 +344,72 @@ const FeasibilitySummary = ({
   const radarData = [
     {
       metric: 'Residual Land Value',
-      'Medium Density': (currentResults?.mediumDensity?.residualLandValue || 0) / 1000000,
+      'Medium Density': (() => {
+        if (!currentResults?.mediumDensity) return 0;
+        
+        // For medium density, calculate based on lot size limitation
+        const minimumLotSize = 500; // 500m² per dwelling
+        const developableArea = currentResults.mediumDensity.developableArea || 0;
+        const maxDwellingsByLotSize = Math.floor(developableArea / minimumLotSize);
+        const developmentYield = currentResults.mediumDensity.developmentYield || 0;
+        const actualYield = Math.min(developmentYield, maxDwellingsByLotSize);
+        
+        // If no actual yield, return 0
+        if (!actualYield) return 0;
+        
+        // Calculate the adjusted residual land value using the same logic as in chartData
+        // Full calculation is the same as in chartData, abbreviated for brevity
+        const dwellingPrice = settings.mediumDensity.dwellingPrice || 0;
+        const adjustedGrossRealisation = actualYield * dwellingPrice;
+        
+        // Abbreviated calculation for residual land value in millions
+        const sellCostRate = 0.1 + settings.mediumDensity.agentsSalesCommission + settings.mediumDensity.legalFeesOnSales + settings.mediumDensity.marketingCosts;
+        const netRealisation = adjustedGrossRealisation * (1 - sellCostRate);
+        const netRealisationAfterProfit = netRealisation * (1 - settings.mediumDensity.profitAndRisk);
+        
+        const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
+        const adjustedGfa = actualYield * dwellingSize;
+        const constructionCostPerGfa = currentResults.mediumDensity.constructionCostPerGfa || 0;
+        const constructionCosts = adjustedGfa * constructionCostPerGfa;
+        const otherDevCosts = constructionCosts * (settings.mediumDensity.professionalFees + settings.mediumDensity.developmentContribution);
+        const totalDevCosts = constructionCosts + otherDevCosts + (currentResults.mediumDensity.daApplicationFees || 0);
+        
+        return (netRealisationAfterProfit - totalDevCosts) / 1000000;
+      })(),
       'High Density': (currentResults?.highDensity?.residualLandValue || 0) / 1000000,
     },
     {
       metric: 'GFA',
-      'Medium Density': (currentResults?.mediumDensity?.gfa || 0) / 1000,
+      'Medium Density': (() => {
+        if (!currentResults?.mediumDensity) return 0;
+        
+        // For medium density, calculate based on lot size limitation
+        const minimumLotSize = 500; // 500m² per dwelling
+        const developableArea = currentResults.mediumDensity.developableArea || 0;
+        const maxDwellingsByLotSize = Math.floor(developableArea / minimumLotSize);
+        const developmentYield = currentResults.mediumDensity.developmentYield || 0;
+        const actualYield = Math.min(developmentYield, maxDwellingsByLotSize);
+        
+        // Calculate adjusted GFA
+        const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
+        const adjustedGfa = actualYield * dwellingSize;
+        
+        return adjustedGfa / 1000;
+      })(),
       'High Density': (currentResults?.highDensity?.gfa || 0) / 1000,
     },
     {
       metric: 'Yield',
-      'Medium Density': (currentResults?.mediumDensity?.developmentYield || 0),
+      'Medium Density': (() => {
+        if (!currentResults?.mediumDensity) return 0;
+        
+        // For medium density, calculate based on lot size limitation
+        const minimumLotSize = 500; // 500m² per dwelling
+        const developableArea = currentResults.mediumDensity.developableArea || 0;
+        const maxDwellingsByLotSize = Math.floor(developableArea / minimumLotSize);
+        const developmentYield = currentResults.mediumDensity.developmentYield || 0;
+        return Math.min(developmentYield, maxDwellingsByLotSize);
+      })(),
       'High Density': (currentResults?.highDensity?.developmentYield || 0),
     },
     {
@@ -219,7 +419,28 @@ const FeasibilitySummary = ({
     },
     {
       metric: 'Cost',
-      'Medium Density': (currentResults?.mediumDensity?.totalCost || 0) / 1000000,
+      'Medium Density': (() => {
+        if (!currentResults?.mediumDensity) return 0;
+        
+        // For medium density, calculate based on lot size limitation
+        const minimumLotSize = 500; // 500m² per dwelling
+        const developableArea = currentResults.mediumDensity.developableArea || 0;
+        const maxDwellingsByLotSize = Math.floor(developableArea / minimumLotSize);
+        const developmentYield = currentResults.mediumDensity.developmentYield || 0;
+        const actualYield = Math.min(developmentYield, maxDwellingsByLotSize);
+        
+        // Calculate adjusted total cost
+        const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
+        const adjustedGfa = actualYield * dwellingSize;
+        const constructionCostPerGfa = currentResults.mediumDensity.constructionCostPerGfa || 0;
+        const adjustedConstructionCosts = adjustedGfa * constructionCostPerGfa;
+        const adjustedProfessionalFees = adjustedConstructionCosts * settings.mediumDensity.professionalFees;
+        const adjustedDevelopmentContribution = adjustedConstructionCosts * settings.mediumDensity.developmentContribution;
+        const daApplicationFees = currentResults.mediumDensity.daApplicationFees || 0;
+        const adjustedTotalDevelopmentCosts = adjustedConstructionCosts + daApplicationFees + adjustedProfessionalFees + adjustedDevelopmentContribution;
+        
+        return adjustedTotalDevelopmentCosts / 1000000;
+      })(),
       'High Density': (currentResults?.highDensity?.totalCost || 0) / 1000000,
     },
   ];
@@ -261,117 +482,6 @@ const FeasibilitySummary = ({
             </div>
           </div>
         )}
-      </div>
-    );
-  };
-
-  // Add sensitivity analysis section
-  const renderSensitivityAnalysis = () => {
-    if (!selectedFeature || !calculateFeasibility) return null;
-
-    const mediumDensityMatrix = generateSensitivityMatrix(settings, selectedFeature, 'mediumDensity', calculateFeasibility);
-    const highDensityMatrix = generateSensitivityMatrix(settings, selectedFeature, 'highDensity', calculateFeasibility);
-
-    return (
-      <div className="mt-8 bg-white p-4 rounded-lg shadow">
-        <h3 className="text-lg font-bold mb-4 flex items-center">
-          <TrendingUp className="mr-2" /> FSR and HOB Sensitivity Analysis
-        </h3>
-        
-        {/* Medium Density Matrix */}
-        <div className="mb-6">
-          <h4 className="text-md font-semibold mb-3 flex items-center">
-            <Building2 className="mr-2" size={16} /> Medium Density
-          </h4>
-          <div className="overflow-x-auto">
-            <table className="min-w-full border border-gray-200">
-              <thead>
-                <tr>
-                  <th className="border bg-gray-50 px-4 py-2">FSR \ HOB</th>
-                  {mediumDensityMatrix.hobRange.map(hob => (
-                    <th key={hob} className={`border px-4 py-2 ${Math.abs(hob - mediumDensityMatrix.baselineHob) < 0.01 ? 'bg-blue-100' : 'bg-gray-50'}`}>
-                      {hob}m
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {mediumDensityMatrix.matrix.map((row, i) => (
-                  <tr key={`medium-${mediumDensityMatrix.fsrRange[i]}-${i}`}>
-                    <td className={`border px-4 py-2 font-medium ${Math.abs(mediumDensityMatrix.fsrRange[i] - mediumDensityMatrix.baselineFsr) < 0.01 ? 'bg-blue-100' : 'bg-gray-50'}`}>
-                      {mediumDensityMatrix.fsrRange[i]}:1
-                    </td>
-                    {row.map((cell, j) => (
-                      <td 
-                        key={`medium-${mediumDensityMatrix.fsrRange[i]}-${j}`}
-                        className={`border px-4 py-2 text-right ${
-                          cell.isBaseline ? 'bg-blue-100 font-bold' : 
-                          cell.residualLandValue < 0 ? 'bg-red-50 text-red-600' : ''
-                        }`}
-                      >
-                        {formatCurrencyInMillions(cell.residualLandValue)}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* High Density Matrix */}
-        <div>
-          <h4 className="text-md font-semibold mb-3 flex items-center">
-            <Building className="mr-2" size={16} /> High Density
-          </h4>
-          <div className="overflow-x-auto">
-            <table className="min-w-full border border-gray-200">
-              <thead>
-                <tr>
-                  <th className="border bg-gray-50 px-4 py-2">FSR \ HOB</th>
-                  {highDensityMatrix.hobRange.map(hob => (
-                    <th key={hob} className={`border px-4 py-2 ${Math.abs(hob - highDensityMatrix.baselineHob) < 0.01 ? 'bg-blue-100' : 'bg-gray-50'}`}>
-                      {hob}m
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {highDensityMatrix.matrix.map((row, i) => (
-                  <tr key={`high-${highDensityMatrix.fsrRange[i]}-${i}`}>
-                    <td className={`border px-4 py-2 font-medium ${Math.abs(highDensityMatrix.fsrRange[i] - highDensityMatrix.baselineFsr) < 0.01 ? 'bg-blue-100' : 'bg-gray-50'}`}>
-                      {highDensityMatrix.fsrRange[i]}:1
-                    </td>
-                    {row.map((cell, j) => (
-                      <td 
-                        key={`high-${highDensityMatrix.fsrRange[i]}-${j}`}
-                        className={`border px-4 py-2 text-right ${
-                          cell.isBaseline ? 'bg-blue-100 font-bold' : 
-                          cell.residualLandValue < 0 ? 'bg-red-50 text-red-600' : ''
-                        }`}
-                      >
-                        {formatCurrencyInMillions(cell.residualLandValue)}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="mt-4 p-3 bg-blue-50 rounded text-sm text-blue-800">
-          <div className="flex items-start">
-            <Info size={14} className="mr-2 mt-0.5 flex-shrink-0" />
-            <div>
-              This analysis shows how residual land value changes with different FSR and HOB combinations. Values are shown in millions (M).
-              <br />
-              <span className="font-medium">Baseline values (highlighted in blue):</span> FSR {mediumDensityMatrix.baselineFsr}:1, HOB {mediumDensityMatrix.baselineHob}m
-              <br />
-              <span className="text-red-600">Negative values</span> indicate scenarios where development costs exceed potential revenue.
-            </div>
-          </div>
-        </div>
       </div>
     );
   };
@@ -497,7 +607,6 @@ const FeasibilitySummary = ({
         </div>
       </div>
 
-
       {/* Cost Impact on Residual Land Value */}
       <div className="mb-8 bg-white p-4 rounded-lg shadow">
         <h3 className="text-lg font-bold mb-4 flex items-center">
@@ -594,7 +703,7 @@ const FeasibilitySummary = ({
         <div className="h-80">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
-              data={residualLandValueSensitivityData}
+              data={revenueFactorData}
               margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
               animationDuration={1500}
               animationBegin={300}
@@ -606,11 +715,11 @@ const FeasibilitySummary = ({
                 tick={(props) => {
                   const { x, y, payload } = props;
                   // Get revenue per dwelling in millions
-                  const index = residualLandValueSensitivityData.findIndex(item => item.factor === payload.value);
-                  const revenuePerDwelling = index >= 0 ? residualLandValueSensitivityData[index].revenuePerDwelling : 0;
+                  const index = revenueFactorData.findIndex(item => item.factor === payload.value);
+                  const mediumRevenue = index >= 0 ? revenueFactorData[index].mediumRevenue : 0;
                   
                   // Per dwelling revenue in millions with 1 decimal place
-                  const perDwellingMillions = revenuePerDwelling / 1000000;
+                  const perDwellingMillions = mediumRevenue / 1000000;
                   
                   // Format as $#.0M per unit
                   const formattedRevenue = `$${perDwellingMillions.toFixed(1)}M`;
@@ -635,8 +744,8 @@ const FeasibilitySummary = ({
                     { length: 10 }, 
                     (_, i) => roundToNearest500k(
                       (Math.max(
-                        Math.max(...residualLandValueSensitivityData.map(item => item['Medium Density'] || 0)),
-                        Math.max(...residualLandValueSensitivityData.map(item => item['High Density'] || 0))
+                        Math.max(...revenueFactorData.map(item => item.mediumRlv || 0)),
+                        Math.max(...revenueFactorData.map(item => item.highRlv || 0))
                       ) * 1.1) / 10 * (i + 1)
                     )
                   ).filter(val => val > 0)
@@ -644,26 +753,45 @@ const FeasibilitySummary = ({
               />
               <Tooltip formatter={(value) => formatCurrency(value)} />
               <Legend />
-              <Line 
-                type="monotone" 
-                dataKey="Medium Density" 
-                stroke="#8884d8" 
-                strokeWidth={2}
-                dot={{ r: 4 }}
-                activeDot={{ r: 8 }}
-                animationDuration={1500}
+              <Line
+                type="monotone"
                 name="Medium Density"
+                dataKey="mediumRlv"
+                stroke={colors.residualLandValue[0]}
+                strokeWidth={3}
+                connectNulls
+                dot={{
+                  fill: colors.residualLandValue[0],
+                  stroke: colors.residualLandValue[0],
+                  r: 5,
+                }}
+                activeDot={{
+                  stroke: colors.residualLandValue[0],
+                  fill: colors.background,
+                  r: 8,
+                  strokeWidth: 2,
+                }}
+                label={renderLineLabel}
               />
-              <Line 
-                type="monotone" 
-                dataKey="High Density" 
-                stroke="#82ca9d" 
-                strokeWidth={2}
-                dot={{ r: 4 }}
-                activeDot={{ r: 8 }}
-                animationDuration={1500}
-                animationBegin={500}
+              <Line
+                type="monotone"
                 name="High Density"
+                dataKey="highRlv"
+                stroke={colors.residualLandValue[1]}
+                strokeWidth={3}
+                connectNulls
+                dot={{
+                  fill: colors.residualLandValue[1],
+                  stroke: colors.residualLandValue[1],
+                  r: 5,
+                }}
+                activeDot={{
+                  stroke: colors.residualLandValue[1],
+                  fill: colors.background,
+                  r: 8,
+                  strokeWidth: 2,
+                }}
+                label={renderLineLabel}
               />
             </LineChart>
           </ResponsiveContainer>
@@ -687,15 +815,114 @@ const FeasibilitySummary = ({
             <tbody>
               <tr>
                 <td className="px-4 py-2">GFA</td>
-                <td className="px-4 py-2 text-right">{currentResults?.mediumDensity?.gfa ? formatSqm(currentResults.mediumDensity.gfa) : 'N/A'}</td>
+                <td className="px-4 py-2 text-right">{
+                  (() => {
+                    if (!currentResults?.mediumDensity) return 'N/A';
+                    
+                    // For medium density, calculate based on lot size limitation
+                    const minimumLotSize = 500; // 500m² per dwelling
+                    const developableArea = currentResults.mediumDensity.developableArea || 0;
+                    const maxDwellingsByLotSize = Math.floor(developableArea / minimumLotSize);
+                    const developmentYield = currentResults.mediumDensity.developmentYield || 0;
+                    const actualYield = Math.min(developmentYield, maxDwellingsByLotSize);
+                    
+                    // Calculate adjusted GFA
+                    const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
+                    const adjustedGfa = actualYield * dwellingSize;
+                    
+                    return formatSqm(adjustedGfa);
+                  })()
+                }</td>
               </tr>
               <tr>
                 <td className="px-4 py-2">Development Yield</td>
-                <td className="px-4 py-2 text-right">{currentResults?.mediumDensity?.developmentYield || 0} units</td>
+                <td className="px-4 py-2 text-right">{
+                  (() => {
+                    if (!currentResults?.mediumDensity) return '0 units';
+                    
+                    // For medium density, calculate based on lot size limitation
+                    const minimumLotSize = 500; // 500m² per dwelling
+                    const developableArea = currentResults.mediumDensity.developableArea || 0;
+                    const maxDwellingsByLotSize = Math.floor(developableArea / minimumLotSize);
+                    const developmentYield = currentResults.mediumDensity.developmentYield || 0;
+                    const actualYield = Math.min(developmentYield, maxDwellingsByLotSize);
+                    
+                    return `${actualYield} units`;
+                  })()
+                }</td>
               </tr>
               <tr className="font-bold">
                 <td className="px-4 py-2">Residual Land Value</td>
-                <td className="px-4 py-2 text-right">{formatCurrency(currentResults?.mediumDensity?.residualLandValue || 0)}</td>
+                <td className="px-4 py-2 text-right">{
+                  (() => {
+                    if (!currentResults?.mediumDensity) return formatCurrency(0);
+                    
+                    // For medium density, calculate based on lot size limitation
+                    const minimumLotSize = 500; // 500m² per dwelling
+                    const developableArea = currentResults.mediumDensity.developableArea || 0;
+                    const maxDwellingsByLotSize = Math.floor(developableArea / minimumLotSize);
+                    const developmentYield = currentResults.mediumDensity.developmentYield || 0;
+                    const actualYield = Math.min(developmentYield, maxDwellingsByLotSize);
+                    
+                    // If no actual yield, return 0
+                    if (!actualYield) return formatCurrency(0);
+                    
+                    // Recalculate everything from the beginning using the complete calculation
+                    // Adjusted gross realisation
+                    const dwellingPrice = settings.mediumDensity.dwellingPrice || 0;
+                    const adjustedGrossRealisation = actualYield * dwellingPrice;
+                    
+                    // Adjusted selling costs
+                    const adjustedGst = adjustedGrossRealisation * 0.1;
+                    const adjustedAgentsCommission = adjustedGrossRealisation * settings.mediumDensity.agentsSalesCommission;
+                    const adjustedLegalFees = adjustedGrossRealisation * settings.mediumDensity.legalFeesOnSales;
+                    const adjustedMarketingCosts = adjustedGrossRealisation * settings.mediumDensity.marketingCosts;
+                    
+                    // Adjusted net realisation
+                    const adjustedNetRealisation = adjustedGrossRealisation - adjustedGst - adjustedAgentsCommission - adjustedLegalFees - adjustedMarketingCosts;
+                    
+                    // Adjusted profit margin
+                    const adjustedProfitMargin = adjustedNetRealisation * settings.mediumDensity.profitAndRisk;
+                    
+                    // Adjusted net realisation after profit
+                    const adjustedNetRealisationAfterProfit = adjustedNetRealisation - adjustedProfitMargin;
+                    
+                    // Adjusted GFA and construction costs
+                    const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
+                    const adjustedGfa = actualYield * dwellingSize;
+                    const constructionCostPerGfa = currentResults.mediumDensity.constructionCostPerGfa || 0;
+                    const adjustedConstructionCosts = adjustedGfa * constructionCostPerGfa;
+                    const adjustedProfessionalFees = adjustedConstructionCosts * settings.mediumDensity.professionalFees;
+                    const adjustedDevelopmentContribution = adjustedConstructionCosts * settings.mediumDensity.developmentContribution;
+                    const daApplicationFees = currentResults.mediumDensity.daApplicationFees || 0;
+                    const adjustedTotalDevelopmentCosts = adjustedConstructionCosts + daApplicationFees + adjustedProfessionalFees + adjustedDevelopmentContribution;
+                    
+                    // Land tax and finance costs
+                    const landTax = currentResults.mediumDensity.landTax || 0;
+                    const projectPeriod = currentResults.mediumDensity.projectPeriod || 24;
+                    const projectDurationYears = projectPeriod / 12;
+                    const adjustedFinanceCosts = settings.mediumDensity.interestRate * (projectDurationYears / 2) * adjustedTotalDevelopmentCosts;
+                    
+                    // Calculate residual land value before interest
+                    const adjustedResidualBeforeInterest = adjustedNetRealisationAfterProfit - adjustedTotalDevelopmentCosts - landTax - adjustedFinanceCosts;
+                    
+                    // Calculate interest on purchase price
+                    const adjustedInterestOnPurchase = Math.abs(
+                      adjustedResidualBeforeInterest - 
+                      adjustedResidualBeforeInterest / 
+                      (1 + settings.mediumDensity.interestRate / 12 * projectPeriod * 0.5)
+                    );
+                    
+                    // Calculate acquisition costs (3% of residual land value minus interest)
+                    const acquisitionRate = 0.03; // 3%
+                    const adjustedAcquisitionCosts = acquisitionRate * (adjustedResidualBeforeInterest - adjustedInterestOnPurchase);
+                    
+                    // Final residual land value
+                    const adjustedResidualLandValue = adjustedResidualBeforeInterest - adjustedInterestOnPurchase - adjustedAcquisitionCosts;
+                    
+                    return formatCurrency(adjustedResidualLandValue);
+                  })()
+                }</td>
               </tr>
             </tbody>
           </table>
@@ -730,9 +957,6 @@ const FeasibilitySummary = ({
           </table>
         </div>
       </div>
-
-      {/* Add Sensitivity Analysis Section */}
-      {renderSensitivityAnalysis()}
     </div>
   );
 };

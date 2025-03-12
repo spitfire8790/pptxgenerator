@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   LineChart,
   Line,
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
+  Tooltip as RechartsTooltip,
   Legend,
   ResponsiveContainer,
   BarChart,
@@ -13,7 +13,7 @@ import {
   ReferenceLine
 } from 'recharts';
 import { Calculator, TrendingUp, DollarSign, HardHat, Percent, Home, Building2, Settings2, Info, FileDown, Loader2, CheckCircle, XCircle } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 
 // Helper function to format currency
@@ -206,7 +206,7 @@ const FeasibilityCalculation = ({
                   <p className="text-sm text-blue-800">
                     {selectedOption.fsrRange 
                       ? `FSR and HOB values are based on distance to centers/stations`
-                      : `Fixed FSR and HOB values for ${selectedFeature?.properties?.copiedFrom?.site_suitability__zone || 'current'} zone`}
+                      : `Fixed FSR and HOB values for ${selectedFeature?.properties?.copiedFrom?.site_suitability__principal_zone_identifier || 'current'} zone`}
                   </p>
                 </div>
               )}
@@ -345,708 +345,733 @@ const FeasibilityCalculation = ({
       setIsExporting(true);
       
       // Create a new workbook
-      const wb = XLSX.utils.book_new();
+      const wb = new ExcelJS.Workbook();
       
-      // Add default workbook styles - Public Sans font will be applied to all cells
-      wb.Styles = {
-        Fonts: [
-          { FontName: "Public Sans" } // Set default font for workbook
-        ]
-      };
+      // Create worksheets
+      const mainWs = wb.addWorksheet('Feasibility Calculation');
+      const sensitivityWs = wb.addWorksheet('Sensitivity Analysis');
+      
+      let lmrWs = null;
+      if (lmrResults && lmrOptions?.isInLMRArea) {
+        lmrWs = wb.addWorksheet('LMR Comparison');
+      }
       
       // Get clean numeric values for GFA and other measurements
       const cleanGFA = Math.round(calculationResults.gfa);
       const cleanBuildingFootprint = Math.round(calculationResults.siteCoverage);
       const cleanDevelopableArea = Math.round(calculationResults.developableArea);
       
-      // Create the main calculations worksheet data structure
-      const mainWsData = [
-        ['Development Feasibility Analysis', '', '', ''],
-        [`${density === 'mediumDensity' ? 'Medium Density' : 'High Density'} Development`, '', '', ''],
-        ['', '', '', ''],
-        ['Development Metrics', '', '', ''],
-        ['Building Footprint', cleanBuildingFootprint, `${formatPercentage(settings[density].siteEfficiencyRatio)} of Developable Area (${cleanDevelopableArea} m²)`, ''],
-        ['Gross Floor Area (GFA)', cleanGFA, `FSR ${calculationResults.fsr}:1`, ''],
-        ['Development Yield', calculationResults.developmentYield, `Total NSA (${Math.round(calculationResults.nsa)}) ÷ Assumed Unit Size (${density === 'highDensity' ? '75' : Math.floor(calculationResults.dwellingSize / 10) * 10} m²)`, ''],
-        ['', '', '', ''],
-        ['Sales Analysis', '', '', ''],
-        ['Median Unit Price', settings[density].dwellingPrice, 'Based on sales data', ''],
-        ['Total Gross Realisation', { f: 'B7*B10' }, 'Development Yield × Median Unit Price', ''],
-        ['', '', '', ''],
-        ['GST and Selling Costs', '', '', ''],
-        ['GST (10%)', { f: 'B11*B46' }, 'Total Gross Realisation × GST Rate', ''],
-        ['Agent\'s Commission', { f: 'B11*B47' }, 'Total Gross Realisation × Agent\'s Commission', ''],
-        ['Legal Fees', { f: 'B11*B48' }, 'Total Gross Realisation × Legal Fees', ''],
-        ['Marketing Costs', { f: 'B11*B49' }, 'Total Gross Realisation × Marketing Costs', ''],
-        ['Net Realisation', { f: 'B11-B14-B15-B16-B17' }, 'Total Gross Realisation - GST - Commission - Legal - Marketing', ''],
-        ['', '', '', ''],
-        ['Profit and Risk', '', '', ''],
-        ['Profit Margin', { f: 'B18*B53' }, 'Net Realisation × Profit Margin', ''],
-        ['Net Realisation after Profit', { f: 'B18-B21' }, 'Net Realisation - Profit Margin', ''],
-        ['', '', '', ''],
-        ['Development Costs', '', '', ''],
-        ['Construction Cost (per m² GFA)', calculationResults.constructionCostPerGfa, 'Based on recent construction certificates', ''],
-        ['Total Construction Costs', { f: 'B25*B6' }, 'Construction Cost per m² × Total GFA', ''],
-        ['DA Application Fees', calculationResults.daApplicationFees, 'Fixed cost', ''],
-        ['Professional Fees', { f: 'B26*B50' }, 'Construction Costs × Professional Fees', ''],
-        ['Development Contribution', { f: 'B26*B51' }, 'Construction Costs × Development Contribution', ''],
-        ['Total Development Costs', { f: 'B26+B27+B28+B29' }, 'Construction + DA + Professional Fees + Development Contribution', ''],
-        ['', '', '', ''],
-        ['Finance and Holding Costs', '', '', ''],
-        ['Land Tax', calculationResults.landTax, `Annual Land Tax (${formatCurrency(calculationResults.landTaxPerYear)}) × Project Duration (${(calculationResults.projectPeriod / 12).toFixed(1)} years)`, ''],
-        ['Interest Rate', { f: 'B54' }, 'See Assumptions below', ''],
-        ['Finance Costs', { f: 'B54*B55*B30' }, 'Interest Rate × Project Duration × Total Development Costs', ''],
-        ['', '', '', ''],
-        ['Residual Land Value', '', '', ''],
-        ['Residual Land Value', { f: 'B22-B30-B35-B33' }, 'Net Realisation after Profit - Total Development Costs - Finance Costs - Land Tax', ''],
-        ['', '', '', ''],
-        ['Assumptions', '', '', ''],
-        // Development Parameters
-        ['Site Efficiency Ratio', settings[density].siteEfficiencyRatio, 'Building footprint as percentage of developable area', ''],
-        ['GBA to GFA Ratio', settings[density].gbaToGfaRatio, 'Efficiency of gross building area', ''],
-        ['Floor to Floor Height', settings[density].floorToFloorHeight, 'Height between floors in meters', ''],
-        // Sales Parameters
-        ['GST Rate', 0.1, 'Goods and Services Tax rate', ''],
-        ['Agent\'s Commission', settings[density].agentsSalesCommission, 'Percentage of sales for agent commission', ''],
-        ['Legal Fees', settings[density].legalFeesOnSales, 'Percentage of sales for legal costs', ''],
-        ['Marketing Costs', settings[density].marketingCosts, 'Percentage of sales for marketing', ''],
-        // Development Cost Parameters
-        ['Professional Fees', settings[density].professionalFees, 'Percentage of construction costs for professional services', ''],
-        ['Development Contribution', settings[density].developmentContribution, 'Percentage of construction costs for development contributions', ''],
-        // Finance Parameters
-        ['Profit and Risk', settings[density].profitAndRisk, 'Profit margin as percentage of net realisation', ''],
-        ['Interest Rate', settings[density].interestRate, 'Annual interest rate for finance costs', ''],
-        ['Project Period (Years)', calculationResults.projectPeriod / 12, 'Project duration in years', ''],
-        // Other Assumptions
-        ['Unit Size (Medium Density)', density === 'mediumDensity' ? Math.floor(calculationResults.dwellingSize / 10) * 10 : 'N/A', 'Assumed unit size in m²', ''],
-        ['Unit Size (High Density)', density === 'highDensity' ? 75 : 'N/A', 'Assumed unit size in m²', ''],
-      ];
-
-      // Create worksheet from data
-      const mainWs = XLSX.utils.aoa_to_sheet(mainWsData);
-
-      // Add mock calculation results to help Excel formulas evaluate (hidden column E)
-      // This ensures that even if a formula doesn't calculate properly, the user still sees reasonable values
-      mainWs['E11'] = { v: calculationResults.totalGrossRealisation, t: 'n', z: '"$"#,##0' };
-      mainWs['E14'] = { v: calculationResults.gst, t: 'n', z: '"$"#,##0' };
-      mainWs['E15'] = { v: calculationResults.agentsCommission, t: 'n', z: '"$"#,##0' };
-      mainWs['E16'] = { v: calculationResults.legalFees, t: 'n', z: '"$"#,##0' };
-      mainWs['E17'] = { v: calculationResults.marketingCosts, t: 'n', z: '"$"#,##0' };
-      mainWs['E18'] = { v: calculationResults.netRealisation, t: 'n', z: '"$"#,##0' };
-      mainWs['E21'] = { v: calculationResults.profitAndRisk, t: 'n', z: '"$"#,##0' };
-      mainWs['E22'] = { v: calculationResults.netRealisationAfterProfitAndRisk, t: 'n', z: '"$"#,##0' };
-      mainWs['E26'] = { v: calculationResults.constructionCosts, t: 'n', z: '"$"#,##0' };
-      mainWs['E28'] = { v: calculationResults.professionalFees, t: 'n', z: '"$"#,##0' };
-      mainWs['E29'] = { v: calculationResults.developmentContribution, t: 'n', z: '"$"#,##0' };
-      mainWs['E30'] = { v: calculationResults.totalDevelopmentCosts, t: 'n', z: '"$"#,##0' };
-      mainWs['E35'] = { v: calculationResults.financeCosts, t: 'n', z: '"$"#,##0' };
-      mainWs['E38'] = { v: calculationResults.residualLandValue, t: 'n', z: '"$"#,##0' };
-
-      // Pre-calculate formula results to help Excel
-      mainWs['B11'].v = calculationResults.totalGrossRealisation;
-      mainWs['B14'].v = calculationResults.gst;
-      mainWs['B15'].v = calculationResults.agentsCommission;
-      mainWs['B16'].v = calculationResults.legalFees;
-      mainWs['B17'].v = calculationResults.marketingCosts;
-      mainWs['B18'].v = calculationResults.netRealisation;
-      mainWs['B21'].v = calculationResults.profitAndRisk;
-      mainWs['B22'].v = calculationResults.netRealisationAfterProfitAndRisk;
-      mainWs['B26'].v = calculationResults.constructionCosts;
-      mainWs['B28'].v = calculationResults.professionalFees;
-      mainWs['B29'].v = calculationResults.developmentContribution;
-      mainWs['B30'].v = calculationResults.totalDevelopmentCosts;
-      mainWs['B35'].v = calculationResults.financeCosts;
-      mainWs['B38'].v = calculationResults.residualLandValue;
-
-      // Ensure building footprint and GFA cells have numeric values
-      mainWs['B5'].t = 'n';
-      mainWs['B6'].t = 'n';
-      
-      // Format cells with numeric values and percentages
-      // Format currency values
-      ['B10', 'B11', 'B14', 'B15', 'B16', 'B17', 'B18', 'B21', 'B22', 'B25', 'B26', 'B27', 'B28', 'B29', 'B30', 'B33', 'B35', 'B38'].forEach(cell => {
-        if (!mainWs[cell]) return;
-        mainWs[cell].z = '"$"#,##0';
-      });
-
-      // Format percentage values
-      ['B34'].forEach(cell => {
-        if (!mainWs[cell]) return;
-        mainWs[cell].z = '0.0%';
-      });
-      
-      // Format area values with m² suffix
-      ['B5', 'B6'].forEach(cell => {
-        if (!mainWs[cell]) return;
-        mainWs[cell].z = '#,##0" m²"';
-      });
-      
-      // Format development yield with "units" suffix
-      if (mainWs['B7']) {
-        mainWs['B7'].z = '0" units"';
-      }
-
-      // Set column widths
-      const mainWsCols = [
-        { wch: 25 }, // A - Metric
-        { wch: 20 }, // B - Value
-        { wch: 50 }, // C - Calculation Method
-        { wch: 30 }, // D - Formula
-        { wch: 0 },  // E - Hidden values (zero width to hide)
-      ];
-      mainWs['!cols'] = mainWsCols;
-
       // Define styles for different elements
       const headerStyle = {
-        font: { 
-          bold: true, 
-          sz: 14, 
-          color: { rgb: "FFFFFF" },
-          name: "Public Sans"
+        font: {
+          name: 'Public Sans',
+          size: 14,
+          color: { argb: 'FFFFFF' },
+          bold: true
         },
-        fill: { 
-          fgColor: { rgb: "0C2340" } // Dark blue background
+        fill: {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: '0C2340' } // Dark blue background
         },
         alignment: {
-          horizontal: "left",
-          vertical: "center"
+          horizontal: 'left',
+          vertical: 'center'
         }
       };
 
       const sectionHeaderStyle = {
-        font: { 
-          bold: true, 
-          sz: 12,
-          color: { rgb: "FFFFFF" },
-          name: "Public Sans"
+        font: {
+          name: 'Public Sans',
+          size: 12,
+          color: { argb: 'FFFFFF' },
+          bold: true
         },
-        fill: { 
-          fgColor: { rgb: "0C2340" } // Dark blue background
+        fill: {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: '0C2340' } // Dark blue background
         },
         alignment: {
-          horizontal: "left",
-          vertical: "center"
+          horizontal: 'left',
+          vertical: 'center'
         }
       };
 
       const totalRowStyle = {
-        font: { 
-          bold: true,
-          name: "Public Sans"
+        font: {
+          name: 'Public Sans',
+          bold: true
         },
-        fill: { 
-          fgColor: { rgb: "E9EDF1" } 
+        fill: {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'E9EDF1' }
         },
         border: {
-          top: { style: "medium", color: { rgb: "0C2340" } } // Bold top border
+          top: { style: 'medium', color: { argb: '0C2340' } } // Bold top border
         }
       };
 
       const generalCellStyle = {
         font: {
-          name: "Public Sans"
+          name: 'Public Sans'
         }
       };
-
-      // Apply styles to the main worksheet
-      // Main headers
-      ['A1', 'A2'].forEach(cell => {
-        if (!mainWs[cell]) return;
-        mainWs[cell].s = headerStyle;
-      });
-
-      // Section headers
-      ['A4', 'A9', 'A13', 'A20', 'A24', 'A32', 'A37', 'A40'].forEach(cell => {
-        if (!mainWs[cell]) return;
-        mainWs[cell].s = sectionHeaderStyle;
-      });
-
-      // Total rows with bold top border
-      ['A11', 'A18', 'A22', 'A30', 'A38'].forEach(cell => {
-        if (!mainWs[cell]) return;
-        mainWs[cell].s = totalRowStyle;
+      
+      // ----------------- Main Worksheet -----------------
+      
+      // Add header rows
+      mainWs.addRow(['Development Feasibility Analysis', '', '', '']);
+      mainWs.addRow([`${density === 'mediumDensity' ? 'Medium Density' : 'High Density'} Development`, '', '', '']);
+      mainWs.addRow(['', '', '', '']);
+      
+      // Add site information section at the top
+      // Get site details from selectedFeature
+      const siteProps = selectedFeature && selectedFeature.properties 
+        ? (selectedFeature.properties.copiedFrom || selectedFeature.properties) 
+        : {};
+      
+      // Site Information Section
+      mainWs.addRow(['Site Information', '', siteProps.site__address || 'No address available', '']);
+      mainWs.addRow(['Zoning', '', siteProps.site_suitability__principal_zone_identifier || 'No zoning available', '']);
+      mainWs.addRow(['Site Area', '', Math.round(calculationResults.siteArea) || 0, 'm²']);
+      mainWs.addRow(['FSR', '', calculationResults.fsr || 0, ':1']);
+      mainWs.addRow(['HOB', '', calculationResults.hob || 0, 'm']);
+      
+      // After adding all rows, let's adjust the alignment for Address and Zoning
+      mainWs.getRow(5).getCell(3).alignment = { horizontal: 'right' };
+      mainWs.getRow(6).getCell(3).alignment = { horizontal: 'right' };
+      
+      if (customControls?.enabled) {
+        mainWs.addRow(['Custom FSR', '', customControls.fsr !== null ? customControls.fsr : 'Using current FSR', '']);
+        mainWs.addRow(['Custom HOB', '', customControls.hob !== null ? customControls.hob : 'Using current HOB', '']);
+      }
+      
+      if (lmrOptions?.isInLMRArea) {
+        mainWs.addRow(['LMR Area', '', 'Yes', '']);
+        mainWs.addRow(['Using LMR Controls', '', settings[density].useLMR ? 'Yes' : 'No', '']);
+      }
+      
+      mainWs.addRow(['', '', '', '']);
+      
+      // Store cell references for key values we need in formulas
+      // We need to track initial row numbers to handle dynamic sections (customControls, lmr)
+      const initialMetricsRow = mainWs.rowCount + 1;
+      
+      // Add section headers and data
+      // Development Metrics section
+      mainWs.addRow(['Development Metrics', '', '', '']);
+      
+      // Add Developable Area row first
+      const developableAreaRow = mainWs.rowCount + 1;
+      mainWs.addRow(['Developable Area', '', cleanDevelopableArea, 'Total site area accounting for setbacks and constraints']);
+      
+      // Track important row numbers for formulas
+      const buildingFootprintRow = mainWs.rowCount + 1;
+      // Building footprint now references the Developable Area
+      mainWs.addRow(['Building Footprint', settings[density].siteEfficiencyRatio, { formula: `B${buildingFootprintRow}*C${developableAreaRow}` }, `${formatPercentage(settings[density].siteEfficiencyRatio)} of Developable Area`]);
+      
+      const gfaRow = mainWs.rowCount + 1;
+      
+      if (density === 'mediumDensity') {
+        // For medium density, calculate GFA based on lot size limitation
+        const minimumLotSize = 500; // 500m² per dwelling
+        const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
+        const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+        const adjustedGfa = actualYield * calculationResults.dwellingSize;
         
-        // Apply the total row style to entire row (columns B, C, D)
-        ['B', 'C', 'D'].forEach(col => {
-          const rowCell = `${col}${cell.substring(1)}`;
-          if (!mainWs[rowCell]) return;
-          mainWs[rowCell].s = totalRowStyle;
-        });
+        mainWs.addRow(['Gross Floor Area (GFA)', '', Math.round(adjustedGfa), `Based on lot size limitation: ${actualYield} units × ${Math.round(calculationResults.dwellingSize)} m² per unit`]);
+      } else {
+        // For high density, use existing calculation
+        mainWs.addRow(['Gross Floor Area (GFA)', calculationResults.fsr, cleanGFA, `FSR ${calculationResults.fsr}:1`]);
+      }
+      
+      const developmentYieldRow = mainWs.rowCount + 1;
+      if (density === 'mediumDensity') {
+        // For medium density, add minimum lot size constraint
+        const minimumLotSize = 500; // 500m² per dwelling
+        const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
+        const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+        
+        mainWs.addRow(['Development Yield', calculationResults.dwellingSize, actualYield, 
+          `Limited by: Min(NSA calculation: ${calculationResults.developmentYield} units, Lot constraint: ${maxDwellingsByLotSize} units @ ${minimumLotSize}m² min lot size)`]);
+      } else {
+        // For high density, use existing calculation
+        mainWs.addRow(['Development Yield', calculationResults.dwellingSize, calculationResults.developmentYield, 
+          `Total NSA (${Math.round(calculationResults.nsa)}) ÷ Assumed Unit Size (${density === 'highDensity' ? '75' : Math.floor(calculationResults.dwellingSize / 10) * 10} m²)`]);
+      }
+      
+      mainWs.addRow(['', '', '', '']);
+      
+      // Add Feasibility Analysis header
+      const feasibilityAnalysisRow = mainWs.rowCount + 1;
+      mainWs.addRow(['Feasibility Analysis', '', '', '']);
+      
+      // Sales Analysis section - no dark blue header - Remove blank row
+      
+      const medianUnitPriceRow = mainWs.rowCount + 1;
+      mainWs.addRow(['Median Unit Price', '', settings[density].dwellingPrice, 'Based on sales data']);
+      
+      const totalGrossRealisationRow = mainWs.rowCount + 1;
+      // Use formula: Development Yield * Median Unit Price
+      mainWs.addRow(['Total Gross Realisation', '', { formula: `C${developmentYieldRow}*C${medianUnitPriceRow}` }, 'Development Yield × Median Unit Price']);
+      
+      mainWs.addRow(['', '', '', '']);
+      
+      // GST and Selling Costs section - no dark blue header
+      
+      // GST Row - Fix reference
+      const gstRate = 0.1; // Store the GST rate as a variable
+      mainWs.addRow(['GST (10%)', gstRate, { formula: `${gstRate}*C${totalGrossRealisationRow}` }, 'Total Gross Realisation × GST Rate']);
+      
+      // Store the GST row after creating it
+      const gstRow = mainWs.rowCount;
+      
+      // Agent's Commission Row
+      const agentsCommissionRow = mainWs.rowCount + 1;
+      mainWs.addRow(['Agent\'s Commission', settings[density].agentsSalesCommission, { formula: `B${agentsCommissionRow}*C${totalGrossRealisationRow}` }, 'Total Gross Realisation × Agent\'s Commission (see Assumptions)']);
+      
+      // Legal Fees Row
+      const legalFeesRow = mainWs.rowCount + 1;
+      mainWs.addRow(['Legal Fees', settings[density].legalFeesOnSales, { formula: `B${legalFeesRow}*C${totalGrossRealisationRow}` }, 'Total Gross Realisation × Legal Fees (see Assumptions)']);
+      
+      // Marketing Costs Row - standard formatting (not a section header)
+      const marketingCostsRow = mainWs.rowCount + 1; 
+      mainWs.addRow(['Marketing Costs', settings[density].marketingCosts, { formula: `B${marketingCostsRow}*C${totalGrossRealisationRow}` }, 'Total Gross Realisation × Marketing Costs (see Assumptions)']);
+      
+      // Net Realisation Row
+      const netRealisationRow = mainWs.rowCount + 1;
+      mainWs.addRow(['Net Realisation', '', { formula: `C${totalGrossRealisationRow}-C${gstRow}-C${agentsCommissionRow}-C${legalFeesRow}-C${marketingCostsRow}` }, 'Total Gross Realisation - GST - Commission - Legal - Marketing']);
+      
+      mainWs.addRow(['', '', '', '']);
+      
+      // Profit and Risk section - no dark blue header
+      
+      // Profit Margin Row - standard formatting (not a section header)
+      const profitMarginRate = settings[density].profitAndRisk; // Store the profit margin rate as a variable
+      mainWs.addRow(['Profit Margin', profitMarginRate, { formula: `B${mainWs.rowCount+1}*C${netRealisationRow}` }, 'Net Realisation × Profit and Risk (see Assumptions)']);
+      const profitMarginRow = mainWs.rowCount;
+      
+      // Net Realisation after Profit Row
+      const netRealisationAfterProfitRow = mainWs.rowCount + 1;
+      mainWs.addRow(['Net Realisation after Profit', '', { formula: `C${netRealisationRow}-C${profitMarginRow}` }, 'Net Realisation - Profit Margin']);
+      
+      mainWs.addRow(['', '', '', '']);
+      
+      // Development Costs section - no dark blue header
+      
+      // Construction Cost per GFA Row
+      const constructionCostPerGfaRow = mainWs.rowCount + 1;
+      mainWs.addRow(['Construction Cost (per m² GFA)', '', calculationResults.constructionCostPerGfa, 'Based on recent construction certificates']);
+      
+      // Total Construction Costs Row
+      const totalConstructionCostsRow = mainWs.rowCount + 1;
+      if (density === 'mediumDensity') {
+        // For medium density, calculate construction costs based on adjusted GFA
+        const minimumLotSize = 500; // 500m² per dwelling
+        const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
+        const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+        const adjustedGfa = actualYield * calculationResults.dwellingSize;
+        const adjustedConstructionCosts = adjustedGfa * calculationResults.constructionCostPerGfa;
+        
+        mainWs.addRow(['Total Construction Costs', '', adjustedConstructionCosts, `Adjusted GFA (${Math.round(adjustedGfa)} m²) × Construction Cost per m² (${formatCurrency(calculationResults.constructionCostPerGfa)})`]);
+      } else {
+        // For high density, use existing formula
+        mainWs.addRow(['Total Construction Costs', '', calculationResults.constructionCosts, 'Construction Cost per m² × Total GFA']);
+      }
+      
+      // DA Application Fees Row
+      const daApplicationFeesRow = mainWs.rowCount + 1;
+      mainWs.addRow(['DA Application Fees', '', calculationResults.daApplicationFees, 'Fixed cost']);
+      
+      // Professional Fees Row - Fix reference
+      const professionalFeesRow = mainWs.rowCount + 1;
+      mainWs.addRow(['Professional Fees', settings[density].professionalFees, { formula: `B${professionalFeesRow}*C${totalConstructionCostsRow}` }, 'Construction Costs × Professional Fees']);
+      
+      // Development Contribution Row - standard formatting (not a section header)
+      const developmentContributionRow = mainWs.rowCount + 1;
+      mainWs.addRow(['Development Contribution', settings[density].developmentContribution, { formula: `B${developmentContributionRow}*C${totalConstructionCostsRow}` }, 'Construction Costs × Development Contribution (see Assumptions)']);
+      
+      // Total Development Costs Row
+      const totalDevelopmentCostsRow = mainWs.rowCount + 1;
+      mainWs.addRow(['Total Development Costs', '', { formula: `C${totalConstructionCostsRow}+C${daApplicationFeesRow}+C${professionalFeesRow}+C${developmentContributionRow}` }, 'Construction + DA + Professional Fees + Development Contribution']);
+      
+      mainWs.addRow(['', '', '', '']);
+      
+      // Finance and Holding Costs section - no dark blue header
+      
+      // Integrated Land Tax Row
+      const landTaxRow = mainWs.rowCount + 1;
+      const landTaxYearly = calculationResults.landTaxPerYear;
+      const projectDurationYears = (calculationResults.projectPeriod / 12).toFixed(1);
+      mainWs.addRow(['Land Tax', '', calculationResults.landTax, `Annual Amount (${formatCurrency(landTaxYearly)}) × ${projectDurationYears} years`]);
+      
+      // Project Duration Row - Remove value from column B 
+      const projectDurationRow = mainWs.rowCount + 1;
+      mainWs.addRow(['Project Duration (years)', '', calculationResults.projectPeriod / 12, 'Estimated development timeframe']);
+      
+      // Interest Rate Row - Keep in column B for formula reference but update column C format
+      const interestRateRow = mainWs.rowCount + 1;
+      mainWs.addRow(['Interest Rate', settings[density].interestRate, settings[density].interestRate, 'Annual interest rate']);
+      
+      // Finance Costs Row
+      const financeRow = mainWs.rowCount + 1;
+      if (density === 'mediumDensity') {
+        // For medium density, calculate Finance Costs based on adjusted Total Development Costs
+        const minimumLotSize = 500; // 500m² per dwelling
+        const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
+        const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+        const adjustedGfa = actualYield * calculationResults.dwellingSize;
+        const adjustedConstructionCosts = adjustedGfa * calculationResults.constructionCostPerGfa;
+        const adjustedProfessionalFees = adjustedConstructionCosts * settings[density].professionalFees;
+        const adjustedDevelopmentContribution = adjustedConstructionCosts * settings[density].developmentContribution;
+        const adjustedTotalDevelopmentCosts = adjustedConstructionCosts + calculationResults.daApplicationFees + adjustedProfessionalFees + adjustedDevelopmentContribution;
+        
+        // Calculate finance costs using adjusted total development costs
+        const adjustedFinanceCosts = settings[density].interestRate * (projectDurationYears / 2) * adjustedTotalDevelopmentCosts;
+        mainWs.addRow(['Finance Costs', '', adjustedFinanceCosts, `Interest Rate (${formatPercentage(settings[density].interestRate)}) × Project Duration (${projectDurationYears} years ÷ 2) × Adjusted Total Development Costs`]);
+      } else {
+        // For high density, use original formula
+        mainWs.addRow(['Finance Costs', '', { formula: `C${interestRateRow}*(${projectDurationYears}/2)*C${totalDevelopmentCostsRow}` }, 'Interest Rate × Project Duration × Total Development Costs']);
+      }
+      
+      // Interest on Purchase Price - Calculate interest on Residual Land Value
+      const interestOnPurchaseRow = mainWs.rowCount + 1;
+      if (density === 'mediumDensity') {
+        // For medium density, recalculate Interest on Purchase Price using adjusted values
+        const minimumLotSize = 500; // 500m² per dwelling
+        const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
+        const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+        
+        // Recalculate everything from the beginning
+        // Adjusted gross realisation
+        const adjustedGrossRealisation = actualYield * settings[density].dwellingPrice;
+        
+        // Adjusted selling costs
+        const adjustedGst = adjustedGrossRealisation * 0.1;
+        const adjustedAgentsCommission = adjustedGrossRealisation * settings[density].agentsSalesCommission;
+        const adjustedLegalFees = adjustedGrossRealisation * settings[density].legalFeesOnSales;
+        const adjustedMarketingCosts = adjustedGrossRealisation * settings[density].marketingCosts;
+        
+        // Adjusted net realisation
+        const adjustedNetRealisation = adjustedGrossRealisation - adjustedGst - adjustedAgentsCommission - adjustedLegalFees - adjustedMarketingCosts;
+        
+        // Adjusted profit margin
+        const adjustedProfitMargin = adjustedNetRealisation * settings[density].profitAndRisk;
+        
+        // Adjusted net realisation after profit
+        const adjustedNetRealisationAfterProfit = adjustedNetRealisation - adjustedProfitMargin;
+        
+        // Adjusted GFA and construction costs
+        const adjustedGfa = actualYield * calculationResults.dwellingSize;
+        const adjustedConstructionCosts = adjustedGfa * calculationResults.constructionCostPerGfa;
+        const adjustedProfessionalFees = adjustedConstructionCosts * settings[density].professionalFees;
+        const adjustedDevelopmentContribution = adjustedConstructionCosts * settings[density].developmentContribution;
+        const adjustedTotalDevelopmentCosts = adjustedConstructionCosts + calculationResults.daApplicationFees + adjustedProfessionalFees + adjustedDevelopmentContribution;
+        
+        // Calculate finance costs using adjusted total development costs
+        const adjustedFinanceCosts = settings[density].interestRate * (projectDurationYears / 2) * adjustedTotalDevelopmentCosts;
+        
+        // Calculate residual land value before interest
+        const adjustedResidualBeforeInterest = adjustedNetRealisationAfterProfit - adjustedTotalDevelopmentCosts - calculationResults.landTax - adjustedFinanceCosts;
+        
+        // Calculate interest on purchase price
+        const lvrRate = 0.5; // 50% Loan to Value Ratio
+        const adjustedInterestOnPurchase = Math.abs(
+          adjustedResidualBeforeInterest - 
+          adjustedResidualBeforeInterest / 
+          (1 + settings[density].interestRate / 12 * calculationResults.projectPeriod * lvrRate)
+        );
+        
+        mainWs.addRow(['Interest on Purchase Price', '', adjustedInterestOnPurchase, 'Interest over full project period with 50% LVR on adjusted Residual Land Value']);
+      } else {
+        // For high density, use original formula
+        const lvrRate = 0.5; // 50% Loan to Value Ratio
+        mainWs.addRow(['Interest on Purchase Price', '', { formula: `ABS(C${netRealisationAfterProfitRow}-C${totalDevelopmentCostsRow}-C${landTaxRow}-C${financeRow}-(C${netRealisationAfterProfitRow}-C${totalDevelopmentCostsRow}-C${landTaxRow}-C${financeRow})/(1+C${interestRateRow}/12*${calculationResults.projectPeriod}*${lvrRate}))` }, 'Interest over full project period with 50% LVR']);
+      }
+      
+      // Acquisition Costs - 3% of (Residual Land Value - Interest on Purchase Price)
+      const acquisitionCostsRow = mainWs.rowCount + 1;
+      if (density === 'mediumDensity') {
+        // For medium density, recalculate Acquisition Costs using adjusted values
+        const minimumLotSize = 500; // 500m² per dwelling
+        const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
+        const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+        
+        // Recalculate everything from the beginning
+        // Adjusted gross realisation
+        const adjustedGrossRealisation = actualYield * settings[density].dwellingPrice;
+        
+        // Adjusted selling costs
+        const adjustedGst = adjustedGrossRealisation * 0.1;
+        const adjustedAgentsCommission = adjustedGrossRealisation * settings[density].agentsSalesCommission;
+        const adjustedLegalFees = adjustedGrossRealisation * settings[density].legalFeesOnSales;
+        const adjustedMarketingCosts = adjustedGrossRealisation * settings[density].marketingCosts;
+        
+        // Adjusted net realisation
+        const adjustedNetRealisation = adjustedGrossRealisation - adjustedGst - adjustedAgentsCommission - adjustedLegalFees - adjustedMarketingCosts;
+        
+        // Adjusted profit margin
+        const adjustedProfitMargin = adjustedNetRealisation * settings[density].profitAndRisk;
+        
+        // Adjusted net realisation after profit
+        const adjustedNetRealisationAfterProfit = adjustedNetRealisation - adjustedProfitMargin;
+        
+        // Adjusted GFA and construction costs
+        const adjustedGfa = actualYield * calculationResults.dwellingSize;
+        const adjustedConstructionCosts = adjustedGfa * calculationResults.constructionCostPerGfa;
+        const adjustedProfessionalFees = adjustedConstructionCosts * settings[density].professionalFees;
+        const adjustedDevelopmentContribution = adjustedConstructionCosts * settings[density].developmentContribution;
+        const adjustedTotalDevelopmentCosts = adjustedConstructionCosts + calculationResults.daApplicationFees + adjustedProfessionalFees + adjustedDevelopmentContribution;
+        
+        // Calculate finance costs using adjusted total development costs
+        const adjustedFinanceCosts = settings[density].interestRate * (projectDurationYears / 2) * adjustedTotalDevelopmentCosts;
+        
+        // Calculate residual land value before interest
+        const adjustedResidualBeforeInterest = adjustedNetRealisationAfterProfit - adjustedTotalDevelopmentCosts - calculationResults.landTax - adjustedFinanceCosts;
+        
+        // Calculate interest on purchase price
+        const lvrRate = 0.5; // 50% Loan to Value Ratio
+        const adjustedInterestOnPurchase = Math.abs(
+          adjustedResidualBeforeInterest - 
+          adjustedResidualBeforeInterest / 
+          (1 + settings[density].interestRate / 12 * calculationResults.projectPeriod * lvrRate)
+        );
+        
+        // Calculate acquisition costs (3% of residual land value minus interest)
+        const acquisitionRate = 0.03; // 3%
+        const adjustedAcquisitionCosts = acquisitionRate * (adjustedResidualBeforeInterest - adjustedInterestOnPurchase);
+        
+        mainWs.addRow(['Acquisition Costs', acquisitionRate, adjustedAcquisitionCosts, '3% of (Adjusted Residual Land Value - Interest on Purchase Price)']);
+      } else {
+        // For high density, use original formula
+        const acquisitionRate = 0.03; // 3%
+        mainWs.addRow(['Acquisition Costs', acquisitionRate, { formula: `${acquisitionRate}*(C${netRealisationAfterProfitRow}-C${totalDevelopmentCostsRow}-C${landTaxRow}-C${financeRow}-C${interestOnPurchaseRow})` }, '3% of (Residual Land Value - Interest on Purchase Price)']);
+      }
+      
+      // Residual Land Value section - Remove blank row and header
+      
+      // Residual Land Value Row - Update to include new costs
+      if (density === 'mediumDensity') {
+        // For medium density, calculate final Residual Land Value using adjusted values
+        const minimumLotSize = 500; // 500m² per dwelling
+        const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
+        const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+        
+        // Recalculate everything from the beginning
+        // Adjusted gross realisation
+        const adjustedGrossRealisation = actualYield * settings[density].dwellingPrice;
+        
+        // Adjusted selling costs
+        const adjustedGst = adjustedGrossRealisation * 0.1;
+        const adjustedAgentsCommission = adjustedGrossRealisation * settings[density].agentsSalesCommission;
+        const adjustedLegalFees = adjustedGrossRealisation * settings[density].legalFeesOnSales;
+        const adjustedMarketingCosts = adjustedGrossRealisation * settings[density].marketingCosts;
+        
+        // Adjusted net realisation
+        const adjustedNetRealisation = adjustedGrossRealisation - adjustedGst - adjustedAgentsCommission - adjustedLegalFees - adjustedMarketingCosts;
+        
+        // Adjusted profit margin
+        const adjustedProfitMargin = adjustedNetRealisation * settings[density].profitAndRisk;
+        
+        // Adjusted net realisation after profit
+        const adjustedNetRealisationAfterProfit = adjustedNetRealisation - adjustedProfitMargin;
+        
+        // Adjusted GFA and construction costs
+        const adjustedGfa = actualYield * calculationResults.dwellingSize;
+        const adjustedConstructionCosts = adjustedGfa * calculationResults.constructionCostPerGfa;
+        const adjustedProfessionalFees = adjustedConstructionCosts * settings[density].professionalFees;
+        const adjustedDevelopmentContribution = adjustedConstructionCosts * settings[density].developmentContribution;
+        const adjustedTotalDevelopmentCosts = adjustedConstructionCosts + calculationResults.daApplicationFees + adjustedProfessionalFees + adjustedDevelopmentContribution;
+        
+        // Calculate finance costs using adjusted total development costs
+        const adjustedFinanceCosts = settings[density].interestRate * (projectDurationYears / 2) * adjustedTotalDevelopmentCosts;
+        
+        // Calculate residual land value before interest
+        const adjustedResidualBeforeInterest = adjustedNetRealisationAfterProfit - adjustedTotalDevelopmentCosts - calculationResults.landTax - adjustedFinanceCosts;
+        
+        // Calculate interest on purchase price
+        const lvrRate = 0.5; // 50% Loan to Value Ratio
+        const adjustedInterestOnPurchase = Math.abs(
+          adjustedResidualBeforeInterest - 
+          adjustedResidualBeforeInterest / 
+          (1 + settings[density].interestRate / 12 * calculationResults.projectPeriod * lvrRate)
+        );
+        
+        // Calculate acquisition costs (3% of residual land value minus interest)
+        const acquisitionRate = 0.03; // 3%
+        const adjustedAcquisitionCosts = acquisitionRate * (adjustedResidualBeforeInterest - adjustedInterestOnPurchase);
+        
+        // Final residual land value
+        const adjustedResidualLandValue = adjustedResidualBeforeInterest - adjustedInterestOnPurchase - adjustedAcquisitionCosts;
+        
+        mainWs.addRow(['Residual Land Value', '', adjustedResidualLandValue, 'Adjusted Net Realisation after Profit - Adjusted Total Costs - Finance Costs - Land Tax - Interest on Purchase - Acquisition Costs']);
+      } else {
+        // For high density, use original formula
+        mainWs.addRow(['Residual Land Value', '', { formula: `C${netRealisationAfterProfitRow}-C${totalDevelopmentCostsRow}-C${landTaxRow}-C${financeRow}-C${interestOnPurchaseRow}-C${acquisitionCostsRow}` }, 'Net Realisation after Profit - Total Costs - Finance Costs - Land Tax - Interest on Purchase - Acquisition Costs']);
+      }
+      
+      // Set column widths
+      mainWs.columns = [
+        { width: 42 }, // A - Metric - Made wider as requested
+        { width: 15 }, // B - Assumption Value
+        { width: 30 }, // C - Value (with formulas) - Doubled width
+        { width: 60 }, // D - Calculation Method
+      ];
+      
+      // Format cells with numeric values
+      mainWs.getRow(7).getCell(3).numFmt = '#,##0'; // Site Area - removed " m²" since it's in column D
+      mainWs.getRow(8).getCell(3).numFmt = '0.00'; // FSR
+      mainWs.getRow(9).getCell(3).numFmt = '0.0'; // HOB - removed " m" since it's in column D
+      
+      mainWs.getRow(developableAreaRow).getCell(3).numFmt = '#,##0" m²"'; // Developable Area
+      mainWs.getRow(buildingFootprintRow).getCell(3).numFmt = '#,##0" m²"'; // Building Footprint
+      mainWs.getRow(gfaRow).getCell(3).numFmt = '#,##0" m²"'; // GFA
+      mainWs.getRow(developmentYieldRow).getCell(3).numFmt = '0" units"'; // Development Yield
+      
+      // Format percentage cells
+      mainWs.getRow(buildingFootprintRow).getCell(2).numFmt = '0.0%'; // Site Efficiency Ratio
+      mainWs.getRow(gstRow).getCell(2).numFmt = '0.0%'; // GST Rate
+      mainWs.getRow(agentsCommissionRow).getCell(2).numFmt = '0.0%'; // Agent's Commission
+      mainWs.getRow(legalFeesRow).getCell(2).numFmt = '0.0%'; // Legal Fees
+      mainWs.getRow(marketingCostsRow).getCell(2).numFmt = '0.0%'; // Marketing Costs
+      mainWs.getRow(profitMarginRow).getCell(2).numFmt = '0.0%'; // Profit and Risk
+      mainWs.getRow(interestRateRow).getCell(2).numFmt = '0.0%'; // Interest Rate
+      mainWs.getRow(interestRateRow).getCell(3).numFmt = '0.0%'; // Interest Rate in column C
+      mainWs.getRow(acquisitionCostsRow).getCell(2).numFmt = '0.0%'; // Acquisition Costs Rate
+      
+      // Format currency cells in column C
+      [
+        medianUnitPriceRow, totalGrossRealisationRow, 
+        gstRow, agentsCommissionRow, legalFeesRow, marketingCostsRow, netRealisationRow,
+        profitMarginRow, netRealisationAfterProfitRow,
+        constructionCostPerGfaRow, totalConstructionCostsRow, daApplicationFeesRow, 
+        professionalFeesRow, developmentContributionRow, totalDevelopmentCostsRow,
+        landTaxRow, financeRow, interestOnPurchaseRow, acquisitionCostsRow,
+        mainWs.rowCount // Residual Land Value row
+      ].forEach(row => {
+        mainWs.getRow(row).getCell(3).numFmt = '$#,##0';
       });
       
-      // Apply general cell style to all other cells to ensure Public Sans font
-      Object.keys(mainWs).forEach(cell => {
-        if (cell[0] === '!') return; // Skip special keys like !ref
-        if (!mainWs[cell].s) { // Only apply if no style exists
-          mainWs[cell].s = generalCellStyle;
+      // Apply styles to main worksheet
+      // Apply header style to first two rows
+      for (let row = 1; row <= 2; row++) {
+        for (let col = 1; col <= 4; col++) {
+          mainWs.getRow(row).getCell(col).fill = headerStyle.fill;
+          mainWs.getRow(row).getCell(col).font = headerStyle.font;
+          mainWs.getRow(row).getCell(col).alignment = headerStyle.alignment;
+        }
+      }
+      
+      // Apply section header style to section headers
+      // Only apply to Site Information, Development Metrics, and Feasibility Analysis
+      [4, initialMetricsRow, feasibilityAnalysisRow].forEach(row => {
+        for (let col = 1; col <= 4; col++) {
+          mainWs.getRow(row).getCell(col).fill = sectionHeaderStyle.fill;
+          mainWs.getRow(row).getCell(col).font = sectionHeaderStyle.font;
+          mainWs.getRow(row).getCell(col).alignment = sectionHeaderStyle.alignment;
         }
       });
-
-      // Create a worksheet for sensitivity analysis
-      const sensitivityWsData = [
-        ['Social/Affordable Housing Impact Analysis', '', '', ''],
-        ['', '', '', ''],
-        ['Percentage', 'Social Housing (0% revenue)', 'Affordable Housing (75% revenue)', '50/50 Mix'],
-      ];
-
-      // Add sensitivity data with proper number values, not formatted strings
+      
+      // Apply total row style to total rows
+      [totalGrossRealisationRow, netRealisationRow, netRealisationAfterProfitRow, totalDevelopmentCostsRow, mainWs.rowCount].forEach(row => {
+        mainWs.getRow(row).getCell(4).value = ''; // Clear explanatory text for total rows
+        
+        for (let col = 1; col <= 4; col++) {
+          mainWs.getRow(row).getCell(col).fill = totalRowStyle.fill;
+          mainWs.getRow(row).getCell(col).font = totalRowStyle.font;
+          mainWs.getRow(row).getCell(col).border = totalRowStyle.border;
+        }
+      });
+      
+      // ----------------- Sensitivity Worksheet -----------------
+      
+      // Add header and columns
+      sensitivityWs.addRow(['Social/Affordable Housing Impact Analysis', '', '', '']);
+      sensitivityWs.addRow(['', '', '', '']);
+      sensitivityWs.addRow(['Percentage', 'Social Housing (0% revenue)', 'Affordable Housing (75% revenue)', '50/50 Mix']);
+      
+      // Add data rows
       sensitivityData.housingImpact.data.forEach(dataPoint => {
-        sensitivityWsData.push([
+        sensitivityWs.addRow([
           dataPoint.percentage / 100, // Store as decimal for proper Excel percentage formatting
           dataPoint.socialResidualLandValue,
           dataPoint.affordableResidualLandValue,
           dataPoint.mixedResidualLandValue
         ]);
       });
-
-      // Add breakeven points
-      sensitivityWsData.push(['', '', '', '']);
-      sensitivityWsData.push(['Breakeven Points', '', '', '']);
+      
+      // Add breakeven section
+      sensitivityWs.addRow(['', '', '', '']);
+      const breakevenHeaderRow = sensitivityWs.addRow(['Breakeven Points', '', '', '']);
       
       const socialBreakeven = sensitivityData.housingImpact.breakeven?.social;
       const affordableBreakeven = sensitivityData.housingImpact.breakeven?.affordable;
       const mixedBreakeven = sensitivityData.housingImpact.breakeven?.mixed;
       
-      sensitivityWsData.push([
+      sensitivityWs.addRow([
         'Social Housing', 
         socialBreakeven ? `${socialBreakeven.units} units (${Math.round(socialBreakeven.percentage)}%)` : 'Site feasible at 100%',
         '', 
         ''
       ]);
       
-      sensitivityWsData.push([
+      sensitivityWs.addRow([
         'Affordable Housing', 
         affordableBreakeven ? `${affordableBreakeven.units} units (${Math.round(affordableBreakeven.percentage)}%)` : 'Site feasible at 100%',
         '', 
         ''
       ]);
       
-      sensitivityWsData.push([
+      sensitivityWs.addRow([
         'Mixed Housing', 
         mixedBreakeven ? `${mixedBreakeven.units} units (${Math.round(mixedBreakeven.percentage)}%)` : 'Site feasible at 100%',
         '', 
         ''
       ]);
-
-      // Create sensitivity worksheet
-      const sensitivityWs = XLSX.utils.aoa_to_sheet(sensitivityWsData);
-      
-      // Format percentage cells in the sensitivity sheet
-      const percentageCells = [];
-      for (let i = 4; i < sensitivityData.housingImpact.data.length + 4; i++) {
-        percentageCells.push(`A${i}`);
-      }
-      
-      percentageCells.forEach(cell => {
-        if (!sensitivityWs[cell]) return;
-        sensitivityWs[cell].z = '0%';
-        sensitivityWs[cell].t = 'n'; // Ensure numeric type
-      });
-      
-      // Format currency cells in the sensitivity sheet
-      for (let i = 4; i < sensitivityData.housingImpact.data.length + 4; i++) {
-        ['B', 'C', 'D'].forEach(col => {
-          const cell = `${col}${i}`;
-          if (!sensitivityWs[cell]) return;
-          sensitivityWs[cell].z = '"$"#,##0';
-          sensitivityWs[cell].t = 'n'; // Ensure numeric type
-        });
-      }
-
-      // Set column widths for sensitivity worksheet
-      const sensitivityWsCols = [
-        { wch: 20 }, // A
-        { wch: 25 }, // B
-        { wch: 30 }, // C
-        { wch: 25 }, // D
-      ];
-      sensitivityWs['!cols'] = sensitivityWsCols;
-
-      // Apply styles to sensitivity worksheet
-      // Header
-      if (sensitivityWs['A1']) {
-        sensitivityWs['A1'].s = headerStyle;
-      }
-
-      // Column headers
-      ['A3', 'B3', 'C3', 'D3'].forEach(cell => {
-        if (!sensitivityWs[cell]) return;
-        sensitivityWs[cell].s = {
-          font: { bold: true, name: "Public Sans" },
-          fill: { fgColor: { rgb: "E9EDF1" } }
-        };
-      });
-
-      // Breakeven section header
-      const breakevenRowIndex = 4 + sensitivityData.housingImpact.data.length + 1;
-      if (sensitivityWs[`A${breakevenRowIndex}`]) {
-        sensitivityWs[`A${breakevenRowIndex}`].s = sectionHeaderStyle;
-      }
-      
-      // Apply general cell style to all cells in sensitivity worksheet
-      Object.keys(sensitivityWs).forEach(cell => {
-        if (cell[0] === '!') return; // Skip special keys like !ref
-        if (!sensitivityWs[cell].s) { // Only apply if no style exists
-          sensitivityWs[cell].s = generalCellStyle;
-        }
-      });
-
-      // Create an Assumptions worksheet with all key parameters
-      const assumptionsData = [
-        ['Assumptions', '', '', ''],
-        ['', '', '', ''],
-        ['Parameter', 'Value', 'Description', 'Used In'],
-        // Development Parameters
-        ['Site Efficiency Ratio', settings[density].siteEfficiencyRatio, 'Building footprint as percentage of developable area', 'Building Footprint calculation'],
-        ['GBA to GFA Ratio', settings[density].gbaToGfaRatio, 'Efficiency of gross building area', 'GFA calculation from building area'],
-        ['Floor to Floor Height', settings[density].floorToFloorHeight, 'Height between floors in meters', 'GFA calculation based on HOB'],
-        ['', '', '', ''],
-        // Sales Parameters
-        ['GST Rate', 0.1, 'Goods and Services Tax rate', 'GST calculation'],
-        ['Agent\'s Commission', settings[density].agentsSalesCommission, 'Percentage of sales for agent commission', 'Agent\'s Commission calculation'],
-        ['Legal Fees', settings[density].legalFeesOnSales, 'Percentage of sales for legal costs', 'Legal Fees calculation'],
-        ['Marketing Costs', settings[density].marketingCosts, 'Percentage of sales for marketing', 'Marketing Costs calculation'],
-        ['', '', '', ''],
-        // Development Cost Parameters
-        ['Professional Fees', settings[density].professionalFees, 'Percentage of construction costs for professional services', 'Professional Fees calculation'],
-        ['Development Contribution', settings[density].developmentContribution, 'Percentage of construction costs for development contributions', 'Development Contribution calculation'],
-        ['', '', '', ''],
-        // Finance Parameters
-        ['Profit and Risk', settings[density].profitAndRisk, 'Profit margin as percentage of net realisation', 'Profit calculation'],
-        ['Interest Rate', settings[density].interestRate, 'Annual interest rate for finance costs', 'Finance Costs calculation'],
-        ['Project Period', calculationResults.projectPeriod / 12, 'Project duration in years', 'Finance Costs calculation'],
-        ['', '', '', ''],
-        // Other Assumptions
-        ['Unit Size (Medium Density)', density === 'mediumDensity' ? Math.floor(calculationResults.dwellingSize / 10) * 10 : 'N/A', 'Assumed unit size in m²', 'Development Yield calculation'],
-        ['Unit Size (High Density)', density === 'highDensity' ? 75 : 'N/A', 'Assumed unit size in m²', 'Development Yield calculation'],
-      ];
-
-      const assumptionsWs = XLSX.utils.aoa_to_sheet(assumptionsData);
-      
-      // Format percentage cells in the assumptions sheet
-      ['B4', 'B5', 'B9', 'B10', 'B11', 'B14', 'B15', 'B17', 'B18'].forEach(cell => {
-        if (!assumptionsWs[cell]) return;
-        assumptionsWs[cell].z = '0.0%';
-        assumptionsWs[cell].t = 'n'; // Ensure numeric type
-      });
-      
-      // Format numeric cells with appropriate formats
-      // Floor height with m suffix
-      if (assumptionsWs['B6']) {
-        assumptionsWs['B6'].z = '0.0" m"';
-        assumptionsWs['B6'].t = 'n';
-      }
-      
-      // Project period in years
-      if (assumptionsWs['B19']) {
-        assumptionsWs['B19'].z = '0.0" years"';
-        assumptionsWs['B19'].t = 'n';
-      }
-      
-      // Unit sizes with m² suffix
-      ['B21', 'B22'].forEach(cell => {
-        if (!assumptionsWs[cell] || assumptionsWs[cell].v === 'N/A') return;
-        assumptionsWs[cell].z = '0" m²"';
-        assumptionsWs[cell].t = 'n';
-      });
-      
-      // Set column widths for assumptions worksheet
-      const assumptionsWsCols = [
-        { wch: 25 }, // A - Parameter
-        { wch: 15 }, // B - Value
-        { wch: 40 }, // C - Description
-        { wch: 30 }, // D - Used In
-      ];
-      assumptionsWs['!cols'] = assumptionsWsCols;
-
-      // Apply styles to assumptions worksheet
-      // Main header
-      if (assumptionsWs['A1']) {
-        assumptionsWs['A1'].s = headerStyle;
-      }
-
-      // Column headers
-      ['A3', 'B3', 'C3', 'D3'].forEach(cell => {
-        if (!assumptionsWs[cell]) return;
-        assumptionsWs[cell].s = {
-          font: { bold: true, name: "Public Sans" },
-          fill: { fgColor: { rgb: "E9EDF1" } }
-        };
-      });
-      
-      // Parameter section headers - add dark blue background to empty rows preceding sections
-      ['A7', 'A12', 'A16', 'A20'].forEach(cell => {
-        if (!assumptionsWs[cell]) return;
-        assumptionsWs[cell].s = {
-          fill: { fgColor: { rgb: "D6DCE4" } }
-        };
-        
-        // Apply to whole row
-        ['B', 'C', 'D'].forEach(col => {
-          const rowCell = `${col}${cell.substring(1)}`;
-          if (!assumptionsWs[rowCell]) return;
-          assumptionsWs[rowCell].s = {
-            fill: { fgColor: { rgb: "D6DCE4" } }
-          };
-        });
-      });
-      
-      // Apply general cell style to all cells in assumptions worksheet
-      Object.keys(assumptionsWs).forEach(cell => {
-        if (cell[0] === '!') return; // Skip special keys like !ref
-        // Add Public Sans font to all cells if no style exists
-        if (!assumptionsWs[cell].s) {
-          assumptionsWs[cell].s = generalCellStyle;
-        } else {
-          // Ensure Public Sans font is applied to cells with existing styles
-          assumptionsWs[cell].s.font = {
-            ...(assumptionsWs[cell].s.font || {}),
-            name: "Public Sans"
-          };
-        }
-      });
-
-      // Now update the main calculation sheet formulas to reference the assumptions sheet
-      // Replace the formulas in the main worksheet with references to the Assumptions sheet
-      mainWs['B14'] = { f: 'B11*Assumptions!B8', t: 'n', z: '"$"#,##0' }; // GST
-      mainWs['B15'] = { f: 'B11*Assumptions!B9', t: 'n', z: '"$"#,##0' }; // Agent's Commission
-      mainWs['B16'] = { f: 'B11*Assumptions!B10', t: 'n', z: '"$"#,##0' }; // Legal Fees
-      mainWs['B17'] = { f: 'B11*Assumptions!B11', t: 'n', z: '"$"#,##0' }; // Marketing Costs
-      mainWs['B21'] = { f: 'B18*Assumptions!B17', t: 'n', z: '"$"#,##0' }; // Profit Margin
-      mainWs['B28'] = { f: 'B26*Assumptions!B14', t: 'n', z: '"$"#,##0' }; // Professional Fees
-      mainWs['B29'] = { f: 'B26*Assumptions!B15', t: 'n', z: '"$"#,##0' }; // Development Contribution
-      mainWs['B35'] = { f: 'Assumptions!B18*Assumptions!B19*B30', t: 'n', z: '"$"#,##0' }; // Finance Costs
-      
-      // Update the calculation descriptions to reference the Assumptions sheet
-      mainWs['C14'] = { v: 'Total Gross Realisation × GST Rate (see Assumptions)', t: 's' };
-      mainWs['C15'] = { v: 'Total Gross Realisation × Agent\'s Commission (see Assumptions)', t: 's' };
-      mainWs['C16'] = { v: 'Total Gross Realisation × Legal Fees (see Assumptions)', t: 's' };
-      mainWs['C17'] = { v: 'Total Gross Realisation × Marketing Costs (see Assumptions)', t: 's' };
-      mainWs['C21'] = { v: 'Net Realisation × Profit and Risk (see Assumptions)', t: 's' };
-      mainWs['C28'] = { v: 'Construction Costs × Professional Fees (see Assumptions)', t: 's' };
-      mainWs['C29'] = { v: 'Construction Costs × Development Contribution (see Assumptions)', t: 's' };
-      mainWs['C35'] = { v: 'Interest Rate × Project Period × Total Development Costs (see Assumptions)', t: 's' };
-
-      // Add worksheets to workbook
-      XLSX.utils.book_append_sheet(wb, mainWs, 'Feasibility Calculation');
-      XLSX.utils.book_append_sheet(wb, assumptionsWs, 'Assumptions');
-      XLSX.utils.book_append_sheet(wb, sensitivityWs, 'Sensitivity Analysis');
-
-      // If LMR comparison is available, add a worksheet for it
-      if (lmrResults && lmrOptions?.isInLMRArea) {
-        const lmrWsData = [
-          ['LMR Impact Analysis', '', '', ''],
-          ['', '', '', ''],
-          ['Metric', 'Current', 'LMR', 'Difference'],
-          ['GFA', calculationResults.gfa, lmrResults.gfa, { f: 'C4-B4' }],
-          ['Development Yield', calculationResults.developmentYield, lmrResults.developmentYield, { f: 'C5-B5' }],
-          ['Net Realisation', calculationResults.netRealisation, lmrResults.netRealisation, { f: 'C6-B6' }],
-          ['Residual Land Value', calculationResults.residualLandValue, lmrResults.residualLandValue, { f: 'C7-B7' }],
-        ];
-
-        const lmrWs = XLSX.utils.aoa_to_sheet(lmrWsData);
-        
-        // Pre-calculate formula results for LMR comparison
-        lmrWs['D4'].v = lmrResults.gfa - calculationResults.gfa;
-        lmrWs['D5'].v = lmrResults.developmentYield - calculationResults.developmentYield;
-        lmrWs['D6'].v = lmrResults.netRealisation - calculationResults.netRealisation;
-        lmrWs['D7'].v = lmrResults.residualLandValue - calculationResults.residualLandValue;
-        
-        // Format cells
-        // GFA with m² suffix
-        ['B4', 'C4'].forEach(cell => {
-          if (!lmrWs[cell]) return;
-          lmrWs[cell].z = '#,##0" m²"';
-          lmrWs[cell].t = 'n'; // Ensure numeric type
-        });
-        
-        // Units suffix
-        ['B5', 'C5'].forEach(cell => {
-          if (!lmrWs[cell]) return;
-          lmrWs[cell].z = '0" units"';
-          lmrWs[cell].t = 'n'; // Ensure numeric type
-        });
-        
-        // Currency format
-        ['B6', 'C6', 'B7', 'C7', 'D6', 'D7'].forEach(cell => {
-          if (!lmrWs[cell]) return;
-          lmrWs[cell].z = '"$"#,##0';
-          lmrWs[cell].t = 'n'; // Ensure numeric type
-        });
-        
-        // Custom format for difference in GFA
-        if (lmrWs['D4']) {
-          lmrWs['D4'].z = '+#,##0" m²";-#,##0" m²"';
-          lmrWs['D4'].t = 'n'; // Ensure numeric type
-        }
-        
-        // Custom format for difference in units
-        if (lmrWs['D5']) {
-          lmrWs['D5'].z = '+0" units";-0" units"';
-          lmrWs['D5'].t = 'n'; // Ensure numeric type
-        }
-        
-        // Set column widths
-        const lmrWsCols = [
-          { wch: 20 }, // A
-          { wch: 20 }, // B
-          { wch: 20 }, // C
-          { wch: 20 }, // D
-        ];
-        lmrWs['!cols'] = lmrWsCols;
-
-        // Apply styles to LMR worksheet
-        // Header
-        if (lmrWs['A1']) {
-          lmrWs['A1'].s = headerStyle;
-        }
-
-        // Column headers
-        ['A3', 'B3', 'C3', 'D3'].forEach(cell => {
-          if (!lmrWs[cell]) return;
-          lmrWs[cell].s = {
-            font: { bold: true, name: "Public Sans" },
-            fill: { fgColor: { rgb: "E9EDF1" } }
-          };
-        });
-
-        // Highlight the Residual Land Value row with bold top border
-        ['A7', 'B7', 'C7', 'D7'].forEach(cell => {
-          if (!lmrWs[cell]) return;
-          lmrWs[cell].s = {
-            font: { bold: true, name: "Public Sans" },
-            border: {
-              top: { style: "medium", color: { rgb: "0C2340" } } // Bold top border
-            }
-          };
-        });
-
-        // Apply conditional formatting for positive/negative differences
-        ['D4', 'D5', 'D6', 'D7'].forEach(cell => {
-          if (!lmrWs[cell]) return;
-          const cellValue = lmrWs[cell].v;
-          if (cellValue > 0) {
-            lmrWs[cell].s = {
-              ...(lmrWs[cell].s || {}),
-              font: { ...(lmrWs[cell].s?.font || {}), color: { rgb: "008800" }, name: "Public Sans" }
-            };
-          } else if (cellValue < 0) {
-            lmrWs[cell].s = {
-              ...(lmrWs[cell].s || {}),
-              font: { ...(lmrWs[cell].s?.font || {}), color: { rgb: "CC0000" }, name: "Public Sans" }
-            };
-          }
-        });
-        
-        // Apply general cell style to all cells in LMR worksheet
-        Object.keys(lmrWs).forEach(cell => {
-          if (cell[0] === '!') return; // Skip special keys like !ref
-          if (!lmrWs[cell].s) { // Only apply if no style exists
-            lmrWs[cell].s = generalCellStyle;
-          }
-        });
-
-        XLSX.utils.book_append_sheet(wb, lmrWs, 'LMR Comparison');
-      }
-
-      // Add a site information worksheet
-      const siteInfoData = [
-        ['Site Information', '', ''],
-        ['', '', ''],
-        ['Property', 'Value', 'Notes'],
-        ['Site Area', calculationResults.siteArea, 'Square meters'],
-        ['Developable Area', calculationResults.developableArea, 'After excluding constraints'],
-        ['Zone', selectedFeature?.properties?.copiedFrom?.site_suitability__zone || 'N/A', ''],
-        ['FSR', calculationResults.fsr, ''],
-        ['HOB', calculationResults.hob || 'N/A', 'Meters'],
-        ['', '', ''],
-        ['Development Controls', '', ''],
-        ['Density Type', density === 'mediumDensity' ? 'Medium Density' : 'High Density', ''],
-        ['Site Efficiency Ratio', settings[density].siteEfficiencyRatio, 'Building footprint as percentage of developable area'],
-        ['GBA to GFA Ratio', settings[density].gbaToGfaRatio, 'Efficiency of gross building area'],
-        ['Floor to Floor Height', settings[density].floorToFloorHeight, 'Meters'],
-        ['Profit and Risk Margin', settings[density].profitAndRisk, ''],
-        ['Interest Rate', settings[density].interestRate, 'Annual rate'],
-        ['Project Period', calculationResults.projectPeriod, 'Months'],
-      ];
-
-      const siteInfoWs = XLSX.utils.aoa_to_sheet(siteInfoData);
-      
-      // Format cells
-      // Area values with m² suffix
-      ['B4', 'B5'].forEach(cell => {
-        if (!siteInfoWs[cell]) return;
-        siteInfoWs[cell].z = '#,##0" m²"';
-        siteInfoWs[cell].t = 'n'; // Ensure numeric type
-      });
-      
-      // Percentage values
-      ['B12', 'B13', 'B15', 'B16'].forEach(cell => {
-        if (!siteInfoWs[cell]) return;
-        siteInfoWs[cell].z = '0.0%';
-        siteInfoWs[cell].t = 'n'; // Ensure numeric type
-      });
-      
-      // FSR value
-      if (siteInfoWs['B7']) {
-        siteInfoWs['B7'].t = 'n'; // Ensure numeric type
-        siteInfoWs['B7'].z = '0.0"; : 1"'; // Format as "1.3 : 1"
-      }
-      
-      // HOB with m suffix
-      if (siteInfoWs['B8'] && siteInfoWs['B8'].v !== 'N/A') {
-        siteInfoWs['B8'].z = '0" m"';
-        siteInfoWs['B8'].t = 'n'; // Ensure numeric type
-      }
-      
-      // Floor height with m suffix
-      if (siteInfoWs['B14']) {
-        siteInfoWs['B14'].z = '0.0" m"';
-        siteInfoWs['B14'].t = 'n'; // Ensure numeric type
-      }
-      
-      // Project period with "months" suffix
-      if (siteInfoWs['B17']) {
-        siteInfoWs['B17'].z = '0" months"';
-        siteInfoWs['B17'].t = 'n'; // Ensure numeric type
-      }
       
       // Set column widths
-      const siteInfoWsCols = [
-        { wch: 25 }, // A
-        { wch: 25 }, // B
-        { wch: 40 }, // C
+      sensitivityWs.columns = [
+        { width: 20 }, // A
+        { width: 25 }, // B
+        { width: 30 }, // C
+        { width: 25 }, // D
       ];
-      siteInfoWs['!cols'] = siteInfoWsCols;
-
-      // Apply styles to site info worksheet
-      // Headers
-      ['A1', 'A10'].forEach(cell => {
-        if (!siteInfoWs[cell]) return;
-        siteInfoWs[cell].s = headerStyle;
-      });
-
-      // Column headers
-      ['A3', 'B3', 'C3'].forEach(cell => {
-        if (!siteInfoWs[cell]) return;
-        siteInfoWs[cell].s = {
-          font: { bold: true, name: "Public Sans" },
-          fill: { fgColor: { rgb: "E9EDF1" } }
-        };
-      });
       
-      // Apply general cell style to all cells in site info worksheet
-      Object.keys(siteInfoWs).forEach(cell => {
-        if (cell[0] === '!') return; // Skip special keys like !ref
-        if (!siteInfoWs[cell].s) { // Only apply if no style exists
-          siteInfoWs[cell].s = generalCellStyle;
+      // Format percentage cells
+      for (let i = 4; i < sensitivityData.housingImpact.data.length + 4; i++) {
+        sensitivityWs.getRow(i).getCell(1).numFmt = '0%';
+      }
+      
+      // Format currency cells
+      for (let i = 4; i < sensitivityData.housingImpact.data.length + 4; i++) {
+        for (let col = 2; col <= 4; col++) {
+          sensitivityWs.getRow(i).getCell(col).numFmt = '$#,##0';
         }
-      });
-
-      XLSX.utils.book_append_sheet(wb, siteInfoWs, 'Site Information');
+      }
       
+      // Apply styles to sensitivity worksheet
+      // Header row
+      for (let col = 1; col <= 4; col++) {
+        sensitivityWs.getRow(1).getCell(col).fill = headerStyle.fill;
+        sensitivityWs.getRow(1).getCell(col).font = headerStyle.font;
+        sensitivityWs.getRow(1).getCell(col).alignment = headerStyle.alignment;
+      }
+      
+      // Column headers
+      for (let col = 1; col <= 4; col++) {
+        sensitivityWs.getRow(3).getCell(col).fill = sectionHeaderStyle.fill;
+        sensitivityWs.getRow(3).getCell(col).font = sectionHeaderStyle.font;
+        sensitivityWs.getRow(3).getCell(col).alignment = sectionHeaderStyle.alignment;
+      }
+      
+      // Breakeven headers
+      const breakevenRowIndex = 4 + sensitivityData.housingImpact.data.length + 1;
+      for (let col = 1; col <= 4; col++) {
+        sensitivityWs.getRow(breakevenRowIndex).getCell(col).fill = sectionHeaderStyle.fill;
+        sensitivityWs.getRow(breakevenRowIndex).getCell(col).font = sectionHeaderStyle.font;
+        sensitivityWs.getRow(breakevenRowIndex).getCell(col).alignment = sectionHeaderStyle.alignment;
+      }
+      
+      // ----------------- LMR Comparison Worksheet (if applicable) -----------------
+      if (lmrWs && lmrResults && lmrOptions?.isInLMRArea) {
+        // Add headers
+        lmrWs.addRow(['LMR Comparison Analysis', '', '', '']);
+        lmrWs.addRow(['', '', '', '']);
+        
+        lmrWs.addRow(['Parameter', 'Current Controls', 'LMR Controls', 'Difference']);
+        lmrWs.addRow(['', '', '', '']);
+        
+        // Development metrics comparison
+        lmrWs.addRow(['Development Metrics', '', '', '']);
+        
+        const currentResults = calculationResults;
+        lmrWs.addRow(['FSR', currentResults.fsr, lmrResults.fsr, lmrResults.fsr - currentResults.fsr]);
+        lmrWs.addRow(['HOB (m)', currentResults.hob, lmrResults.hob, lmrResults.hob - currentResults.hob]);
+        lmrWs.addRow(['GFA (m²)', Math.round(currentResults.gfa), Math.round(lmrResults.gfa), Math.round(lmrResults.gfa - currentResults.gfa)]);
+        lmrWs.addRow(['Development Yield (units)', currentResults.developmentYield, lmrResults.developmentYield, lmrResults.developmentYield - currentResults.developmentYield]);
+        lmrWs.addRow(['', '', '', '']);
+        
+        // Financial outcomes comparison
+        lmrWs.addRow(['Financial Outcomes', '', '', '']);
+        lmrWs.addRow(['Gross Realisation', currentResults.totalGrossRealisation, lmrResults.totalGrossRealisation, lmrResults.totalGrossRealisation - currentResults.totalGrossRealisation]);
+        lmrWs.addRow(['Net Realisation', currentResults.netRealisation, lmrResults.netRealisation, lmrResults.netRealisation - currentResults.netRealisation]);
+        lmrWs.addRow(['Construction Costs', currentResults.constructionCosts, lmrResults.constructionCosts, lmrResults.constructionCosts - currentResults.constructionCosts]);
+        lmrWs.addRow(['Total Development Costs', currentResults.totalDevelopmentCosts, lmrResults.totalDevelopmentCosts, lmrResults.totalDevelopmentCosts - currentResults.totalDevelopmentCosts]);
+        lmrWs.addRow(['Residual Land Value', currentResults.residualLandValue, lmrResults.residualLandValue, lmrResults.residualLandValue - currentResults.residualLandValue]);
+        
+        // Format LMR worksheet columns
+        lmrWs.columns = [
+          { width: 30 }, // A
+          { width: 20 }, // B
+          { width: 20 }, // C
+          { width: 20 }, // D
+        ];
+        
+        // Apply styles to LMR worksheet
+        // Header
+        for (let col = 1; col <= 4; col++) {
+          lmrWs.getRow(1).getCell(col).fill = headerStyle.fill;
+          lmrWs.getRow(1).getCell(col).font = headerStyle.font;
+          lmrWs.getRow(1).getCell(col).alignment = headerStyle.alignment;
+        }
+        
+        // Section headers and column headers
+        [3, 5, 11].forEach(row => {
+          for (let col = 1; col <= 4; col++) {
+            lmrWs.getRow(row).getCell(col).fill = sectionHeaderStyle.fill;
+            lmrWs.getRow(row).getCell(col).font = sectionHeaderStyle.font;
+            lmrWs.getRow(row).getCell(col).alignment = sectionHeaderStyle.alignment;
+          }
+        });
+        
+        // Format currency cells
+        [12, 13, 14, 15, 16].forEach(row => {
+          for (let col = 2; col <= 4; col++) {
+            lmrWs.getRow(row).getCell(col).numFmt = '$#,##0';
+          }
+        });
+        
+        // Format numeric cells
+        [6, 8, 9].forEach(row => {
+          for (let col = 2; col <= 4; col++) {
+            if (row === 6) {
+              lmrWs.getRow(row).getCell(col).numFmt = '0.00';
+            } else if (row === 8) {
+              lmrWs.getRow(row).getCell(col).numFmt = '#,##0" m²"';
+            } else {
+              lmrWs.getRow(row).getCell(col).numFmt = '#,##0" units"';
+            }
+          }
+        });
+        
+        // Format height cells
+        for (let col = 2; col <= 4; col++) {
+          lmrWs.getRow(7).getCell(col).numFmt = '0.0" m"';
+        }
+        
+        // Apply conditional formatting to difference column
+        for (let row = 6; row <= 16; row++) {
+          if (row === 10) continue; // Skip the empty row
+          
+          const cell = lmrWs.getRow(row).getCell(4);
+          const value = cell.value;
+          
+          if (typeof value === 'number') {
+            if (value > 0) {
+              cell.font = { color: { argb: '006100' } };
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'C6EFCE' } };
+            } else if (value < 0) {
+              cell.font = { color: { argb: '9C0006' } };
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC7CE' } };
+            }
+          }
+        }
+      }
+
       // Generate Excel file
-      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const excelBuffer = await wb.xlsx.writeBuffer();
       const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       
       // Save the file
@@ -1165,42 +1190,108 @@ const FeasibilityCalculation = ({
             </tr>
             <tr>
               <td className="py-2 px-4 border-t border-gray-200">Gross Floor Area (GFA)</td>
-              <td className="py-2 px-4 border-t border-gray-200">{Math.round(calculationResults.gfa).toLocaleString()} m²</td>
+              <td className="py-2 px-4 border-t border-gray-200">
+                {density === 'mediumDensity' ? (
+                  // For medium density, recalculate GFA based on lot size limitations
+                  (() => {
+                    const minimumLotSize = 500; // 500m² per dwelling
+                    const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
+                    const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+                    const adjustedGfa = actualYield * calculationResults.dwellingSize;
+                    return `${Math.round(adjustedGfa).toLocaleString()} m²`;
+                  })()
+                ) : (
+                  // For high density, use existing GFA
+                  `${Math.round(calculationResults.gfa).toLocaleString()} m²`
+                )}
+              </td>
               <td className="py-2 px-4 border-t border-gray-200 text-sm">
-                {!calculationResults.hob 
-                  ? `FSR ${calculationResults.fsr}:1 (${Math.round(calculationResults.siteArea).toLocaleString()} m² × ${calculationResults.fsr} = ${Math.round(calculationResults.gfa).toLocaleString()} m²)`
-                  : (
-                    <div>
-                      <div>Minimum of two calculations:</div>
-                      <div 
-                        className="cursor-help hover:text-blue-600" 
-                        title={`${Math.round(calculationResults.siteArea).toLocaleString()} m² × ${calculationResults.fsr} = ${Math.round(calculationResults.gfaUnderFsr).toLocaleString()} m²`}
-                      >
-                        1) FSR approach: {Math.round(calculationResults.gfaUnderFsr).toLocaleString()} m²
+                {density === 'mediumDensity' ? (
+                  // For medium density, calculate based on lot size limitations
+                  (() => {
+                    const minimumLotSize = 500; // 500m² per dwelling
+                    const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
+                    const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+                    
+                    return (
+                      <div>
+                        <div>For Medium Density, GFA is based on lot size constraints:</div>
+                        <div>1) Maximum lots: {maxDwellingsByLotSize} (based on {Math.round(calculationResults.developableArea).toLocaleString()} m² ÷ {minimumLotSize} m² min lot size)</div>
+                        <div>2) Actual dwellings: {actualYield} units</div>
+                        <div>3) GFA per dwelling: {Math.round(calculationResults.dwellingSize).toLocaleString()} m²</div>
+                        <div className="mt-1">
+                          Final GFA = {actualYield} units × {Math.round(calculationResults.dwellingSize).toLocaleString()} m² = {Math.round(actualYield * calculationResults.dwellingSize).toLocaleString()} m²
+                        </div>
                       </div>
-                      <div 
-                        className="cursor-help hover:text-blue-600" 
-                        title={`${Math.round(calculationResults.developableArea).toLocaleString()} m² site area × ${formatPercentage(settings[density].siteEfficiencyRatio)} building footprint × ${density === 'mediumDensity' ? 'min(3, ' : ''}${Math.floor(calculationResults.hob / settings[density].floorToFloorHeight)}${density === 'mediumDensity' ? ')' : ''} storeys × ${formatPercentage(settings[density].gbaToGfaRatio)} efficiency = ${Math.round(calculationResults.gfaUnderHob).toLocaleString()} m²`}
-                      >
-                        2) HOB approach: {Math.round(calculationResults.gfaUnderHob).toLocaleString()} m² {density === 'mediumDensity' ? '(capped at 3 storeys)' : ''}
+                    );
+                  })()
+                ) : (
+                  // For high density, keep existing calculation
+                  !calculationResults.hob 
+                    ? `FSR ${calculationResults.fsr}:1 (${Math.round(calculationResults.siteArea).toLocaleString()} m² × ${calculationResults.fsr} = ${Math.round(calculationResults.gfa).toLocaleString()} m²)`
+                    : (
+                      <div>
+                        <div>Minimum of two calculations:</div>
+                        <div 
+                          className="cursor-help hover:text-blue-600" 
+                          title={`${Math.round(calculationResults.siteArea).toLocaleString()} m² × ${calculationResults.fsr} = ${Math.round(calculationResults.gfaUnderFsr).toLocaleString()} m²`}
+                        >
+                          1) FSR approach: {Math.round(calculationResults.gfaUnderFsr).toLocaleString()} m²
+                        </div>
+                        <div 
+                          className="cursor-help hover:text-blue-600" 
+                          title={`${Math.round(calculationResults.developableArea).toLocaleString()} m² site area × ${formatPercentage(settings[density].siteEfficiencyRatio)} building footprint × ${Math.floor(calculationResults.hob / settings[density].floorToFloorHeight)} storeys × ${formatPercentage(settings[density].gbaToGfaRatio)} efficiency = ${Math.round(calculationResults.gfaUnderHob).toLocaleString()} m²`}
+                        >
+                          2) HOB approach: {Math.round(calculationResults.gfaUnderHob).toLocaleString()} m²
+                        </div>
+                        <div className="mt-1">
+                          Final GFA = {Math.round(calculationResults.gfa).toLocaleString()} m² 
+                          <span className="text-gray-500 ml-1">
+                            ({calculationResults.gfaUnderFsr <= calculationResults.gfaUnderHob ? 'FSR is more restrictive' : 'Height limit is more restrictive'})
+                          </span>
+                        </div>
                       </div>
-                      <div className="mt-1">
-                        Final GFA = {Math.round(calculationResults.gfa).toLocaleString()} m² 
-                        <span className="text-gray-500 ml-1">
-                          ({calculationResults.gfaUnderFsr <= calculationResults.gfaUnderHob ? 'FSR is more restrictive' : 'Height limit is more restrictive'})
-                        </span>
-                      </div>
-                    </div>
-                  )
-                }
+                    )
+                )}
               </td>
             </tr>
             <tr>
               <td className="py-2 px-4 border-t border-gray-200">Development Yield</td>
-              <td className="py-2 px-4 border-t border-gray-200">{calculationResults.developmentYield} units</td>
+              <td className="py-2 px-4 border-t border-gray-200">
+                {density === 'mediumDensity' ? (
+                  // For medium density, apply minimum lot size constraint
+                  (() => {
+                    const minimumLotSize = 500; // 500m² per dwelling
+                    const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
+                    const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+                    return actualYield;
+                  })()
+                ) : (
+                  calculationResults.developmentYield 
+                )} units
+              </td>
               <td className="py-2 px-4 border-t border-gray-200 text-sm">
-                Total NSA ({Math.round(calculationResults.nsa).toLocaleString()} m²) ÷ 
-                Assumed Unit Size ({density === 'highDensity' ? '75' : Math.floor(calculationResults.dwellingSize / 10) * 10} m²)
+                {density === 'mediumDensity' ? (
+                  (() => {
+                    const minimumLotSize = 500; // 500m² per dwelling
+                    const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
+                    return (
+                      <div>
+                        Limited by:
+                        <ul className="list-disc ml-5 mt-1">
+                          <li>NSA calculation: {calculationResults.developmentYield} units</li>
+                          <li>Lot constraint: {maxDwellingsByLotSize} units @ 500m² min lot size</li>
+                        </ul>
+                        <div className="text-sm text-gray-600 mt-1">
+                          Final yield: {Math.min(calculationResults.developmentYield, maxDwellingsByLotSize)} units
+                        </div>
+                      </div>
+                    );
+                  })()
+                ) : (
+                  `Total NSA (${Math.round(calculationResults.nsa).toLocaleString()} m²) ÷ 
+                  Assumed Unit Size (${density === 'highDensity' ? '75' : Math.floor(calculationResults.dwellingSize / 10) * 10} m²)`
+                )}
               </td>
             </tr>
             
@@ -1215,7 +1306,19 @@ const FeasibilityCalculation = ({
             </tr>
             <tr className="bg-gray-200">
               <td className="py-2 px-4 border-t border-gray-200 font-bold">Total Gross Realisation</td>
-              <td className="py-2 px-4 border-t border-gray-200 font-bold">{formatCurrency(calculationResults.totalGrossRealisation)}</td>
+              <td className="py-2 px-4 border-t border-gray-200 font-bold">
+                {density === 'mediumDensity' ? (
+                  // For medium density, recalculate using constrained development yield
+                  (() => {
+                    const minimumLotSize = 500; // 500m² per dwelling
+                    const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
+                    const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+                    return formatCurrency(actualYield * settings[density].dwellingPrice);
+                  })()
+                ) : (
+                  formatCurrency(calculationResults.totalGrossRealisation)
+                )}
+              </td>
               <td className="py-2 px-4 border-t border-gray-200 text-sm">Development Yield × Median Unit Price</td>
             </tr>
             
@@ -1245,7 +1348,28 @@ const FeasibilityCalculation = ({
             </tr>
             <tr className="bg-gray-200">
               <td className="py-2 px-4 border-t border-gray-200 font-bold">Net Realisation</td>
-              <td className="py-2 px-4 border-t border-gray-200 font-bold">{formatCurrency(calculationResults.netRealisation)}</td>
+              <td className="py-2 px-4 border-t border-gray-200 font-bold">
+                {density === 'mediumDensity' ? (
+                  // For medium density, recalculate using constrained gross realisation
+                  (() => {
+                    const minimumLotSize = 500; // 500m² per dwelling
+                    const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
+                    const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+                    const adjustedGrossRealisation = actualYield * settings[density].dwellingPrice;
+                    
+                    // Recalculate GST and selling costs based on adjusted gross realisation
+                    const adjustedGst = adjustedGrossRealisation * 0.1;
+                    const adjustedAgentsCommission = adjustedGrossRealisation * settings[density].agentsSalesCommission;
+                    const adjustedLegalFees = adjustedGrossRealisation * settings[density].legalFeesOnSales;
+                    const adjustedMarketingCosts = adjustedGrossRealisation * settings[density].marketingCosts;
+                    
+                    // Calculate adjusted net realisation
+                    return formatCurrency(adjustedGrossRealisation - adjustedGst - adjustedAgentsCommission - adjustedLegalFees - adjustedMarketingCosts);
+                  })()
+                ) : (
+                  formatCurrency(calculationResults.netRealisation)
+                )}
+              </td>
               <td className="py-2 px-4 border-t border-gray-200 text-sm">Total Gross Realisation - GST - Commission - Legal - Marketing</td>
             </tr>
             
@@ -1260,7 +1384,34 @@ const FeasibilityCalculation = ({
             </tr>
             <tr className="bg-gray-200">
               <td className="py-2 px-4 border-t border-gray-200 font-bold">Net Realisation after Profit</td>
-              <td className="py-2 px-4 border-t border-gray-200 font-bold">{formatCurrency(calculationResults.netRealisationAfterProfitAndRisk)}</td>
+              <td className="py-2 px-4 border-t border-gray-200 font-bold">
+                {density === 'mediumDensity' ? (
+                  // For medium density, recalculate based on adjusted net realisation
+                  (() => {
+                    const minimumLotSize = 500; // 500m² per dwelling
+                    const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
+                    const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+                    const adjustedGrossRealisation = actualYield * settings[density].dwellingPrice;
+                    
+                    // Recalculate GST and selling costs based on adjusted gross realisation
+                    const adjustedGst = adjustedGrossRealisation * 0.1;
+                    const adjustedAgentsCommission = adjustedGrossRealisation * settings[density].agentsSalesCommission;
+                    const adjustedLegalFees = adjustedGrossRealisation * settings[density].legalFeesOnSales;
+                    const adjustedMarketingCosts = adjustedGrossRealisation * settings[density].marketingCosts;
+                    
+                    // Calculate adjusted net realisation
+                    const adjustedNetRealisation = adjustedGrossRealisation - adjustedGst - adjustedAgentsCommission - adjustedLegalFees - adjustedMarketingCosts;
+                    
+                    // Calculate profit margin
+                    const adjustedProfitMargin = adjustedNetRealisation * settings[density].profitAndRisk;
+                    
+                    // Calculate net realisation after profit
+                    return formatCurrency(adjustedNetRealisation - adjustedProfitMargin);
+                  })()
+                ) : (
+                  formatCurrency(calculationResults.netRealisationAfterProfitAndRisk)
+                )}
+              </td>
               <td className="py-2 px-4 border-t border-gray-200 text-sm">Net Realisation - Profit Margin</td>
             </tr>
             
@@ -1275,8 +1426,37 @@ const FeasibilityCalculation = ({
             </tr>
             <tr>
               <td className="py-2 px-4 border-t border-gray-200">Total Construction Costs</td>
-              <td className="py-2 px-4 border-t border-gray-200">{formatCurrency(calculationResults.constructionCosts)}</td>
-              <td className="py-2 px-4 border-t border-gray-200 text-sm">Construction Cost per m² × Total GFA</td>
+              <td className="py-2 px-4 border-t border-gray-200">
+                {density === 'mediumDensity' ? (
+                  // For medium density, recalculate construction costs based on adjusted GFA
+                  (() => {
+                    const minimumLotSize = 500; // 500m² per dwelling
+                    const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
+                    const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+                    const adjustedGfa = actualYield * calculationResults.dwellingSize;
+                    const adjustedConstructionCosts = adjustedGfa * calculationResults.constructionCostPerGfa;
+                    return formatCurrency(adjustedConstructionCosts);
+                  })()
+                ) : (
+                  // For high density, use existing construction costs
+                  formatCurrency(calculationResults.constructionCosts)
+                )}
+              </td>
+              <td className="py-2 px-4 border-t border-gray-200 text-sm">
+                {density === 'mediumDensity' ? (
+                  // For medium density, explain adjusted construction costs
+                  (() => {
+                    const minimumLotSize = 500; // 500m² per dwelling
+                    const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
+                    const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+                    const adjustedGfa = actualYield * calculationResults.dwellingSize;
+                    return `Adjusted GFA (${Math.round(adjustedGfa).toLocaleString()} m²) × Construction Cost per m² (${formatCurrency(calculationResults.constructionCostPerGfa)})`;
+                  })()
+                ) : (
+                  // For high density, use original explanation
+                  'Construction Cost per m² × Total GFA'
+                )}
+              </td>
             </tr>
             <tr>
               <td className="py-2 px-4 border-t border-gray-200">DA Application Fees</td>
@@ -1285,17 +1465,67 @@ const FeasibilityCalculation = ({
             </tr>
             <tr>
               <td className="py-2 px-4 border-t border-gray-200">Professional Fees</td>
-              <td className="py-2 px-4 border-t border-gray-200">{formatCurrency(calculationResults.professionalFees)}</td>
+              <td className="py-2 px-4 border-t border-gray-200">
+                {density === 'mediumDensity' ? (
+                  // For medium density, calculate Professional Fees based on adjusted construction costs
+                  (() => {
+                    const minimumLotSize = 500; // 500m² per dwelling
+                    const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
+                    const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+                    const adjustedGfa = actualYield * calculationResults.dwellingSize;
+                    const adjustedConstructionCosts = adjustedGfa * calculationResults.constructionCostPerGfa;
+                    const adjustedProfessionalFees = adjustedConstructionCosts * settings[density].professionalFees;
+                    return formatCurrency(adjustedProfessionalFees);
+                  })()
+                ) : (
+                  // For high density, use existing Professional Fees
+                  formatCurrency(calculationResults.professionalFees)
+                )}
+              </td>
               <td className="py-2 px-4 border-t border-gray-200 text-sm">Construction Costs × {formatPercentage(settings[density].professionalFees)}</td>
             </tr>
             <tr>
               <td className="py-2 px-4 border-t border-gray-200">Development Contribution</td>
-              <td className="py-2 px-4 border-t border-gray-200">{formatCurrency(calculationResults.developmentContribution)}</td>
+              <td className="py-2 px-4 border-t border-gray-200">
+                {density === 'mediumDensity' ? (
+                  // For medium density, calculate Development Contribution based on adjusted construction costs
+                  (() => {
+                    const minimumLotSize = 500; // 500m² per dwelling
+                    const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
+                    const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+                    const adjustedGfa = actualYield * calculationResults.dwellingSize;
+                    const adjustedConstructionCosts = adjustedGfa * calculationResults.constructionCostPerGfa;
+                    const adjustedDevelopmentContribution = adjustedConstructionCosts * settings[density].developmentContribution;
+                    return formatCurrency(adjustedDevelopmentContribution);
+                  })()
+                ) : (
+                  // For high density, use existing Development Contribution
+                  formatCurrency(calculationResults.developmentContribution)
+                )}
+              </td>
               <td className="py-2 px-4 border-t border-gray-200 text-sm">Construction Costs × {formatPercentage(settings[density].developmentContribution)}</td>
             </tr>
-            <tr className="bg-gray-200">
-              <td className="py-2 px-4 border-t border-gray-200 font-bold">Total Development Costs</td>
-              <td className="py-2 px-4 border-t border-gray-200 font-bold">{formatCurrency(calculationResults.totalDevelopmentCosts)}</td>
+            <tr>
+              <td className="py-2 px-4 border-t border-gray-200">Total Development Costs</td>
+              <td className="py-2 px-4 border-t border-gray-200 font-bold">
+                {density === 'mediumDensity' ? (
+                  // For medium density, calculate Total Development Costs using adjusted values
+                  (() => {
+                    const minimumLotSize = 500; // 500m² per dwelling
+                    const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
+                    const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+                    const adjustedGfa = actualYield * calculationResults.dwellingSize;
+                    const adjustedConstructionCosts = adjustedGfa * calculationResults.constructionCostPerGfa;
+                    const adjustedProfessionalFees = adjustedConstructionCosts * settings[density].professionalFees;
+                    const adjustedDevelopmentContribution = adjustedConstructionCosts * settings[density].developmentContribution;
+                    const adjustedTotalDevelopmentCosts = adjustedConstructionCosts + calculationResults.daApplicationFees + adjustedProfessionalFees + adjustedDevelopmentContribution;
+                    return formatCurrency(adjustedTotalDevelopmentCosts);
+                  })()
+                ) : (
+                  // For high density, use existing Total Development Costs
+                  formatCurrency(calculationResults.totalDevelopmentCosts)
+                )}
+              </td>
               <td className="py-2 px-4 border-t border-gray-200 text-sm">Construction + DA + Professional Fees + Development Contribution</td>
             </tr>
             
@@ -1325,8 +1555,186 @@ const FeasibilityCalculation = ({
             </tr>
             <tr>
               <td className="py-2 px-4 border-t border-gray-200">Finance Costs</td>
-              <td className="py-2 px-4 border-t border-gray-200">{formatCurrency(calculationResults.financeCosts)}</td>
+              <td className="py-2 px-4 border-t border-gray-200">
+                {density === 'mediumDensity' ? (
+                  // For medium density, calculate Finance Costs based on adjusted Total Development Costs
+                  (() => {
+                    const minimumLotSize = 500; // 500m² per dwelling
+                    const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
+                    const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+                    const adjustedGfa = actualYield * calculationResults.dwellingSize;
+                    const adjustedConstructionCosts = adjustedGfa * calculationResults.constructionCostPerGfa;
+                    const adjustedProfessionalFees = adjustedConstructionCosts * settings[density].professionalFees;
+                    const adjustedDevelopmentContribution = adjustedConstructionCosts * settings[density].developmentContribution;
+                    const adjustedTotalDevelopmentCosts = adjustedConstructionCosts + calculationResults.daApplicationFees + adjustedProfessionalFees + adjustedDevelopmentContribution;
+                    
+                    // Calculate finance costs using adjusted total development costs
+                    const projectDurationYears = calculationResults.projectPeriod / 12;
+                    const adjustedFinanceCosts = settings[density].interestRate * (projectDurationYears / 2) * adjustedTotalDevelopmentCosts;
+                    return formatCurrency(adjustedFinanceCosts);
+                  })()
+                ) : (
+                  // For high density, use existing Finance Costs
+                  formatCurrency(calculationResults.financeCosts)
+                )}
+              </td>
               <td className="py-2 px-4 border-t border-gray-200 text-sm">Interest Rate × (Project Period ÷ 2) × Total Development Costs</td>
+            </tr>
+            
+            {/* Add new Interest on Purchase Price row */}
+            <tr>
+              <td className="py-2 px-4 border-t border-gray-200">Interest on Purchase Price</td>
+              <td className="py-2 px-4 border-t border-gray-200">
+                {density === 'mediumDensity' ? (
+                  // For medium density, recalculate Interest on Purchase Price
+                  (() => {
+                    // Calculate adjusted values
+                    const minimumLotSize = 500; // 500m² per dwelling
+                    const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
+                    const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+                    
+                    // Recalculate everything from the beginning
+                    // Adjusted gross realisation
+                    const adjustedGrossRealisation = actualYield * settings[density].dwellingPrice;
+                    
+                    // Adjusted selling costs
+                    const adjustedGst = adjustedGrossRealisation * 0.1;
+                    const adjustedAgentsCommission = adjustedGrossRealisation * settings[density].agentsSalesCommission;
+                    const adjustedLegalFees = adjustedGrossRealisation * settings[density].legalFeesOnSales;
+                    const adjustedMarketingCosts = adjustedGrossRealisation * settings[density].marketingCosts;
+                    
+                    // Adjusted net realisation
+                    const adjustedNetRealisation = adjustedGrossRealisation - adjustedGst - adjustedAgentsCommission - adjustedLegalFees - adjustedMarketingCosts;
+                    
+                    // Adjusted profit margin
+                    const adjustedProfitMargin = adjustedNetRealisation * settings[density].profitAndRisk;
+                    
+                    // Adjusted net realisation after profit
+                    const adjustedNetRealisationAfterProfit = adjustedNetRealisation - adjustedProfitMargin;
+                    
+                    // Adjusted GFA and construction costs
+                    const adjustedGfa = actualYield * calculationResults.dwellingSize;
+                    const adjustedConstructionCosts = adjustedGfa * calculationResults.constructionCostPerGfa;
+                    const adjustedProfessionalFees = adjustedConstructionCosts * settings[density].professionalFees;
+                    const adjustedDevelopmentContribution = adjustedConstructionCosts * settings[density].developmentContribution;
+                    const adjustedTotalDevelopmentCosts = adjustedConstructionCosts + calculationResults.daApplicationFees + adjustedProfessionalFees + adjustedDevelopmentContribution;
+                    
+                    // Calculate finance costs using adjusted total development costs
+                    const projectDurationYears = calculationResults.projectPeriod / 12;
+                    const adjustedFinanceCosts = settings[density].interestRate * (projectDurationYears / 2) * adjustedTotalDevelopmentCosts;
+                    
+                    // Calculate residual land value before interest
+                    const adjustedResidualBeforeInterest = adjustedNetRealisationAfterProfit - adjustedTotalDevelopmentCosts - calculationResults.landTax - adjustedFinanceCosts;
+                    
+                    // Calculate interest on purchase price
+                    const adjustedInterestOnPurchase = Math.abs(
+                      adjustedResidualBeforeInterest - 
+                      adjustedResidualBeforeInterest / 
+                      (1 + settings[density].interestRate / 12 * calculationResults.projectPeriod * 0.5)
+                    );
+                    
+                    return formatCurrency(adjustedInterestOnPurchase);
+                  })()
+                ) : (
+                  // For high density, use original calculation
+                  formatCurrency(
+                    Math.abs(
+                      (calculationResults.netRealisationAfterProfitAndRisk - 
+                      calculationResults.totalDevelopmentCosts - 
+                      calculationResults.landTax - 
+                      calculationResults.financeCosts) - 
+                      (calculationResults.netRealisationAfterProfitAndRisk - 
+                      calculationResults.totalDevelopmentCosts - 
+                      calculationResults.landTax - 
+                      calculationResults.financeCosts) / 
+                      (1 + settings[density].interestRate / 12 * calculationResults.projectPeriod * 0.5)
+                    )
+                  )
+                )}
+              </td>
+              <td className="py-2 px-4 border-t border-gray-200 text-sm">Interest over full project period with 50% LVR</td>
+            </tr>
+            
+            {/* Add new Acquisition Costs row */}
+            <tr>
+              <td className="py-2 px-4 border-t border-gray-200">Acquisition Costs</td>
+              <td className="py-2 px-4 border-t border-gray-200">
+                {density === 'mediumDensity' ? (
+                  // For medium density, recalculate Acquisition Costs
+                  (() => {
+                    // Calculate adjusted values
+                    const minimumLotSize = 500; // 500m² per dwelling
+                    const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
+                    const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+                    
+                    // Recalculate everything from the beginning
+                    // Adjusted gross realisation
+                    const adjustedGrossRealisation = actualYield * settings[density].dwellingPrice;
+                    
+                    // Adjusted selling costs
+                    const adjustedGst = adjustedGrossRealisation * 0.1;
+                    const adjustedAgentsCommission = adjustedGrossRealisation * settings[density].agentsSalesCommission;
+                    const adjustedLegalFees = adjustedGrossRealisation * settings[density].legalFeesOnSales;
+                    const adjustedMarketingCosts = adjustedGrossRealisation * settings[density].marketingCosts;
+                    
+                    // Adjusted net realisation
+                    const adjustedNetRealisation = adjustedGrossRealisation - adjustedGst - adjustedAgentsCommission - adjustedLegalFees - adjustedMarketingCosts;
+                    
+                    // Adjusted profit margin
+                    const adjustedProfitMargin = adjustedNetRealisation * settings[density].profitAndRisk;
+                    
+                    // Adjusted net realisation after profit
+                    const adjustedNetRealisationAfterProfit = adjustedNetRealisation - adjustedProfitMargin;
+                    
+                    // Adjusted GFA and construction costs
+                    const adjustedGfa = actualYield * calculationResults.dwellingSize;
+                    const adjustedConstructionCosts = adjustedGfa * calculationResults.constructionCostPerGfa;
+                    const adjustedProfessionalFees = adjustedConstructionCosts * settings[density].professionalFees;
+                    const adjustedDevelopmentContribution = adjustedConstructionCosts * settings[density].developmentContribution;
+                    const adjustedTotalDevelopmentCosts = adjustedConstructionCosts + calculationResults.daApplicationFees + adjustedProfessionalFees + adjustedDevelopmentContribution;
+                    
+                    // Calculate finance costs using adjusted total development costs
+                    const projectDurationYears = calculationResults.projectPeriod / 12;
+                    const adjustedFinanceCosts = settings[density].interestRate * (projectDurationYears / 2) * adjustedTotalDevelopmentCosts;
+                    
+                    // Calculate residual land value before interest
+                    const adjustedResidualBeforeInterest = adjustedNetRealisationAfterProfit - adjustedTotalDevelopmentCosts - calculationResults.landTax - adjustedFinanceCosts;
+                    
+                    // Calculate interest on purchase price
+                    const adjustedInterestOnPurchase = Math.abs(
+                      adjustedResidualBeforeInterest - 
+                      adjustedResidualBeforeInterest / 
+                      (1 + settings[density].interestRate / 12 * calculationResults.projectPeriod * 0.5)
+                    );
+                    
+                    // Calculate acquisition costs (3% of residual land value minus interest)
+                    const acquisitionRate = 0.03; // 3%
+                    const adjustedAcquisitionCosts = acquisitionRate * (adjustedResidualBeforeInterest - adjustedInterestOnPurchase);
+                    
+                    return formatCurrency(adjustedAcquisitionCosts);
+                  })()
+                ) : (
+                  // For high density, use original calculation
+                  formatCurrency(0.03 * 
+                    (calculationResults.netRealisationAfterProfitAndRisk - 
+                    calculationResults.totalDevelopmentCosts - 
+                    calculationResults.landTax - 
+                    calculationResults.financeCosts - 
+                    Math.abs(
+                      (calculationResults.netRealisationAfterProfitAndRisk - 
+                      calculationResults.totalDevelopmentCosts - 
+                      calculationResults.landTax - 
+                      calculationResults.financeCosts) - 
+                      (calculationResults.netRealisationAfterProfitAndRisk - 
+                      calculationResults.totalDevelopmentCosts - 
+                      calculationResults.landTax - 
+                      calculationResults.financeCosts) / 
+                      (1 + settings[density].interestRate / 12 * calculationResults.projectPeriod * 0.5)
+                    ))
+                  )
+                )}
+              </td>
+              <td className="py-2 px-4 border-t border-gray-200 text-sm">3% of (Residual Land Value - Interest on Purchase Price)</td>
             </tr>
             
             {/* Residual Land Value */}
@@ -1335,8 +1743,103 @@ const FeasibilityCalculation = ({
             </tr>
             <tr className="bg-gray-200">
               <td className="py-2 px-4 border-t border-gray-200 font-bold">Residual Land Value</td>
-              <td className="py-2 px-4 border-t border-gray-200 font-bold">{formatCurrency(calculationResults.residualLandValue)}</td>
-              <td className="py-2 px-4 border-t border-gray-200 text-sm">Net Realisation after Profit - Total Development Costs - Finance Costs - Land Tax</td>
+              <td className="py-2 px-4 border-t border-gray-200 font-bold">
+                {density === 'mediumDensity' ? (
+                  // For medium density, calculate final Residual Land Value
+                  (() => {
+                    // Calculate adjusted values
+                    const minimumLotSize = 500; // 500m² per dwelling
+                    const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
+                    const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+                    
+                    // Recalculate everything from the beginning
+                    // Adjusted gross realisation
+                    const adjustedGrossRealisation = actualYield * settings[density].dwellingPrice;
+                    
+                    // Adjusted selling costs
+                    const adjustedGst = adjustedGrossRealisation * 0.1;
+                    const adjustedAgentsCommission = adjustedGrossRealisation * settings[density].agentsSalesCommission;
+                    const adjustedLegalFees = adjustedGrossRealisation * settings[density].legalFeesOnSales;
+                    const adjustedMarketingCosts = adjustedGrossRealisation * settings[density].marketingCosts;
+                    
+                    // Adjusted net realisation
+                    const adjustedNetRealisation = adjustedGrossRealisation - adjustedGst - adjustedAgentsCommission - adjustedLegalFees - adjustedMarketingCosts;
+                    
+                    // Adjusted profit margin
+                    const adjustedProfitMargin = adjustedNetRealisation * settings[density].profitAndRisk;
+                    
+                    // Adjusted net realisation after profit
+                    const adjustedNetRealisationAfterProfit = adjustedNetRealisation - adjustedProfitMargin;
+                    
+                    // Adjusted GFA and construction costs
+                    const adjustedGfa = actualYield * calculationResults.dwellingSize;
+                    const adjustedConstructionCosts = adjustedGfa * calculationResults.constructionCostPerGfa;
+                    const adjustedProfessionalFees = adjustedConstructionCosts * settings[density].professionalFees;
+                    const adjustedDevelopmentContribution = adjustedConstructionCosts * settings[density].developmentContribution;
+                    const adjustedTotalDevelopmentCosts = adjustedConstructionCosts + calculationResults.daApplicationFees + adjustedProfessionalFees + adjustedDevelopmentContribution;
+                    
+                    // Calculate finance costs using adjusted total development costs
+                    const projectDurationYears = calculationResults.projectPeriod / 12;
+                    const adjustedFinanceCosts = settings[density].interestRate * (projectDurationYears / 2) * adjustedTotalDevelopmentCosts;
+                    
+                    // Calculate residual land value before interest
+                    const adjustedResidualBeforeInterest = adjustedNetRealisationAfterProfit - adjustedTotalDevelopmentCosts - calculationResults.landTax - adjustedFinanceCosts;
+                    
+                    // Calculate interest on purchase price
+                    const adjustedInterestOnPurchase = Math.abs(
+                      adjustedResidualBeforeInterest - 
+                      adjustedResidualBeforeInterest / 
+                      (1 + settings[density].interestRate / 12 * calculationResults.projectPeriod * 0.5)
+                    );
+                    
+                    // Calculate acquisition costs (3% of residual land value minus interest)
+                    const acquisitionRate = 0.03; // 3%
+                    const adjustedAcquisitionCosts = acquisitionRate * (adjustedResidualBeforeInterest - adjustedInterestOnPurchase);
+                    
+                    // Final residual land value
+                    const adjustedResidualLandValue = adjustedResidualBeforeInterest - adjustedInterestOnPurchase - adjustedAcquisitionCosts;
+                    
+                    return formatCurrency(adjustedResidualLandValue);
+                  })()
+                ) : (
+                  // For high density, use original calculation
+                  formatCurrency(
+                    calculationResults.netRealisationAfterProfitAndRisk - 
+                    calculationResults.totalDevelopmentCosts - 
+                    calculationResults.landTax - 
+                    calculationResults.financeCosts - 
+                    Math.abs(
+                      (calculationResults.netRealisationAfterProfitAndRisk - 
+                      calculationResults.totalDevelopmentCosts - 
+                      calculationResults.landTax - 
+                      calculationResults.financeCosts) - 
+                      (calculationResults.netRealisationAfterProfitAndRisk - 
+                      calculationResults.totalDevelopmentCosts - 
+                      calculationResults.landTax - 
+                      calculationResults.financeCosts) / 
+                      (1 + settings[density].interestRate / 12 * calculationResults.projectPeriod * 0.5)
+                    ) - 
+                    (0.03 * 
+                      (calculationResults.netRealisationAfterProfitAndRisk - 
+                      calculationResults.totalDevelopmentCosts - 
+                      calculationResults.landTax - 
+                      calculationResults.financeCosts - 
+                      Math.abs(
+                        (calculationResults.netRealisationAfterProfitAndRisk - 
+                        calculationResults.totalDevelopmentCosts - 
+                        calculationResults.landTax - 
+                        calculationResults.financeCosts) - 
+                        (calculationResults.netRealisationAfterProfitAndRisk - 
+                        calculationResults.totalDevelopmentCosts - 
+                        calculationResults.landTax - 
+                        calculationResults.financeCosts) / 
+                        (1 + settings[density].interestRate / 12 * calculationResults.projectPeriod * 0.5)
+                      ))
+                    )
+                  )
+                )}
+              </td>
+              <td className="py-2 px-4 border-t border-gray-200 text-sm">Net Realisation after Profit - Total Development Costs - Finance Costs - Land Tax - Interest on Purchase - Acquisition Costs</td>
             </tr>
           </tbody>
         </table>
@@ -1399,7 +1902,7 @@ const FeasibilityCalculation = ({
                     domain={['auto', 'auto']}
                     padding={{ top: 10, bottom: 10 }}
                   />
-                  <Tooltip 
+                  <RechartsTooltip 
                     formatter={(value) => [formatCurrency(value), 'Residual Land Value']}
                     labelFormatter={(value) => `${value}% of dwellings`}
                   />
