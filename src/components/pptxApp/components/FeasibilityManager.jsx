@@ -32,7 +32,7 @@ const hasMatchingDensityType = (developmentTypes, densityTypes) => {
   return developmentTypes.some(type => densityTypes.includes(type.DevelopmentType));
 };
 
-const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClose, selectedFeature, map }) => {
+const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClose, selectedFeature, map, developableArea = null }) => {
   const [showMedianPrices, setShowMedianPrices] = useState(false);
   const [showConstructionData, setShowConstructionData] = useState(false);
   const [showDwellingSizeData, setShowDwellingSizeData] = useState(false);
@@ -718,8 +718,55 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
   const calculateFeasibility = async (settings, propertyData, density, useLMR = false, lmrOption = null) => {
     try {
       // Get property data
-      const developableArea = propertyData?.properties?.copiedFrom?.site_suitability__area || 0;
-      const siteArea = propertyData?.properties?.copiedFrom?.site_area || developableArea;
+      // If developableArea prop is provided, use that directly, otherwise fall back to the whole feature area
+      let calculatedDevArea;
+      
+      // Import the area function - handle both potential module structures
+      let areaFunction;
+      try {
+        const areaModule = await import('@turf/area');
+        // Check if it's a default export or named export
+        areaFunction = areaModule.default || areaModule.area;
+        
+        if (!areaFunction) {
+          console.error('Error: Could not find area function in @turf/area');
+          // Fallback to site_suitability__area if area function not found
+          calculatedDevArea = propertyData?.properties?.copiedFrom?.site_suitability__area || 0;
+        }
+      } catch (err) {
+        console.error('Error importing @turf/area:', err);
+        // Fallback to site_suitability__area if import fails
+        calculatedDevArea = propertyData?.properties?.copiedFrom?.site_suitability__area || 0;
+      }
+      
+      if (developableArea && areaFunction) {
+        // Check if developableArea is an object with features property
+        if (developableArea.features && Array.isArray(developableArea.features)) {
+          // Calculate total area from all features using turf/area
+          calculatedDevArea = developableArea.features.reduce((total, feature) => {
+            // Use turf's area calculation which works with the geometry directly
+            return total + (feature.geometry ? areaFunction(feature.geometry) : 0);
+          }, 0);
+          
+          // Log the calculated area to help with debugging
+          console.log('Calculated developableArea (sq m):', calculatedDevArea);
+        } else if (typeof developableArea === 'number') {
+          // If it's already a number, use it directly
+          calculatedDevArea = developableArea;
+        } else {
+          // Try to get the area if it's a single feature
+          if (developableArea.geometry) {
+            calculatedDevArea = areaFunction(developableArea.geometry);
+          } else {
+            calculatedDevArea = propertyData?.properties?.copiedFrom?.site_suitability__area || 0;
+          }
+        }
+      } else if (!areaFunction || !developableArea) {
+        // Fall back to the whole feature area
+        calculatedDevArea = propertyData?.properties?.copiedFrom?.site_suitability__area || 0;
+      }
+      
+      const siteArea = propertyData?.properties?.copiedFrom?.site_area || calculatedDevArea;
       
       // Get FSR and HOB based on whether we're using LMR or current controls
       let fsr, hob;
@@ -767,7 +814,7 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
         maxStoreys = 3;
       }
       
-      const siteCoverage = developableArea * settings.siteEfficiencyRatio;
+      const siteCoverage = calculatedDevArea * settings.siteEfficiencyRatio;
       // For high-density: GFA = Site Area × 50% (building footprint) × HOB/3.1 (storeys) × 75% (efficiency)
       // For medium-density: GFA = Site Area × 60% (building footprint) × HOB/3.1 (max 3 storeys) × 90% (efficiency)
       const gfaUnderHob = siteCoverage * maxStoreys * settings.gbaToGfaRatio;
@@ -841,10 +888,20 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
       const residualLandValue = netRealisationAfterProfitAndRisk - totalDevelopmentCosts - financeCosts - landTax;
       
       // Calculate residual land value per m²
-      const residualLandValuePerM2 = residualLandValue / developableArea;
+      const residualLandValuePerM2 = residualLandValue / calculatedDevArea;
+
+      // Log final values for debugging
+      console.log('Final feasibility calculation values:', {
+        developableArea: calculatedDevArea,
+        siteArea,
+        siteCoverage,
+        fsr,
+        hob,
+        gfa
+      });
 
       return {
-        developableArea,
+        developableArea: calculatedDevArea,
         siteArea,
         siteCoverage,
         fsr,

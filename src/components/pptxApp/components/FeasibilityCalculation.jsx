@@ -476,9 +476,7 @@ const FeasibilityCalculation = ({
       
       if (density === 'mediumDensity') {
         // For medium density, calculate GFA based on lot size limitation
-        const minimumLotSize = 500; // 500m² per dwelling
-        const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
-        const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+        const actualYield = calculateMediumDensityActualYield(calculationResults);
         const adjustedGfa = actualYield * calculationResults.dwellingSize;
         
         mainWs.addRow(['Gross Floor Area (GFA)', '', Math.round(adjustedGfa), `Based on lot size limitation: ${actualYield} units × ${Math.round(calculationResults.dwellingSize)} m² per unit`]);
@@ -490,12 +488,12 @@ const FeasibilityCalculation = ({
       const developmentYieldRow = mainWs.rowCount + 1;
       if (density === 'mediumDensity') {
         // For medium density, add minimum lot size constraint
-        const minimumLotSize = 500; // 500m² per dwelling
+        const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use setting or default to 200m² per dwelling
         const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
-        const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+        const actualYield = calculateMediumDensityActualYield(calculationResults);
         
         mainWs.addRow(['Development Yield', calculationResults.dwellingSize, actualYield, 
-          `Limited by: Min(NSA calculation: ${calculationResults.developmentYield} units, Lot constraint: ${maxDwellingsByLotSize} units @ ${minimumLotSize}m² min lot size)`]);
+          `Limited by: Min(NSA calculation: ${calculationResults.developmentYield} units, Lot constraint: ${maxDwellingsByLotSize} units @ ${settings.mediumDensity.minimumLotSize || 200}m² min lot size)`]);
       } else {
         // For high density, use existing calculation
         mainWs.addRow(['Development Yield', calculationResults.dwellingSize, calculationResults.developmentYield, 
@@ -569,9 +567,7 @@ const FeasibilityCalculation = ({
       const totalConstructionCostsRow = mainWs.rowCount + 1;
       if (density === 'mediumDensity') {
         // For medium density, calculate construction costs based on adjusted GFA
-        const minimumLotSize = 500; // 500m² per dwelling
-        const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
-        const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+        const actualYield = calculateMediumDensityActualYield(calculationResults);
         const adjustedGfa = actualYield * calculationResults.dwellingSize;
         const adjustedConstructionCosts = adjustedGfa * calculationResults.constructionCostPerGfa;
         
@@ -619,7 +615,7 @@ const FeasibilityCalculation = ({
       const financeRow = mainWs.rowCount + 1;
       if (density === 'mediumDensity') {
         // For medium density, calculate Finance Costs based on adjusted Total Development Costs
-        const minimumLotSize = 500; // 500m² per dwelling
+        const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use setting or default to 200m² per dwelling
         const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
         const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
         const adjustedGfa = actualYield * calculationResults.dwellingSize;
@@ -632,7 +628,7 @@ const FeasibilityCalculation = ({
         const adjustedFinanceCosts = settings[density].interestRate * (projectDurationYears / 2) * adjustedTotalDevelopmentCosts;
         mainWs.addRow(['Finance Costs', '', adjustedFinanceCosts, `Interest Rate (${formatPercentage(settings[density].interestRate)}) × Project Duration (${projectDurationYears} years ÷ 2) × Adjusted Total Development Costs`]);
       } else {
-        // For high density, use original formula
+        // For high density, use existing Finance Costs
         mainWs.addRow(['Finance Costs', '', { formula: `C${interestRateRow}*(${projectDurationYears}/2)*C${totalDevelopmentCostsRow}` }, 'Interest Rate × Project Duration × Total Development Costs']);
       }
       
@@ -640,7 +636,7 @@ const FeasibilityCalculation = ({
       const interestOnPurchaseRow = mainWs.rowCount + 1;
       if (density === 'mediumDensity') {
         // For medium density, recalculate Interest on Purchase Price using adjusted values
-        const minimumLotSize = 500; // 500m² per dwelling
+        const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use setting or default to 200m² per dwelling
         const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
         const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
         
@@ -695,7 +691,7 @@ const FeasibilityCalculation = ({
       const acquisitionCostsRow = mainWs.rowCount + 1;
       if (density === 'mediumDensity') {
         // For medium density, recalculate Acquisition Costs using adjusted values
-        const minimumLotSize = 500; // 500m² per dwelling
+        const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use setting or default to 200m² per dwelling
         const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
         const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
         
@@ -755,7 +751,7 @@ const FeasibilityCalculation = ({
       // Residual Land Value Row - Update to include new costs
       if (density === 'mediumDensity') {
         // For medium density, calculate final Residual Land Value using adjusted values
-        const minimumLotSize = 500; // 500m² per dwelling
+        const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use setting or default to 200m² per dwelling
         const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
         const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
         
@@ -816,7 +812,7 @@ const FeasibilityCalculation = ({
       mainWs.columns = [
         { width: 42 }, // A - Metric - Made wider as requested
         { width: 15 }, // B - Assumption Value
-        { width: 30 }, // C - Value (with formulas) - Doubled width
+        { width: 40 }, // C - Value (with formulas) - Doubled width
         { width: 60 }, // D - Calculation Method
       ];
       
@@ -934,9 +930,9 @@ const FeasibilityCalculation = ({
       // Set column widths
       sensitivityWs.columns = [
         { width: 20 }, // A
-        { width: 25 }, // B
-        { width: 30 }, // C
-        { width: 25 }, // D
+        { width: 35 }, // B
+        { width: 35 }, // C
+        { width: 35 }, // D
       ];
       
       // Format percentage cells
@@ -1111,6 +1107,17 @@ const FeasibilityCalculation = ({
     );
   };
 
+  // Calculate Medium Density GFA and Development Yield
+  const calculateMediumDensityActualYield = (calculationResults) => {
+    const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use setting or default to 200m² per dwelling
+    const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
+    
+    // Use consistent actualYield calculation that defaults to lot size constraint when NSA calculation is 0
+    return calculationResults.developmentYield === 0 && maxDwellingsByLotSize > 0
+      ? maxDwellingsByLotSize 
+      : Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+  };
+
   return (
     <div className="p-4">
       {/* Notification Toast */}
@@ -1194,9 +1201,9 @@ const FeasibilityCalculation = ({
                 {density === 'mediumDensity' ? (
                   // For medium density, recalculate GFA based on lot size limitations
                   (() => {
-                    const minimumLotSize = 500; // 500m² per dwelling
+                    const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use setting or default to 200m² per dwelling
                     const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
-                    const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+                    const actualYield = calculateMediumDensityActualYield(calculationResults);
                     const adjustedGfa = actualYield * calculationResults.dwellingSize;
                     return `${Math.round(adjustedGfa).toLocaleString()} m²`;
                   })()
@@ -1209,9 +1216,9 @@ const FeasibilityCalculation = ({
                 {density === 'mediumDensity' ? (
                   // For medium density, calculate based on lot size limitations
                   (() => {
-                    const minimumLotSize = 500; // 500m² per dwelling
+                    const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use setting or default to 200m² per dwelling
                     const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
-                    const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+                    const actualYield = calculateMediumDensityActualYield(calculationResults);
                     
                     return (
                       <div>
@@ -1261,9 +1268,9 @@ const FeasibilityCalculation = ({
                 {density === 'mediumDensity' ? (
                   // For medium density, apply minimum lot size constraint
                   (() => {
-                    const minimumLotSize = 500; // 500m² per dwelling
+                    const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use setting or default to 200m² per dwelling
                     const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
-                    const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+                    const actualYield = calculateMediumDensityActualYield(calculationResults);
                     return actualYield;
                   })()
                 ) : (
@@ -1273,14 +1280,14 @@ const FeasibilityCalculation = ({
               <td className="py-2 px-4 border-t border-gray-200 text-sm">
                 {density === 'mediumDensity' ? (
                   (() => {
-                    const minimumLotSize = 500; // 500m² per dwelling
+                    const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use setting or default to 200m² per dwelling
                     const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
                     return (
                       <div>
                         Limited by:
                         <ul className="list-disc ml-5 mt-1">
                           <li>NSA calculation: {calculationResults.developmentYield} units</li>
-                          <li>Lot constraint: {maxDwellingsByLotSize} units @ 500m² min lot size</li>
+                          <li>Lot constraint: {maxDwellingsByLotSize} units @ {settings.mediumDensity.minimumLotSize || 200}m² min lot size</li>
                         </ul>
                         <div className="text-sm text-gray-600 mt-1">
                           Final yield: {Math.min(calculationResults.developmentYield, maxDwellingsByLotSize)} units
@@ -1310,7 +1317,7 @@ const FeasibilityCalculation = ({
                 {density === 'mediumDensity' ? (
                   // For medium density, recalculate using constrained development yield
                   (() => {
-                    const minimumLotSize = 500; // 500m² per dwelling
+                    const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use setting or default to 200m² per dwelling
                     const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
                     const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
                     return formatCurrency(actualYield * settings[density].dwellingPrice);
@@ -1352,7 +1359,7 @@ const FeasibilityCalculation = ({
                 {density === 'mediumDensity' ? (
                   // For medium density, recalculate using constrained gross realisation
                   (() => {
-                    const minimumLotSize = 500; // 500m² per dwelling
+                    const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use setting or default to 200m² per dwelling
                     const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
                     const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
                     const adjustedGrossRealisation = actualYield * settings[density].dwellingPrice;
@@ -1388,7 +1395,7 @@ const FeasibilityCalculation = ({
                 {density === 'mediumDensity' ? (
                   // For medium density, recalculate based on adjusted net realisation
                   (() => {
-                    const minimumLotSize = 500; // 500m² per dwelling
+                    const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use setting or default to 200m² per dwelling
                     const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
                     const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
                     const adjustedGrossRealisation = actualYield * settings[density].dwellingPrice;
@@ -1430,9 +1437,14 @@ const FeasibilityCalculation = ({
                 {density === 'mediumDensity' ? (
                   // For medium density, recalculate construction costs based on adjusted GFA
                   (() => {
-                    const minimumLotSize = 500; // 500m² per dwelling
+                    const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use setting or default to 200m² per dwelling
                     const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
-                    const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+                    
+                    // Use consistent actualYield calculation
+                    const actualYield = calculationResults.developmentYield === 0 && maxDwellingsByLotSize > 0
+                      ? maxDwellingsByLotSize 
+                      : Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+                      
                     const adjustedGfa = actualYield * calculationResults.dwellingSize;
                     const adjustedConstructionCosts = adjustedGfa * calculationResults.constructionCostPerGfa;
                     return formatCurrency(adjustedConstructionCosts);
@@ -1446,9 +1458,14 @@ const FeasibilityCalculation = ({
                 {density === 'mediumDensity' ? (
                   // For medium density, explain adjusted construction costs
                   (() => {
-                    const minimumLotSize = 500; // 500m² per dwelling
+                    const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use setting or default to 200m² per dwelling
                     const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
-                    const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+                    
+                    // Use consistent actualYield calculation
+                    const actualYield = calculationResults.developmentYield === 0 && maxDwellingsByLotSize > 0
+                      ? maxDwellingsByLotSize 
+                      : Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
+                      
                     const adjustedGfa = actualYield * calculationResults.dwellingSize;
                     return `Adjusted GFA (${Math.round(adjustedGfa).toLocaleString()} m²) × Construction Cost per m² (${formatCurrency(calculationResults.constructionCostPerGfa)})`;
                   })()
@@ -1469,7 +1486,7 @@ const FeasibilityCalculation = ({
                 {density === 'mediumDensity' ? (
                   // For medium density, calculate Professional Fees based on adjusted construction costs
                   (() => {
-                    const minimumLotSize = 500; // 500m² per dwelling
+                    const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use setting or default to 200m² per dwelling
                     const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
                     const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
                     const adjustedGfa = actualYield * calculationResults.dwellingSize;
@@ -1490,7 +1507,7 @@ const FeasibilityCalculation = ({
                 {density === 'mediumDensity' ? (
                   // For medium density, calculate Development Contribution based on adjusted construction costs
                   (() => {
-                    const minimumLotSize = 500; // 500m² per dwelling
+                    const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use setting or default to 200m² per dwelling
                     const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
                     const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
                     const adjustedGfa = actualYield * calculationResults.dwellingSize;
@@ -1511,7 +1528,7 @@ const FeasibilityCalculation = ({
                 {density === 'mediumDensity' ? (
                   // For medium density, calculate Total Development Costs using adjusted values
                   (() => {
-                    const minimumLotSize = 500; // 500m² per dwelling
+                    const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use setting or default to 200m² per dwelling
                     const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
                     const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
                     const adjustedGfa = actualYield * calculationResults.dwellingSize;
@@ -1559,7 +1576,7 @@ const FeasibilityCalculation = ({
                 {density === 'mediumDensity' ? (
                   // For medium density, calculate Finance Costs based on adjusted Total Development Costs
                   (() => {
-                    const minimumLotSize = 500; // 500m² per dwelling
+                    const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use setting or default to 200m² per dwelling
                     const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
                     const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
                     const adjustedGfa = actualYield * calculationResults.dwellingSize;
@@ -1589,7 +1606,7 @@ const FeasibilityCalculation = ({
                   // For medium density, recalculate Interest on Purchase Price
                   (() => {
                     // Calculate adjusted values
-                    const minimumLotSize = 500; // 500m² per dwelling
+                    const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use setting or default to 200m² per dwelling
                     const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
                     const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
                     
@@ -1663,7 +1680,7 @@ const FeasibilityCalculation = ({
                   // For medium density, recalculate Acquisition Costs
                   (() => {
                     // Calculate adjusted values
-                    const minimumLotSize = 500; // 500m² per dwelling
+                    const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use setting or default to 200m² per dwelling
                     const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
                     const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
                     
@@ -1748,7 +1765,7 @@ const FeasibilityCalculation = ({
                   // For medium density, calculate final Residual Land Value
                   (() => {
                     // Calculate adjusted values
-                    const minimumLotSize = 500; // 500m² per dwelling
+                    const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use setting or default to 200m² per dwelling
                     const maxDwellingsByLotSize = Math.floor(calculationResults.developableArea / minimumLotSize);
                     const actualYield = Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
                     

@@ -79,7 +79,18 @@ export async function addFeasibilitySlide(pptx, properties, userSettings = {}) {
     // Function to generate feasibility analysis for a given density type
     const generateFeasibilityAnalysis = (slide, settings, densityType) => {
       // Calculate developable area and site coverage
-      const developableArea = properties?.copiedFrom?.site_suitability__area || 0;
+      // Use user-selected developable area if available, otherwise fall back to the whole feature area
+      let developableArea;
+      if (properties.developableArea && properties.developableArea.length > 0) {
+        // Calculate the total area from all developable area features
+        developableArea = properties.developableArea.reduce((total, feature) => {
+          return total + (feature.properties?.SHAPE_Area || 0);
+        }, 0);
+      } else {
+        // Fall back to the whole feature area
+        developableArea = properties?.copiedFrom?.site_suitability__area || 0;
+      }
+      
       // Get the site area (which may be larger than the developable area)
       const siteArea = properties?.copiedFrom?.site_area || developableArea;
       const siteCoverage = developableArea * settings.siteEfficiencyRatio;

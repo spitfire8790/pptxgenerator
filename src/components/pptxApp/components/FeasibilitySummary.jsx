@@ -109,6 +109,17 @@ const FeasibilitySummary = ({
     return () => clearTimeout(timer);
   }, []);
   
+  // Helper function to ensure consistent actualYield calculation for medium density
+  const calculateMediumDensityActualYield = (developmentYield, developableArea) => {
+    const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use the setting or default to 200m²
+    const maxDwellingsByLotSize = Math.floor(developableArea / minimumLotSize);
+    
+    // Use consistent actualYield calculation that defaults to lot size constraint when NSA calculation is 0
+    return developmentYield === 0 && maxDwellingsByLotSize > 0
+      ? maxDwellingsByLotSize 
+      : Math.min(developmentYield, maxDwellingsByLotSize);
+  };
+  
   // Prepare data for the comparison chart
   const chartData = [
     {
@@ -117,11 +128,37 @@ const FeasibilitySummary = ({
         if (!currentResults?.mediumDensity) return 0;
         
         // For medium density, calculate based on lot size limitation
-        const minimumLotSize = 500; // 500m² per dwelling
+        const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use the setting or default to 200m²
         const developableArea = currentResults.mediumDensity.developableArea || 0;
         const maxDwellingsByLotSize = Math.floor(developableArea / minimumLotSize);
-        const developmentYield = currentResults.mediumDensity.developmentYield || 0;
-        const actualYield = Math.min(developmentYield, maxDwellingsByLotSize);
+        
+        // Get development yield based on appropriate method
+        let developmentYield = 0;
+        const fsr = currentResults.mediumDensity.fsr || 0;
+        const hob = currentResults.mediumDensity.hob || 0;
+        const siteArea = currentResults.mediumDensity.siteArea || 0;
+        const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
+        
+        // If FSR is 0, use HOB-based calculation
+        if (fsr === 0 && hob > 0) {
+          // Assume typical floor to floor height (e.g., 3m)
+          const floorToFloorHeight = 3;
+          const numberOfFloors = Math.floor(hob / floorToFloorHeight);
+          const footprint = developableArea * 0.5; // Assume 50% site coverage
+          const totalGFA = footprint * numberOfFloors;
+          developmentYield = Math.floor(totalGFA / dwellingSize);
+          
+          // Make sure we have a non-zero value
+          if (developmentYield === 0 && footprint > 0 && numberOfFloors > 0) {
+            // If we get zero, try using a minimum
+            developmentYield = Math.max(1, Math.floor(footprint * numberOfFloors / 100));
+          }
+        } else {
+          // Use stored development yield or calculate from FSR
+          developmentYield = currentResults.mediumDensity.developmentYield || 0;
+        }
+        
+        const actualYield = calculateMediumDensityActualYield(developmentYield, developableArea);
         
         // If no actual yield, return 0
         if (!actualYield) return 0;
@@ -147,7 +184,6 @@ const FeasibilitySummary = ({
         const adjustedNetRealisationAfterProfit = adjustedNetRealisation - adjustedProfitMargin;
         
         // Adjusted GFA and construction costs
-        const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
         const adjustedGfa = actualYield * dwellingSize;
         const constructionCostPerGfa = currentResults.mediumDensity.constructionCostPerGfa || 0;
         const adjustedConstructionCosts = adjustedGfa * constructionCostPerGfa;
@@ -185,11 +221,37 @@ const FeasibilitySummary = ({
         if (!currentResults?.mediumDensity) return 0;
         
         // For medium density, calculate based on lot size limitation
-        const minimumLotSize = 500; // 500m² per dwelling
+        const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use the setting or default to 200m²
         const developableArea = currentResults.mediumDensity.developableArea || 0;
         const maxDwellingsByLotSize = Math.floor(developableArea / minimumLotSize);
-        const developmentYield = currentResults.mediumDensity.developmentYield || 0;
-        const actualYield = Math.min(developmentYield, maxDwellingsByLotSize);
+        
+        // Get development yield based on appropriate method
+        let developmentYield = 0;
+        const fsr = currentResults.mediumDensity.fsr || 0;
+        const hob = currentResults.mediumDensity.hob || 0;
+        const siteArea = currentResults.mediumDensity.siteArea || 0;
+        const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
+        
+        // If FSR is 0, use HOB-based calculation
+        if (fsr === 0 && hob > 0) {
+          // Assume typical floor to floor height (e.g., 3m)
+          const floorToFloorHeight = 3;
+          const numberOfFloors = Math.floor(hob / floorToFloorHeight);
+          const footprint = developableArea * 0.5; // Assume 50% site coverage
+          const totalGFA = footprint * numberOfFloors;
+          developmentYield = Math.floor(totalGFA / dwellingSize);
+          
+          // Make sure we have a non-zero value
+          if (developmentYield === 0 && footprint > 0 && numberOfFloors > 0) {
+            // If we get zero, try using a minimum
+            developmentYield = Math.max(1, Math.floor(footprint * numberOfFloors / 100));
+          }
+        } else {
+          // Use stored development yield or calculate from FSR
+          developmentYield = currentResults.mediumDensity.developmentYield || 0;
+        }
+        
+        const actualYield = calculateMediumDensityActualYield(developmentYield, developableArea);
         
         return actualYield;
       })(),
@@ -208,30 +270,53 @@ const FeasibilitySummary = ({
       if (!currentResults?.mediumDensity) return 10000000;
       
       // For medium density, calculate based on lot size limitation
-      const minimumLotSize = 500; // 500m² per dwelling
+      const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use the setting or default to 200m²
       const developableArea = currentResults.mediumDensity.developableArea || 0;
       const maxDwellingsByLotSize = Math.floor(developableArea / minimumLotSize);
-      const developmentYield = currentResults.mediumDensity.developmentYield || 0;
-      const actualYield = Math.min(developmentYield, maxDwellingsByLotSize);
+      
+      // Get development yield based on appropriate method
+      let developmentYield = 0;
+      const fsr = currentResults.mediumDensity.fsr || 0;
+      const hob = currentResults.mediumDensity.hob || 0;
+      const siteArea = currentResults.mediumDensity.siteArea || 0;
+      const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
+      
+      // If FSR is 0, use HOB-based calculation
+      if (fsr === 0 && hob > 0) {
+        // Assume typical floor to floor height (e.g., 3m)
+        const floorToFloorHeight = 3;
+        const numberOfFloors = Math.floor(hob / floorToFloorHeight);
+        const footprint = developableArea * 0.5; // Assume 50% site coverage
+        const totalGFA = footprint * numberOfFloors;
+        developmentYield = Math.floor(totalGFA / dwellingSize);
+        
+        // Make sure we have a non-zero value
+        if (developmentYield === 0 && footprint > 0 && numberOfFloors > 0) {
+          // If we get zero, try using a minimum
+          developmentYield = Math.max(1, Math.floor(footprint * numberOfFloors / 100));
+        }
+      } else {
+        // Use stored development yield or calculate from FSR
+        developmentYield = currentResults.mediumDensity.developmentYield || 0;
+      }
+      
+      const actualYield = calculateMediumDensityActualYield(developmentYield, developableArea);
       
       // If no actual yield, return default value
       if (!actualYield) return 10000000;
       
       // Calculate the adjusted residual land value using the same logic as in chartData
       const dwellingPrice = settings.mediumDensity.dwellingPrice || 0;
-      const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
-      const constructionCostPerGfa = currentResults.mediumDensity.constructionCostPerGfa || 0;
+      const adjustedGrossRealisation = actualYield * dwellingPrice;
       
-      // Skip detailed calculation steps as they are the same as in chartData
-      // Just calculating the basic scenario for the baseline
-      const adjustedGfa = actualYield * dwellingSize;
-      const grossRealisation = actualYield * dwellingPrice;
-      
-      // Quick approximation of residual land value
+      // Abbreviated calculation for residual land value in millions
       const sellCostRate = 0.1 + settings.mediumDensity.agentsSalesCommission + settings.mediumDensity.legalFeesOnSales + settings.mediumDensity.marketingCosts;
-      const netRealisation = grossRealisation * (1 - sellCostRate);
+      const netRealisation = adjustedGrossRealisation * (1 - sellCostRate);
       const netRealisationAfterProfit = netRealisation * (1 - settings.mediumDensity.profitAndRisk);
       
+      // Calculate adjusted GFA and construction costs
+      const adjustedGfa = actualYield * dwellingSize;
+      const constructionCostPerGfa = currentResults.mediumDensity.constructionCostPerGfa || 0;
       const constructionCosts = adjustedGfa * constructionCostPerGfa;
       const otherDevCosts = constructionCosts * (settings.mediumDensity.professionalFees + settings.mediumDensity.developmentContribution);
       const totalDevCosts = constructionCosts + otherDevCosts + (currentResults.mediumDensity.daApplicationFees || 0);
@@ -275,10 +360,36 @@ const FeasibilitySummary = ({
       if (!currentResults?.mediumDensity) return 25000000;
       
       // For medium density, calculate based on lot size limitation
-      const minimumLotSize = 500; // 500m² per dwelling
+      const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use the setting or default to 200m²
       const developableArea = currentResults.mediumDensity.developableArea || 0;
       const maxDwellingsByLotSize = Math.floor(developableArea / minimumLotSize);
-      const developmentYield = currentResults.mediumDensity.developmentYield || 0;
+      
+      // Get development yield based on appropriate method
+      let developmentYield = 0;
+      const fsr = currentResults.mediumDensity.fsr || 0;
+      const hob = currentResults.mediumDensity.hob || 0;
+      const siteArea = currentResults.mediumDensity.siteArea || 0;
+      const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
+      
+      // If FSR is 0, use HOB-based calculation
+      if (fsr === 0 && hob > 0) {
+        // Assume typical floor to floor height (e.g., 3m)
+        const floorToFloorHeight = 3;
+        const numberOfFloors = Math.floor(hob / floorToFloorHeight);
+        const footprint = developableArea * 0.5; // Assume 50% site coverage
+        const totalGFA = footprint * numberOfFloors;
+        developmentYield = Math.floor(totalGFA / dwellingSize);
+        
+        // Make sure we have a non-zero value
+        if (developmentYield === 0 && footprint > 0 && numberOfFloors > 0) {
+          // If we get zero, try using a minimum
+          developmentYield = Math.max(1, Math.floor(footprint * numberOfFloors / 100));
+        }
+      } else {
+        // Use stored development yield or calculate from FSR
+        developmentYield = currentResults.mediumDensity.developmentYield || 0;
+      }
+      
       const actualYield = Math.min(developmentYield, maxDwellingsByLotSize);
       
       const dwellingPrice = settings.mediumDensity.dwellingPrice || 0;
@@ -290,10 +401,36 @@ const FeasibilitySummary = ({
       if (!currentResults?.mediumDensity) return 10000000;
       
       // For medium density, calculate based on lot size limitation
-      const minimumLotSize = 500; // 500m² per dwelling
+      const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use the setting or default to 200m²
       const developableArea = currentResults.mediumDensity.developableArea || 0;
       const maxDwellingsByLotSize = Math.floor(developableArea / minimumLotSize);
-      const developmentYield = currentResults.mediumDensity.developmentYield || 0;
+      
+      // Get development yield based on appropriate method
+      let developmentYield = 0;
+      const fsr = currentResults.mediumDensity.fsr || 0;
+      const hob = currentResults.mediumDensity.hob || 0;
+      const siteArea = currentResults.mediumDensity.siteArea || 0;
+      const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
+      
+      // If FSR is 0, use HOB-based calculation
+      if (fsr === 0 && hob > 0) {
+        // Assume typical floor to floor height (e.g., 3m)
+        const floorToFloorHeight = 3;
+        const numberOfFloors = Math.floor(hob / floorToFloorHeight);
+        const footprint = developableArea * 0.5; // Assume 50% site coverage
+        const totalGFA = footprint * numberOfFloors;
+        developmentYield = Math.floor(totalGFA / dwellingSize);
+        
+        // Make sure we have a non-zero value
+        if (developmentYield === 0 && footprint > 0 && numberOfFloors > 0) {
+          // If we get zero, try using a minimum
+          developmentYield = Math.max(1, Math.floor(footprint * numberOfFloors / 100));
+        }
+      } else {
+        // Use stored development yield or calculate from FSR
+        developmentYield = currentResults.mediumDensity.developmentYield || 0;
+      }
+      
       const actualYield = Math.min(developmentYield, maxDwellingsByLotSize);
       
       // If no actual yield, return default value
@@ -301,10 +438,6 @@ const FeasibilitySummary = ({
       
       // Calculate the adjusted residual land value using the same logic as before
       const dwellingPrice = settings.mediumDensity.dwellingPrice || 0;
-      const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
-      const constructionCostPerGfa = currentResults.mediumDensity.constructionCostPerGfa || 0;
-      
-      // Apply the revenue factor to dwelling price
       const adjustedDwellingPrice = dwellingPrice * factor;
       
       // Calculate GFA and costs
@@ -315,6 +448,7 @@ const FeasibilitySummary = ({
       const netRealisation = adjustedGrossRealisation * (1 - sellCostRate);
       const netRealisationAfterProfit = netRealisation * (1 - settings.mediumDensity.profitAndRisk);
       
+      const constructionCostPerGfa = currentResults.mediumDensity.constructionCostPerGfa || 0;
       const constructionCosts = adjustedGfa * constructionCostPerGfa;
       const otherDevCosts = constructionCosts * (settings.mediumDensity.professionalFees + settings.mediumDensity.developmentContribution);
       const totalDevCosts = constructionCosts + otherDevCosts + (currentResults.mediumDensity.daApplicationFees || 0);
@@ -348,10 +482,36 @@ const FeasibilitySummary = ({
         if (!currentResults?.mediumDensity) return 0;
         
         // For medium density, calculate based on lot size limitation
-        const minimumLotSize = 500; // 500m² per dwelling
+        const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use the setting or default to 200m²
         const developableArea = currentResults.mediumDensity.developableArea || 0;
         const maxDwellingsByLotSize = Math.floor(developableArea / minimumLotSize);
-        const developmentYield = currentResults.mediumDensity.developmentYield || 0;
+        
+        // Get development yield based on appropriate method
+        let developmentYield = 0;
+        const fsr = currentResults.mediumDensity.fsr || 0;
+        const hob = currentResults.mediumDensity.hob || 0;
+        const siteArea = currentResults.mediumDensity.siteArea || 0;
+        const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
+        
+        // If FSR is 0, use HOB-based calculation
+        if (fsr === 0 && hob > 0) {
+          // Assume typical floor to floor height (e.g., 3m)
+          const floorToFloorHeight = 3;
+          const numberOfFloors = Math.floor(hob / floorToFloorHeight);
+          const footprint = developableArea * 0.5; // Assume 50% site coverage
+          const totalGFA = footprint * numberOfFloors;
+          developmentYield = Math.floor(totalGFA / dwellingSize);
+          
+          // Make sure we have a non-zero value
+          if (developmentYield === 0 && footprint > 0 && numberOfFloors > 0) {
+            // If we get zero, try using a minimum
+            developmentYield = Math.max(1, Math.floor(footprint * numberOfFloors / 100));
+          }
+        } else {
+          // Use stored development yield or calculate from FSR
+          developmentYield = currentResults.mediumDensity.developmentYield || 0;
+        }
+        
         const actualYield = Math.min(developmentYield, maxDwellingsByLotSize);
         
         // If no actual yield, return 0
@@ -367,7 +527,6 @@ const FeasibilitySummary = ({
         const netRealisation = adjustedGrossRealisation * (1 - sellCostRate);
         const netRealisationAfterProfit = netRealisation * (1 - settings.mediumDensity.profitAndRisk);
         
-        const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
         const adjustedGfa = actualYield * dwellingSize;
         const constructionCostPerGfa = currentResults.mediumDensity.constructionCostPerGfa || 0;
         const constructionCosts = adjustedGfa * constructionCostPerGfa;
@@ -384,14 +543,39 @@ const FeasibilitySummary = ({
         if (!currentResults?.mediumDensity) return 0;
         
         // For medium density, calculate based on lot size limitation
-        const minimumLotSize = 500; // 500m² per dwelling
+        const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use the setting or default to 200m²
         const developableArea = currentResults.mediumDensity.developableArea || 0;
         const maxDwellingsByLotSize = Math.floor(developableArea / minimumLotSize);
-        const developmentYield = currentResults.mediumDensity.developmentYield || 0;
+        
+        // Get development yield based on appropriate method
+        let developmentYield = 0;
+        const fsr = currentResults.mediumDensity.fsr || 0;
+        const hob = currentResults.mediumDensity.hob || 0;
+        const siteArea = currentResults.mediumDensity.siteArea || 0;
+        const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
+        
+        // If FSR is 0, use HOB-based calculation
+        if (fsr === 0 && hob > 0) {
+          // Assume typical floor to floor height (e.g., 3m)
+          const floorToFloorHeight = 3;
+          const numberOfFloors = Math.floor(hob / floorToFloorHeight);
+          const footprint = developableArea * 0.5; // Assume 50% site coverage
+          const totalGFA = footprint * numberOfFloors;
+          developmentYield = Math.floor(totalGFA / dwellingSize);
+          
+          // Make sure we have a non-zero value
+          if (developmentYield === 0 && footprint > 0 && numberOfFloors > 0) {
+            // If we get zero, try using a minimum
+            developmentYield = Math.max(1, Math.floor(footprint * numberOfFloors / 100));
+          }
+        } else {
+          // Use stored development yield or calculate from FSR
+          developmentYield = currentResults.mediumDensity.developmentYield || 0;
+        }
+        
         const actualYield = Math.min(developmentYield, maxDwellingsByLotSize);
         
         // Calculate adjusted GFA
-        const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
         const adjustedGfa = actualYield * dwellingSize;
         
         return adjustedGfa / 1000;
@@ -404,11 +588,39 @@ const FeasibilitySummary = ({
         if (!currentResults?.mediumDensity) return 0;
         
         // For medium density, calculate based on lot size limitation
-        const minimumLotSize = 500; // 500m² per dwelling
+        const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use the setting or default to 200m²
         const developableArea = currentResults.mediumDensity.developableArea || 0;
         const maxDwellingsByLotSize = Math.floor(developableArea / minimumLotSize);
-        const developmentYield = currentResults.mediumDensity.developmentYield || 0;
-        return Math.min(developmentYield, maxDwellingsByLotSize);
+        
+        // Get development yield based on appropriate method
+        let developmentYield = 0;
+        const fsr = currentResults.mediumDensity.fsr || 0;
+        const hob = currentResults.mediumDensity.hob || 0;
+        const siteArea = currentResults.mediumDensity.siteArea || 0;
+        const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
+        
+        // If FSR is 0, use HOB-based calculation
+        if (fsr === 0 && hob > 0) {
+          // Assume typical floor to floor height (e.g., 3m)
+          const floorToFloorHeight = 3;
+          const numberOfFloors = Math.floor(hob / floorToFloorHeight);
+          const footprint = developableArea * 0.5; // Assume 50% site coverage
+          const totalGFA = footprint * numberOfFloors;
+          developmentYield = Math.floor(totalGFA / dwellingSize);
+          
+          // Make sure we have a non-zero value
+          if (developmentYield === 0 && footprint > 0 && numberOfFloors > 0) {
+            // If we get zero, try using a minimum
+            developmentYield = Math.max(1, Math.floor(footprint * numberOfFloors / 100));
+          }
+        } else {
+          // Use stored development yield or calculate from FSR
+          developmentYield = currentResults.mediumDensity.developmentYield || 0;
+        }
+        
+        const actualYield = Math.min(developmentYield, maxDwellingsByLotSize);
+        
+        return actualYield;
       })(),
       'High Density': (currentResults?.highDensity?.developmentYield || 0),
     },
@@ -423,14 +635,40 @@ const FeasibilitySummary = ({
         if (!currentResults?.mediumDensity) return 0;
         
         // For medium density, calculate based on lot size limitation
-        const minimumLotSize = 500; // 500m² per dwelling
+        const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use the setting or default to 200m²
         const developableArea = currentResults.mediumDensity.developableArea || 0;
         const maxDwellingsByLotSize = Math.floor(developableArea / minimumLotSize);
-        const developmentYield = currentResults.mediumDensity.developmentYield || 0;
+        
+        // Get development yield based on appropriate method
+        let developmentYield = 0;
+        const fsr = currentResults.mediumDensity.fsr || 0;
+        const hob = currentResults.mediumDensity.hob || 0;
+        const siteArea = currentResults.mediumDensity.siteArea || 0;
+        const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
+        
+        // If FSR is 0, use HOB-based calculation
+        if (fsr === 0 && hob > 0) {
+          // Assume typical floor to floor height (e.g., 3m)
+          const floorToFloorHeight = 3;
+          const numberOfFloors = Math.floor(hob / floorToFloorHeight);
+          const footprint = developableArea * 0.5; // Assume 50% site coverage
+          const totalGFA = footprint * numberOfFloors;
+          developmentYield = Math.floor(totalGFA / dwellingSize);
+          
+          // Make sure we have a non-zero value
+          if (developmentYield === 0 && footprint > 0 && numberOfFloors > 0) {
+            // If we get zero, try using a minimum
+            developmentYield = Math.max(1, Math.floor(footprint * numberOfFloors / 100));
+          }
+        } else {
+          // Use stored development yield or calculate from FSR
+          developmentYield = currentResults.mediumDensity.developmentYield || 0;
+        }
+        
         const actualYield = Math.min(developmentYield, maxDwellingsByLotSize);
         
         // Calculate adjusted total cost
-        const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
+        const dwellingPrice = settings.mediumDensity.dwellingPrice || 0;
         const adjustedGfa = actualYield * dwellingSize;
         const constructionCostPerGfa = currentResults.mediumDensity.constructionCostPerGfa || 0;
         const adjustedConstructionCosts = adjustedGfa * constructionCostPerGfa;
@@ -820,14 +1058,39 @@ const FeasibilitySummary = ({
                     if (!currentResults?.mediumDensity) return 'N/A';
                     
                     // For medium density, calculate based on lot size limitation
-                    const minimumLotSize = 500; // 500m² per dwelling
+                    const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use the setting or default to 200m²
                     const developableArea = currentResults.mediumDensity.developableArea || 0;
                     const maxDwellingsByLotSize = Math.floor(developableArea / minimumLotSize);
-                    const developmentYield = currentResults.mediumDensity.developmentYield || 0;
+                    
+                    // Get development yield based on appropriate method
+                    let developmentYield = 0;
+                    const fsr = currentResults.mediumDensity.fsr || 0;
+                    const hob = currentResults.mediumDensity.hob || 0;
+                    const siteArea = currentResults.mediumDensity.siteArea || 0;
+                    const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
+                    
+                    // If FSR is 0, use HOB-based calculation
+                    if (fsr === 0 && hob > 0) {
+                      // Assume typical floor to floor height (e.g., 3m)
+                      const floorToFloorHeight = 3;
+                      const numberOfFloors = Math.floor(hob / floorToFloorHeight);
+                      const footprint = developableArea * 0.5; // Assume 50% site coverage
+                      const totalGFA = footprint * numberOfFloors;
+                      developmentYield = Math.floor(totalGFA / dwellingSize);
+                      
+                      // Make sure we have a non-zero value
+                      if (developmentYield === 0 && footprint > 0 && numberOfFloors > 0) {
+                        // If we get zero, try using a minimum
+                        developmentYield = Math.max(1, Math.floor(footprint * numberOfFloors / 100));
+                      }
+                    } else {
+                      // Use stored development yield or calculate from FSR
+                      developmentYield = currentResults.mediumDensity.developmentYield || 0;
+                    }
+                    
                     const actualYield = Math.min(developmentYield, maxDwellingsByLotSize);
                     
                     // Calculate adjusted GFA
-                    const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
                     const adjustedGfa = actualYield * dwellingSize;
                     
                     return formatSqm(adjustedGfa);
@@ -841,10 +1104,36 @@ const FeasibilitySummary = ({
                     if (!currentResults?.mediumDensity) return '0 units';
                     
                     // For medium density, calculate based on lot size limitation
-                    const minimumLotSize = 500; // 500m² per dwelling
+                    const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use the setting or default to 200m²
                     const developableArea = currentResults.mediumDensity.developableArea || 0;
                     const maxDwellingsByLotSize = Math.floor(developableArea / minimumLotSize);
-                    const developmentYield = currentResults.mediumDensity.developmentYield || 0;
+                    
+                    // Get development yield based on appropriate method
+                    let developmentYield = 0;
+                    const fsr = currentResults.mediumDensity.fsr || 0;
+                    const hob = currentResults.mediumDensity.hob || 0;
+                    const siteArea = currentResults.mediumDensity.siteArea || 0;
+                    const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
+                    
+                    // If FSR is 0, use HOB-based calculation
+                    if (fsr === 0 && hob > 0) {
+                      // Assume typical floor to floor height (e.g., 3m)
+                      const floorToFloorHeight = 3;
+                      const numberOfFloors = Math.floor(hob / floorToFloorHeight);
+                      const footprint = developableArea * 0.5; // Assume 50% site coverage
+                      const totalGFA = footprint * numberOfFloors;
+                      developmentYield = Math.floor(totalGFA / dwellingSize);
+                      
+                      // Make sure we have a non-zero value
+                      if (developmentYield === 0 && footprint > 0 && numberOfFloors > 0) {
+                        // If we get zero, try using a minimum
+                        developmentYield = Math.max(1, Math.floor(footprint * numberOfFloors / 100));
+                      }
+                    } else {
+                      // Use stored development yield or calculate from FSR
+                      developmentYield = currentResults.mediumDensity.developmentYield || 0;
+                    }
+                    
                     const actualYield = Math.min(developmentYield, maxDwellingsByLotSize);
                     
                     return `${actualYield} units`;
@@ -858,10 +1147,36 @@ const FeasibilitySummary = ({
                     if (!currentResults?.mediumDensity) return formatCurrency(0);
                     
                     // For medium density, calculate based on lot size limitation
-                    const minimumLotSize = 500; // 500m² per dwelling
+                    const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use the setting or default to 200m²
                     const developableArea = currentResults.mediumDensity.developableArea || 0;
                     const maxDwellingsByLotSize = Math.floor(developableArea / minimumLotSize);
-                    const developmentYield = currentResults.mediumDensity.developmentYield || 0;
+                    
+                    // Get development yield based on appropriate method
+                    let developmentYield = 0;
+                    const fsr = currentResults.mediumDensity.fsr || 0;
+                    const hob = currentResults.mediumDensity.hob || 0;
+                    const siteArea = currentResults.mediumDensity.siteArea || 0;
+                    const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
+                    
+                    // If FSR is 0, use HOB-based calculation
+                    if (fsr === 0 && hob > 0) {
+                      // Assume typical floor to floor height (e.g., 3m)
+                      const floorToFloorHeight = 3;
+                      const numberOfFloors = Math.floor(hob / floorToFloorHeight);
+                      const footprint = developableArea * 0.5; // Assume 50% site coverage
+                      const totalGFA = footprint * numberOfFloors;
+                      developmentYield = Math.floor(totalGFA / dwellingSize);
+                      
+                      // Make sure we have a non-zero value
+                      if (developmentYield === 0 && footprint > 0 && numberOfFloors > 0) {
+                        // If we get zero, try using a minimum
+                        developmentYield = Math.max(1, Math.floor(footprint * numberOfFloors / 100));
+                      }
+                    } else {
+                      // Use stored development yield or calculate from FSR
+                      developmentYield = currentResults.mediumDensity.developmentYield || 0;
+                    }
+                    
                     const actualYield = Math.min(developmentYield, maxDwellingsByLotSize);
                     
                     // If no actual yield, return 0
@@ -888,7 +1203,6 @@ const FeasibilitySummary = ({
                     const adjustedNetRealisationAfterProfit = adjustedNetRealisation - adjustedProfitMargin;
                     
                     // Adjusted GFA and construction costs
-                    const dwellingSize = currentResults.mediumDensity.dwellingSize || 0;
                     const adjustedGfa = actualYield * dwellingSize;
                     const constructionCostPerGfa = currentResults.mediumDensity.constructionCostPerGfa || 0;
                     const adjustedConstructionCosts = adjustedGfa * constructionCostPerGfa;

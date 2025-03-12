@@ -154,6 +154,14 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
       tooltip: 'Default based on median 2 bedroom dwelling sale price only. Click to revert.',
       showSalesButton: true
     },
+    { 
+      id: 'minimumLotSize', 
+      label: 'Minimum Lot Size Per Dwelling', 
+      unit: 'm²', 
+      icon: Map, 
+      isEditable: true,
+      tooltip: 'Minimum lot size for medium density dwellings (not applicable to high density)'
+    },
 
     // Financial Metrics section
     { id: 'section-financial', label: 'Financial Metrics', isSection: true },
@@ -230,8 +238,15 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
       // For medium-density: GFA = Site Area × 60% (building footprint) × HOB/3.1 (max 3 storeys) × 90% (efficiency)
       const gfaUnderHob = siteCoverage * maxStoreys * settings.gbaToGfaRatio;
 
-      // Use FSR value if no HoB exists, otherwise use the lower of the two
-      let gfa = !hob ? gfaUnderFsr : Math.min(gfaUnderFsr, gfaUnderHob);
+      // Use HOB value if FSR is 0, otherwise use the lower of the two
+      let gfa;
+      if (fsr === 0) {
+        // If FSR is 0, only use HOB-based calculation if HOB > 0
+        gfa = hob > 0 ? gfaUnderHob : 0;
+      } else {
+        // Otherwise, use the lower of FSR and HOB calculations
+        gfa = !hob ? gfaUnderFsr : Math.min(gfaUnderFsr, gfaUnderHob);
+      }
 
       // For Medium Density, limit to 3 storeys unless using LMR controls
       if (density === 'mediumDensity' && !useLMR) {
@@ -240,7 +255,7 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
       }
 
       // Calculate NSA and development yield
-      const nsa = gfa * settings.gfaToNsaRatio;
+      let nsa = gfa * settings.gfaToNsaRatio;
       
       // Use the appropriate dwelling size based on density
       let dwellingSize;
@@ -253,7 +268,40 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
         dwellingSize = Math.floor(medianSize / 10) * 10;
       }
       
-      const developmentYield = Math.floor(nsa / dwellingSize);
+      // Calculate development yield
+      let developmentYield = Math.floor(nsa / dwellingSize);
+      
+      // Special handling for medium density when FSR = 0 and HOB = 0
+      // In this case, default to the lot size constraint calculation
+      if (density === 'mediumDensity' && (fsr === 0 || !fsr) && (hob === 0 || !hob)) {
+        const minimumLotSize = settings.mediumDensity.minimumLotSize || 200; // Use setting or default to 200m² per dwelling
+        const maxDwellingsByLotSize = Math.floor(developableArea / minimumLotSize);
+        
+        // If the calculated yield is 0, use the lot size constraint as default
+        if (developmentYield === 0) {
+          developmentYield = maxDwellingsByLotSize;
+          
+          // Recalculate GFA and NSA based on the new yield
+          const estimatedNsa = developmentYield * dwellingSize;
+          nsa = estimatedNsa;
+          gfa = estimatedNsa / settings.gfaToNsaRatio;
+        } else {
+          // If yield > 0, still apply the lot size constraint as a maximum
+          developmentYield = Math.min(developmentYield, maxDwellingsByLotSize);
+        }
+      }
+      
+      // Special handling for FSR = 0 and HOB > 0 to make sure development yield is not zero
+      if (fsr === 0 && hob > 0 && developmentYield === 0) {
+        // Use a minimum yield based on building footprint and number of floors
+        const footprint = siteCoverage;
+        const numberOfFloors = maxStoreys;
+        
+        if (footprint > 0 && numberOfFloors > 0) {
+          // Ensure at least a minimum yield based on the building volume
+          developmentYield = Math.max(1, Math.floor(footprint * numberOfFloors / 100));
+        }
+      }
 
       // Calculate total gross realisation
       const totalGrossRealisation = developmentYield * settings.dwellingPrice;
@@ -532,8 +580,8 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
   // Set default values for Building Footprint if not already set
   useEffect(() => {
     // Check if siteEfficiencyRatio needs to be updated to the new default values
-    if (settings.mediumDensity.siteEfficiencyRatio !== 0.6) {
-      onSettingChange('siteEfficiencyRatio', 0.6, 'mediumDensity');
+    if (settings.mediumDensity.siteEfficiencyRatio !== 0.7) {
+      onSettingChange('siteEfficiencyRatio', 0.7, 'mediumDensity');
     }
     
     if (settings.highDensity.siteEfficiencyRatio !== 0.6) {
@@ -870,6 +918,13 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
   };
 
   const showConstructionData = settings.mediumDensity.useLMR || settings.highDensity.useLMR;
+
+  // Add default minimumLotSize if not present in settings
+  useEffect(() => {
+    if (settings.mediumDensity && !settings.mediumDensity.hasOwnProperty('minimumLotSize')) {
+      onSettingChange('minimumLotSize', 200, 'mediumDensity');
+    }
+  }, [settings]);
 
   return (
     <div className="p-4">

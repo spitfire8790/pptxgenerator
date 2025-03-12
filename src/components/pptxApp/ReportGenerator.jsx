@@ -256,7 +256,7 @@ const ReportGenerator = ({
   const [userInfo, setUserInfo] = useState(null);
   const [feasibilitySettings, setFeasibilitySettings] = useState({
     mediumDensity: {
-      siteEfficiencyRatio: 0.60,
+      siteEfficiencyRatio: 0.70,
       floorToFloorHeight: 3.1,
       gbaToGfaRatio: 0.90,
       gfaToNsaRatio: 0.85,
@@ -276,7 +276,7 @@ const ReportGenerator = ({
       useLMR: false
     },
     highDensity: {
-      siteEfficiencyRatio: 0.50,
+      siteEfficiencyRatio: 0.60,
       floorToFloorHeight: 3.1,
       gbaToGfaRatio: 0.75,
       gfaToNsaRatio: 0.85,
@@ -1964,6 +1964,7 @@ const ReportGenerator = ({
             }
           } : null}
           map={planningMapRef.current}  // Pass the map ref directly
+          developableArea={developableArea}  // Pass the complete developableArea object for maximum flexibility
         />
 
         <Chat
