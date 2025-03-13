@@ -76,6 +76,24 @@ const styles = {
   }
 };
 
+function ensureCorrectCRS(geometry) {
+  // Here we're checking if coordinates appear to be in the wrong CRS
+  // Basic check: If coordinates are outside reasonable GDA94 bounds for Australia
+  if (!geometry || !geometry.coordinates) return geometry;
+  
+  // Check first coordinate of first ring (for polygons)
+  if (geometry.type === 'Polygon' && geometry.coordinates[0]?.[0]) {
+    const [lon, lat] = geometry.coordinates[0][0];
+    // If coordinates look like they're already in Web Mercator or another projected system
+    if (Math.abs(lon) > 180 || Math.abs(lat) > 90) {
+      console.warn('Detected potential CRS issue in developable area geometry - skipping this geometry');
+      return null; // Skip this geometry as it's likely in the wrong CRS
+    }
+  }
+  
+  return geometry;
+}
+
 export async function addAccessSlide(pptx, propertyData) {
   try {
     console.log('Starting to add access slide...');
@@ -83,10 +101,15 @@ export async function addAccessSlide(pptx, propertyData) {
     // Format developableArea consistently for both scoring and screenshots
     const formattedDevelopableArea = propertyData.developableArea?.length ? {
       type: 'FeatureCollection',
-      features: propertyData.developableArea.map(area => ({
-        type: 'Feature',
-        geometry: area.geometry
-      }))
+      features: propertyData.developableArea
+        .map(area => {
+          const validGeometry = ensureCorrectCRS(area.geometry);
+          return validGeometry ? {
+            type: 'Feature',
+            geometry: validGeometry
+          } : null;
+        })
+        .filter(Boolean) // Remove null entries
     } : null;
     
     // Use the combinedGeometry if it exists (for multiple properties), otherwise create a single feature
@@ -114,8 +137,9 @@ export async function addAccessSlide(pptx, propertyData) {
     const roadsResult = await captureRoadsMap(
       featureToUse, 
       formattedDevelopableArea, 
-      false, // Always show developable areas for roads map
-      false
+      true, // Always show developable areas for roads map
+      false, // Don't use developable area for bounds
+      true   // Show feature boundaries
     );
 
     // Store the road features in propertyData
@@ -147,20 +171,22 @@ export async function addAccessSlide(pptx, propertyData) {
 
     // Get the remaining maps in parallel
     const [udpScreenshot, ptalScreenshot] = await Promise.all([
-      // Get UDP precincts map with LMR layers - don't show developable areas
+      // Get UDP precincts map with LMR layers
       captureUDPPrecinctMap(
         featureToUse, 
         formattedDevelopableArea, 
-        false, // Don't show developable areas
-        false
+        true, // Show developable areas
+        false, // Don't use developable area for bounds
+        true   // Show feature boundaries
       ),
       
-      // Get PTAL map showing all features but not developable areas
+      // Get PTAL map
       capturePTALMap(
         featureToUse, 
         formattedDevelopableArea, 
-        false, // Don't show developable areas
-        false
+        true, // Show developable areas 
+        false, // Don't use developable area for bounds
+        true   // Show feature boundaries
       )
     ]);
     
@@ -240,9 +266,15 @@ export async function addAccessSlide(pptx, propertyData) {
     const ptalValues = featureToUse.properties?.ptalValues || [];
     const featurePTALs = featureToUse.properties?.featurePTALs || [];
     
+    console.log('PTAL values for scoring:', ptalValues);
+    console.log('Feature PTALs for scoring:', featurePTALs);
+    
     // Calculate PTAL score based on the best PTAL for different features
     const ptalScoreResult = scoringCriteria.ptal.calculateScore(ptalValues, featurePTALs);
     const ptalDescription = scoringCriteria.ptal.getScoreDescription(ptalScoreResult, ptalValues, featurePTALs);
+
+    console.log('PTAL score result:', ptalScoreResult);
+    console.log('PTAL description:', ptalDescription);
 
     // Ensure scores object exists and store the scores
     if (!propertyData.scores) {

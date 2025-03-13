@@ -236,7 +236,7 @@ function formatCost(cost) {
 async function fetchAllDAs(councilName) {
   const allDAs = [];
   let pageNumber = 1;
-  const pageSize = 50000; // Fetch maximum records at a time
+  const pageSize = 1000; // Fetch maximum records at a time
   
   try {
     const API_BASE_URL = process.env.NODE_ENV === 'development' 
@@ -517,7 +517,7 @@ function drawDAPoint(ctx, x, y, da) {
 async function fetchAllCCs(councilName) {
   const allCCs = [];
   let pageNumber = 1;
-  const pageSize = 50000; // Fetch maximum records at a time
+  const pageSize = 1000; // Fetch maximum records at a time
   
   try {
     const API_BASE_URL = process.env.NODE_ENV === 'development' 
@@ -673,8 +673,22 @@ export async function captureDevelopmentApplicationsMap(feature, developableArea
         };
       }
     } else {
-      // Use the feature as is
+      // Use the feature as is, but ensure it has valid structure
       geoJSONFeature = feature;
+      
+      // Validate feature structure and add default values if needed
+      if (!geoJSONFeature.type) {
+        console.warn('Feature missing type property, defaulting to "Feature"');
+        geoJSONFeature.type = 'Feature';
+      }
+      
+      if (!geoJSONFeature.geometry) {
+        console.warn('Feature missing geometry property, creating empty geometry');
+        geoJSONFeature.geometry = { type: 'Polygon', coordinates: [] };
+      } else if (!geoJSONFeature.geometry.coordinates) {
+        console.warn('Feature geometry missing coordinates, creating empty coordinates');
+        geoJSONFeature.geometry.coordinates = [];
+      }
     }
 
     // Create turf polygons for all property boundaries to check if DAs are within any of them
@@ -682,12 +696,14 @@ export async function captureDevelopmentApplicationsMap(feature, developableArea
     
     if (geoJSONFeature.type === 'FeatureCollection' && geoJSONFeature.features) {
       // Multiple features
-      propertyPolygons = geoJSONFeature.features.map(feat => 
-        turf.polygon(feat.geometry.coordinates)
-      );
-    } else {
-      // Single feature
+      propertyPolygons = geoJSONFeature.features
+        .filter(feat => feat.geometry && Array.isArray(feat.geometry.coordinates) && feat.geometry.coordinates.length > 0)
+        .map(feat => turf.polygon(feat.geometry.coordinates));
+    } else if (geoJSONFeature.geometry && Array.isArray(geoJSONFeature.geometry.coordinates) && geoJSONFeature.geometry.coordinates.length > 0) {
+      // Single feature with valid coordinates
       propertyPolygons = [turf.polygon(geoJSONFeature.geometry.coordinates)];
+    } else {
+      console.warn('No valid geometry coordinates found for property polygons');
     }
 
     const config = {
@@ -722,21 +738,27 @@ export async function captureDevelopmentApplicationsMap(feature, developableArea
     if (geoJSONFeature.type === 'FeatureCollection' && geoJSONFeature.features) {
       // Draw each feature in the collection
       geoJSONFeature.features.forEach((feat, index) => {
-        if (feat.geometry?.coordinates?.[0]) {
+        if (feat && feat.geometry && Array.isArray(feat.geometry.coordinates) && 
+            feat.geometry.coordinates.length > 0 && Array.isArray(feat.geometry.coordinates[0])) {
           console.log(`Drawing feature ${index} boundary`);
           drawBoundary(ctx, feat.geometry.coordinates[0], centerX, centerY, size, config.width, {
             strokeStyle: '#FF0000',
             lineWidth: 6
           });
+        } else {
+          console.warn(`Feature ${index} has invalid or missing coordinates, skipping boundary drawing`);
         }
       });
-    } else if (geoJSONFeature.geometry?.coordinates?.[0]) {
+    } else if (geoJSONFeature.geometry && Array.isArray(geoJSONFeature.geometry.coordinates) && 
+               geoJSONFeature.geometry.coordinates.length > 0 && Array.isArray(geoJSONFeature.geometry.coordinates[0])) {
       // Draw single feature
       console.log('Drawing single feature boundary');
       drawBoundary(ctx, geoJSONFeature.geometry.coordinates[0], centerX, centerY, size, config.width, {
         strokeStyle: '#FF0000',
         lineWidth: 6
       });
+    } else {
+      console.warn('Feature has invalid or missing coordinates, cannot draw boundary');
     }
 
     // Draw all developable area features if they exist and should be shown
@@ -908,6 +930,15 @@ export async function captureConstructionCertificatesMap(feature, developableAre
   console.log('Starting construction certificates analysis with feature:', feature);
 
   try {
+    // Validate the feature structure
+    if (!feature.type) {
+      console.warn('Feature missing type property');
+    }
+    
+    if (!feature.properties && !feature.site_suitability__LGA) {
+      console.warn('Feature missing properties, LGA information may be unavailable');
+    }
+    
     // Get LGA name from properties - use the first feature's properties if it's a collection
     let lgaName;
     

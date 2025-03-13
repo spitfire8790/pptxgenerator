@@ -450,14 +450,18 @@ const scoringCriteria = {
       console.log('Feature PTALs:', featurePTALs);
       
       // Check if we have feature-specific PTAL values
-      if (featurePTALs && Array.isArray(featurePTALs)) {
+      if (featurePTALs && Array.isArray(featurePTALs) && featurePTALs.length > 0) {
         console.log('Processing PTAL for multiple features');
         
         // Find the best PTAL value across all features
         let bestPtalScore = 1;
+        let bestPtalValue = null;
         
         featurePTALs.forEach(featurePtal => {
+          if (!featurePtal) return;
+          
           const featureValues = featurePtal.ptalValues || [];
+          if (featureValues.length === 0) return;
           
           // Get the highest PTAL value from this feature
           const highestPtal = featureValues.reduce((highest, current) => {
@@ -478,27 +482,33 @@ const scoringCriteria = {
           
           // Score based on highest PTAL value
           let featureScore = 1;
-          if (highestPtal === '6 - Very High' || highestPtal === '5 - High') {
+          if (highestPtal && (highestPtal.includes('6 - Very High') || highestPtal.includes('5 - High'))) {
             featureScore = 3;
-          } else if (highestPtal === '4 - Medium-High' || highestPtal === '3 - Medium') {
+          } else if (highestPtal && (highestPtal.includes('4 - Medium-High') || highestPtal.includes('3 - Medium'))) {
             featureScore = 2;
           }
           
           // Update best score if this feature has a better score
           if (featureScore > bestPtalScore) {
             bestPtalScore = featureScore;
+            bestPtalValue = highestPtal;
           }
         });
         
         console.log('Best PTAL score across all features:', bestPtalScore);
+        console.log('Best PTAL value:', bestPtalValue);
         return bestPtalScore;
       }
       
       // Original approach for single feature or fallback
-      if (!ptalValues || ptalValues.length === 0) return 1;
+      if (!ptalValues || !Array.isArray(ptalValues) || ptalValues.length === 0) {
+        console.log('No PTAL values provided - defaulting to score 1');
+        return 1;
+      }
       
-      // Get the highest PTAL value from the intersecting values
+      // Get the highest PTAL value
       const valuesToScore = Array.isArray(ptalValues) ? ptalValues : [];
+      console.log('Processing PTAL values:', valuesToScore);
       
       // Get the highest PTAL value
       const highestPtal = valuesToScore.reduce((highest, current) => {
@@ -517,25 +527,30 @@ const scoringCriteria = {
         return currentValue > highestValue ? current : highest;
       }, valuesToScore[0]);
       
+      console.log('Highest PTAL value:', highestPtal);
+      
       // Score based on highest PTAL value
-      if (highestPtal === '6 - Very High' || highestPtal === '5 - High') {
+      if (highestPtal && (highestPtal.includes('6 - Very High') || highestPtal.includes('5 - High'))) {
+        console.log('Returning score 3 for high PTAL');
         return 3;
-      } else if (highestPtal === '4 - Medium-High' || highestPtal === '3 - Medium') {
+      } else if (highestPtal && (highestPtal.includes('4 - Medium-High') || highestPtal.includes('3 - Medium'))) {
+        console.log('Returning score 2 for medium PTAL');
         return 2;
-      } else if (highestPtal === '2 - Low-Medium' || highestPtal === '1 - Low') {
+      } else {
+        console.log('Returning score 1 for low PTAL');
         return 1;
       }
-      
-      return 1;
     },
     getScoreDescription: (score, ptalValues, featurePTALs) => {
       // Check if we have feature-specific PTAL values
-      if (featurePTALs && Array.isArray(featurePTALs)) {
+      if (featurePTALs && Array.isArray(featurePTALs) && featurePTALs.length > 0) {
         // Find the best PTAL feature
         let bestFeature = null;
         let bestPtalValue = null;
         
         featurePTALs.forEach(featurePtal => {
+          if (!featurePtal) return;
+          
           const featureValues = featurePtal.ptalValues || [];
           
           // Skip empty features
@@ -581,35 +596,53 @@ const scoringCriteria = {
         if (bestFeature !== null && bestPtalValue) {
           const featureText = `The site`;
           
-          switch (score) {
-            case 3:
-              return `${featureText} has good public transport access: PTAL (8:00-9:00 AM) = ${bestPtalValue}`;
-            case 2:
-              return `${featureText} has moderate public transport access: PTAL (8:00-9:00 AM) = ${bestPtalValue}`;
-            case 1:
-              return `${featureText} has low public transport access: PTAL (8:00-9:00 AM) = ${bestPtalValue}`;
-            default:
-              return "PTAL not assessed";
-          }
+          // Determine accessibility level based on the PTAL value, not the score
+          const valueMap = {
+            '6 - Very High': 'good',
+            '5 - High': 'good',
+            '4 - Medium-High': 'moderate',
+            '3 - Medium': 'moderate',
+            '2 - Low-Medium': 'low',
+            '1 - Low': 'low'
+          };
+          
+          const accessLevel = valueMap[bestPtalValue] || 'low';
+          
+          return `${featureText} has ${accessLevel} public transport access: PTAL (8:00-9:00 AM) = ${bestPtalValue}`;
         }
       }
       
       // Original approach for single feature
-      if (!ptalValues || ptalValues.length === 0) {
+      if (!ptalValues || !Array.isArray(ptalValues) || ptalValues.length === 0) {
         return "PTAL not assessed";
       }
       
       const ptalList = Array.from(new Set(ptalValues)).join(', ');
       
-      switch (score) {
-        case 3:
-          return `Site has good public transport access: PTAL (8:00-9:00 AM) = ${ptalList}`;
-        case 2:
-          return `Site has moderate public transport access: PTAL (8:00-9:00 AM) = ${ptalList}`;
-        case 1:
-          return `Site has low public transport access: PTAL (8:00-9:00 AM) = ${ptalList}`;
-        default:
-          return "PTAL not assessed";
+      // Determine accessibility level based on the highest PTAL value
+      const highestPtal = ptalValues.reduce((highest, current) => {
+        const valueMap = {
+          '6 - Very High': 6,
+          '5 - High': 5,
+          '4 - Medium-High': 4,
+          '3 - Medium': 3,
+          '2 - Low-Medium': 2,
+          '1 - Low': 1
+        };
+        
+        const currentValue = valueMap[current] || 0;
+        const highestValue = valueMap[highest] || 0;
+        
+        return currentValue > highestValue ? current : highest;
+      }, ptalValues[0]);
+      
+      // Determine accessibility level based on the PTAL value
+      if (highestPtal && (highestPtal.includes('6 - Very High') || highestPtal.includes('5 - High'))) {
+        return `Site has good public transport access: PTAL (8:00-9:00 AM) = ${ptalList}`;
+      } else if (highestPtal && (highestPtal.includes('4 - Medium-High') || highestPtal.includes('3 - Medium'))) {
+        return `Site has moderate public transport access: PTAL (8:00-9:00 AM) = ${ptalList}`;
+      } else {
+        return `Site has low public transport access: PTAL (8:00-9:00 AM) = ${ptalList}`;
       }
     },
     getScoreColor: (score) => {

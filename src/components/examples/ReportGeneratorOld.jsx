@@ -47,6 +47,7 @@ import PlanningMapView from './PlanningMapView';
 import PptxGenJS from 'pptxgenjs';
 import DevelopableAreaSelector, { DevelopableAreaOptions } from './DevelopableAreaSelector';
 import { checkUserClaims } from './utils/auth/tokenUtils';
+import { sendReportNotificationEmail, isEmailServiceAvailable, saveNotificationPreference, getNotificationPreference } from '../../lib/emailService';
 
 import { 
   Home,
@@ -70,13 +71,10 @@ import {
   Calculator,
   Settings2,
   Banknote,
-  FileStack,
   X,
   MessageSquare,
   Mail,
-  BellRing,
-  Layers as LayersIcon,
-  Bell
+  BellRing
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import './Timer.css';
@@ -90,8 +88,6 @@ import FeasibilityManager from './components/FeasibilityManager';
 import Papa from 'papaparse';
 import PropertyListSelector from './PropertyListSelector';
 import Chat from './Chat';
-import NotificationCenter from '../NotificationCenter';
-import './styles.css';
 
 const slideOptions = [
   { id: 'cover', label: 'Cover Page', addSlide: addCoverSlide, icon: Home },
@@ -253,55 +249,45 @@ const ReportGenerator = ({
   const [generationLogs, setGenerationLogs] = useState([]);
   const [logs, setLogs] = useState([]);
   const logCounterRef = useRef(0);
+  const [enableEmailNotifications, setEnableEmailNotifications] = useState(false);
   const [userInfo, setUserInfo] = useState(null);
+  const [emailServiceAvailable, setEmailServiceAvailable] = useState(true);
   const [feasibilitySettings, setFeasibilitySettings] = useState({
-    mediumDensity: {
-      siteEfficiencyRatio: 0.70,
-      floorToFloorHeight: 3.1,
-      gbaToGfaRatio: 0.90,
-      gfaToNsaRatio: 0.85,
-      dwellingPrice: null,
-      assumedDwellingSize: null,
-      constructionCostM2: null,
-      assumedConstructionCostM2: null,
-      agentsSalesCommission: 0.02,
-      legalFeesOnSales: 0.005,
-      marketingCosts: 0.0075,
-      profitAndRisk: 0.20,
-      daApplicationFees: 200000,
-      professionalFees: 0.05,
-      developmentContribution: 0.01,
-      interestRate: 0.075,
-      projectPeriod: 24,
-      useLMR: false
-    },
-    highDensity: {
-      siteEfficiencyRatio: 0.60,
-      floorToFloorHeight: 3.1,
+    lowMidDensity: {
+      siteEfficiencyRatio: 0.80,
+      floorToFloorHeight: 3.5,
       gbaToGfaRatio: 0.75,
       gfaToNsaRatio: 0.85,
-      dwellingPrice: null,
-      assumedDwellingSize: 75,
-      constructionCostM2: null,
-      assumedConstructionCostM2: null,
+      unitSize: 75,
       agentsSalesCommission: 0.02,
       legalFeesOnSales: 0.005,
       marketingCosts: 0.0075,
       profitAndRisk: 0.20,
       daApplicationFees: 200000,
       professionalFees: 0.05,
-      developmentContribution: 0.01,
       interestRate: 0.075,
-      projectPeriod: 48,
-      useLMR: false
+      projectPeriod: 48
+    },
+    highDensity: {
+      siteEfficiencyRatio: 0.80,
+      floorToFloorHeight: 3.5,
+      gbaToGfaRatio: 0.75,
+      gfaToNsaRatio: 0.85,
+      unitSize: 75,
+      agentsSalesCommission: 0.02,
+      legalFeesOnSales: 0.005,
+      marketingCosts: 0.0075,
+      profitAndRisk: 0.20,
+      daApplicationFees: 200000,
+      professionalFees: 0.05,
+      interestRate: 0.075,
+      projectPeriod: 48
     }
   });
   const [salesData, setSalesData] = useState([]);
   const [showFeasibilitySettings, setShowFeasibilitySettings] = useState(false);
   const [selectedSiteFeatures, setSelectedSiteFeatures] = useState(selectedFeatures);
   const [showChat, setShowChat] = useState(false);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [notificationPermission, setNotificationPermission] = useState('default');
   
   // Use the first selected feature as the primary for display
   const primaryFeature = selectedSiteFeatures.length > 0 ? selectedSiteFeatures[0] : null;
@@ -319,45 +305,108 @@ const ReportGenerator = ({
         const info = await checkUserClaims();
         console.log('User info returned from checkUserClaims:', info);
         
-        // Always set userInfo even if null to avoid sign-in required message
-        setUserInfo(info || { email: 'user@example.com', name: 'User' });
-        
-        // Check notification permission regardless of user info
-        checkNotificationPermission();
+        if (info) {
+          console.log('Retrieved user info for notifications:', info);
+          setUserInfo(info);
+          
+          // Initialize email notification preference from localStorage
+          if (info.email) {
+            const preferenceEnabled = getNotificationPreference(info.email);
+            setEnableEmailNotifications(preferenceEnabled);
+            console.log(`Loaded email notification preference for ${info.email}: ${preferenceEnabled}`);
+          } else {
+            console.warn('User info retrieved but email is missing:', info);
+          }
+        } else {
+          console.warn('No user info returned from checkUserClaims');
+          
+          // Fallback for development/testing - create a mock user
+          const mockUser = {
+            email: 'test.user@example.com',
+            name: 'Test User'
+          };
+          console.log('Setting up mock user for testing:', mockUser);
+          setUserInfo(mockUser);
+        }
       } catch (error) {
-        console.error('Error getting user info:', error);
-        // Use a default user object to prevent sign-in required messages
-        setUserInfo({ email: 'user@example.com', name: 'User' });
+        console.error('Error fetching user info for notifications:', error);
+        
+        // Fallback for development/testing if an error occurs
+        const mockUser = {
+          email: 'test.user@example.com',
+          name: 'Test User'
+        };
+        console.log('Setting up mock user after error:', mockUser);
+        setUserInfo(mockUser);
       }
     };
-
+    
+    // Check if email service is available
+    const checkEmailService = async () => {
+      try {
+        const available = await isEmailServiceAvailable();
+        console.log('Email service available:', available);
+        setEmailServiceAvailable(available);
+      } catch (error) {
+        console.error('Error checking email service:', error);
+        setEmailServiceAvailable(false);
+      }
+    };
+    
+    // Request notification permission if not already granted or denied
+    const checkNotificationPermission = () => {
+      if ('Notification' in window) {
+        console.log('Current notification permission:', Notification.permission);
+        if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+          // Show a notification about the feature
+          const notificationMessage = document.createElement('div');
+          notificationMessage.className = 'fixed bottom-4 right-4 bg-white p-4 rounded-xl shadow-lg border border-gray-300 z-50 flex items-start max-w-md';
+          notificationMessage.innerHTML = `
+            <div class="bg-blue-100 p-2 rounded-full mr-3">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="h-6 w-6 text-blue-600">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+            </div>
+            <div>
+              <h3 class="font-semibold text-gray-900">Enable Desktop Notifications</h3>
+              <p class="text-sm text-gray-600 mb-3">Allow notifications to be alerted when your report generation is complete.</p>
+              <div class="flex space-x-2">
+                <button id="enable-notifications" class="px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700">Enable</button>
+                <button id="dismiss-notification" class="px-3 py-1 bg-gray-200 text-gray-700 text-sm rounded-md hover:bg-gray-300">Maybe Later</button>
+              </div>
+            </div>`;
+          
+          document.body.appendChild(notificationMessage);
+          
+          // Add event listeners
+          document.getElementById('enable-notifications').addEventListener('click', () => {
+            Notification.requestPermission().then(permission => {
+              console.log('Notification permission:', permission);
+              document.body.removeChild(notificationMessage);
+            });
+          });
+          
+          document.getElementById('dismiss-notification').addEventListener('click', () => {
+            document.body.removeChild(notificationMessage);
+          });
+          
+          // Auto-remove after 10 seconds
+          setTimeout(() => {
+            if (document.body.contains(notificationMessage)) {
+              document.body.removeChild(notificationMessage);
+            }
+          }, 10000);
+        }
+      }
+    };
+    
     getUserInfo();
+    checkEmailService();
     
-    // For good measure, recheck periodically in case user logs in during session
-    const interval = setInterval(getUserInfo, 60000); // Check every minute
-    
-    return () => clearInterval(interval);
+    // Only check notification permission after a short delay to ensure
+    // the component is fully mounted and the user has had time to interact
+    setTimeout(checkNotificationPermission, 3000);
   }, []);
-
-  // Check notification permission
-  const checkNotificationPermission = () => {
-    try {
-      if (!('Notification' in window)) {
-        console.log('This browser does not support desktop notifications');
-        setNotificationPermission('not-supported');
-        return;
-      }
-      
-      setNotificationPermission(Notification.permission);
-      
-      // If permission isn't denied or granted, we'll leave it for user action later
-      if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
-        console.log('Notification permission status:', Notification.permission);
-      }
-    } catch (error) {
-      console.error('Error checking notification permission:', error);
-    }
-  };
 
   // Function to send desktop notification
   const sendDesktopNotification = (title, message) => {
@@ -385,51 +434,44 @@ const ReportGenerator = ({
     }
   };
 
-  // Function to save notification locally
-  const saveNotification = (notification) => {
-    try {
-      const notifications = JSON.parse(localStorage.getItem('userNotifications') || '[]');
-      const isSuccess = notification.title.includes('Complete') || notification.title.includes('success');
-      
-      notifications.push({
-        ...notification,
-        to: userInfo?.email || 'anonymous', // Add recipient info
-        subject: notification.title,
-        text: notification.message,
-        status: isSuccess ? 'success' : 'error',
-      });
-      localStorage.setItem('userNotifications', JSON.stringify(notifications));
-      return true;
-    } catch (error) {
-      console.error('Error saving notification to localStorage:', error);
-      return false;
-    }
-  };
-
-  // Function to save notification
+  // Function to send email notification
   const sendEmailNotification = async (reportName, status) => {
-    // We'll always have userInfo now, so just save the notification
+    console.log('sendEmailNotification called with:', { reportName, status });
+    console.log('Current userInfo:', userInfo);
+    console.log('Email notifications enabled:', enableEmailNotifications);
+    
+    if (!enableEmailNotifications) {
+      console.log('Email notifications are disabled - not sending email');
+      return;
+    }
+    
+    if (!userInfo?.email) {
+      console.warn('Cannot send email notification - no user email available');
+      return;
+    }
+    
     try {
-      addLog('Saving notification...', 'default');
+      addLog('Sending email notification...', 'default');
+      console.log(`Preparing to send email to ${userInfo.email}`);
       
-      // Standardize status for display purposes
-      const displayStatus = status === 'success' ? 'Complete' : status;
-      const isSuccess = status === 'success' || status === 'Complete';
+      // Use our email service to send the notification
+      const result = await sendReportNotificationEmail({
+        to: userInfo.email,
+        reportName: reportName || 'Property Analysis Report',
+        status: status || 'success',
+        userName: userInfo.name || 'User'
+      });
       
-      // Save to localStorage
-      const notification = {
-        id: Date.now(),
-        title: `Report ${displayStatus}: ${reportName}`,
-        message: `Your property report "${reportName}" has ${isSuccess ? 'been generated' : 'failed to generate'}.`,
-        timestamp: new Date().toISOString(),
-        read: false
-      };
+      console.log('Email service result:', result);
       
-      saveNotification(notification);
-      addLog('Notification saved locally', 'success');
+      if (result.success) {
+        addLog('Email notification sent successfully', 'success');
+      } else {
+        throw new Error(result.error || 'Unknown error sending email');
+      }
     } catch (error) {
-      console.error('Error saving notification:', error);
-      addLog(`Error saving notification: ${error.message}`, 'error');
+      console.error('Error sending email notification:', error);
+      addLog('Failed to send email notification', 'error');
     }
   };
 
@@ -1152,7 +1194,7 @@ const ReportGenerator = ({
         addLog('Generating access maps in parallel...', 'info');
         const [roadsResult, udpPrecinctsResult, ptalScreenshot] = await Promise.all([
           captureRoadsMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true),
-          captureUDPPrecinctMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true),
+          captureUDPPrecinctMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds),
           capturePTALMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true)
         ]);
 
@@ -1182,58 +1224,7 @@ const ReportGenerator = ({
           propertyData.udpFeatures = udpPrecinctsResult?.udpFeatures || null;
         }
 
-        // Handle PTAL data similarly to UDP data
-        if (typeof ptalScreenshot === 'string') {
-          screenshots.ptalScreenshot = ptalScreenshot;
-        } else {
-          // Store just the dataURL in the screenshot field for PowerPoint
-          screenshots.ptalScreenshot = ptalScreenshot?.dataURL || null;
-          
-          // Extract and store PTAL values from feature if they exist
-          if (featureToCapture.properties?.ptalValues) {
-            console.log('Found PTAL values in feature:', featureToCapture.properties.ptalValues);
-            propertyData.ptalValues = featureToCapture.properties.ptalValues;
-          }
-          
-          // Extract and store feature-specific PTAL data if it exists
-          if (featureToCapture.properties?.featurePTALs) {
-            console.log('Found feature-specific PTAL data:', featureToCapture.properties.featurePTALs);
-            propertyData.featurePTALs = featureToCapture.properties.featurePTALs;
-          }
-        }
-        
-        // Add more detailed property data to help with slide generation
-        if (selectedSiteFeatures.length > 0) {
-          const primaryFeatureProp = selectedSiteFeatures[0]?.properties || {};
-          
-          propertyData.isMultipleProperties = selectedSiteFeatures.length > 1;
-          propertyData.site__address = primaryFeatureProp.address || primaryFeatureProp.properties?.address;
-          propertyData.site__geometry = selectedSiteFeatures[0]?.geometry?.coordinates || null;
-          
-          if (selectedSiteFeatures.length > 1) {
-            propertyData.site__multiple_addresses = selectedSiteFeatures.map(f => f.properties?.address || null).filter(Boolean);
-            propertyData.allProperties = selectedSiteFeatures;
-          }
-          
-          // If feature has any developable area, format it for slides
-          if (developableArea && developableArea.features) {
-            propertyData.developableArea = developableArea.features;
-          }
-          
-          // Include captured FeatureToUse object which might have PTAL data
-          propertyData.combinedGeometry = featureToCapture;
-        }
-        
-        // Make sure access slide has all the data it needs for proper scoring
-        if (selectedSlides.access) {
-          try {
-            addLog('Creating access slide...', 'info');
-            await addAccessSlide(pptx, propertyData);
-          } catch (error) {
-            addLog(`Error creating access slide: ${error.message}`, 'error');
-            console.error('Error creating access slide:', error);
-          }
-        }
+        screenshots.ptalScreenshot = ptalScreenshot;
       }
       
       if (selectedSlides.hazards) {
@@ -1676,307 +1667,361 @@ const ReportGenerator = ({
   };
 
   return (
-    <div className="relative w-full flex flex-col px-4 py-6">
-      <div className="grid grid-cols-5 gap-4 mb-6 relative">
-        <button
-          className="px-4 py-2.5 rounded-xl text-gray-900 font-medium bg-white border-2 border-blue-600 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setShowHowTo(prev => !prev);
-          }}
-        >
-          <HelpCircle className="w-5 h-5 text-blue-600" />
-          How to use
-        </button>
-        
-        <button
-          className="px-4 py-2.5 rounded-xl text-gray-900 font-medium bg-white border-2 border-blue-600 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setShowLeaderboard(prev => !prev);
-          }}
-        >
-          <Trophy className="w-5 h-5 text-yellow-500" />
-          Leaderboard
-        </button>
+    <div className="h-full overflow-auto">
+      <div className="p-4 relative z-50">
+        <div className="grid grid-cols-5 gap-4 mb-6 relative">
+          <button
+            className="px-4 py-2.5 rounded-xl text-gray-900 font-medium bg-white border-2 border-blue-600 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
+            onClick={(e) => {
+              console.log('How to use button clicked');
+              e.preventDefault();
+              e.stopPropagation();
+              setShowHowTo(prev => {
+                console.log('Setting showHowTo to:', !prev);
+                return !prev;
+              });
+            }}
+          >
+            <HelpCircle className="w-5 h-5 text-blue-600" />
+            How to use
+          </button>
 
-        <button
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setShowIssuesList(prev => !prev);
-          }}
-          className="px-4 py-2.5 rounded-xl text-gray-900 font-medium bg-white border-2 border-blue-600 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
-        >
-          <AlertCircle className="w-5 h-5 text-blue-600" />
-          View Issues
-        </button>
+          <button
+            className="px-4 py-2.5 rounded-xl text-gray-900 font-medium bg-white border-2 border-blue-600 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
+            onClick={(e) => {
+              console.log('Leaderboard button clicked');
+              e.preventDefault();
+              e.stopPropagation();
+              setShowLeaderboard(prev => {
+                console.log('Setting showLeaderboard to:', !prev);
+                return !prev;
+              });
+            }}
+          >
+            <Trophy className="w-5 h-5 text-yellow-500" />
+            Leaderboard
+          </button>
 
-        <button
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setIsIssueModalOpen(prev => !prev);
-          }}
-          className="px-4 py-2.5 rounded-xl text-gray-900 font-medium bg-white border-2 border-blue-600 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
-        >
-          <AlertCircle className="w-5 h-5 text-red-600" />
-          Log Issue
-        </button>
+          <button
+            onClick={(e) => {
+              console.log('View Issues button clicked');
+              e.preventDefault();
+              e.stopPropagation();
+              setShowIssuesList(prev => {
+                console.log('Setting showIssuesList to:', !prev);
+                return !prev;
+              });
+            }}
+            className="px-4 py-2.5 rounded-xl text-gray-900 font-medium bg-white border-2 border-blue-600 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
+          >
+            <AlertCircle className="w-5 h-5 text-blue-600" />
+            View Issues
+          </button>
 
-        <button
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setShowChat(prev => !prev);
-          }}
-          className="px-4 py-2.5 rounded-xl text-gray-900 font-medium bg-white border-2 border-blue-600 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
-        >
-          <MessageSquare className="w-5 h-5 text-blue-600" />
-          Chat
-        </button>
-      </div>
-      
-      <div className="mb-4">
-        <div className="flex justify-between items-center">
-          <h2 className="text-xl font-semibold">Desktop Due Diligence PowerPoint Report Generator</h2>
-          <div className="flex items-center">
-            <NotificationCenter userEmail={userInfo?.email} />
-          </div>
+          <button
+            onClick={(e) => {
+              console.log('Log Issue button clicked');
+              e.preventDefault();
+              e.stopPropagation();
+              setIsIssueModalOpen(prev => {
+                console.log('Setting isIssueModalOpen to:', !prev);
+                return !prev;
+              });
+            }}
+            className="px-4 py-2.5 rounded-xl text-gray-900 font-medium bg-white border-2 border-blue-600 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
+          >
+            <AlertCircle className="w-5 h-5 text-red-600" />
+            Log Issue
+          </button>
+
+          <button
+            onClick={(e) => {
+              console.log('Chat button clicked');
+              e.preventDefault();
+              e.stopPropagation();
+              setShowChat(prev => {
+                console.log('Setting showChat to:', !prev);
+                return !prev;
+              });
+            }}
+            className="px-4 py-2.5 rounded-xl text-gray-900 font-medium bg-white border-2 border-blue-600 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
+          >
+            <MessageSquare className="w-5 h-5 text-blue-600" />
+            Chat
+          </button>
         </div>
-        <div className="h-1 bg-[#da2244] mt-2 rounded-full"></div>
-        
-        {/* Animated scrolling news ticker */}
-        <div className="mt-2 py-2 bg-blue-50 rounded-md overflow-hidden border border-blue-200">
-          <div className="news-ticker-container overflow-hidden">
-            <div className="news-ticker-content flex items-center whitespace-nowrap text-blue-800 font-medium px-4">
-              <span className="inline-flex items-center bg-blue-600 text-white px-2 py-0.5 rounded-md text-xs mr-3">
-                NEW
-              </span>
-              7 March 2025 Update: Multiple Sites and Multiple Developable Areas can now be incorporated into a single report.
+
+        <div className="mb-4">
+          <div className="flex justify-between items-center">
+            <h2 className="text-xl font-semibold">Desktop Due Diligence PowerPoint Report Generator</h2>
+          </div>
+          <div className="h-1 bg-[#da2244] mt-2 rounded-full"></div>
+          
+          {/* Animated scrolling news ticker */}
+          <div className="mt-2 py-2 bg-blue-50 rounded-md overflow-hidden border border-blue-200">
+            <div className="news-ticker-container overflow-hidden">
+              <div className="news-ticker-content flex items-center whitespace-nowrap text-blue-800 font-medium px-4">
+                <span className="inline-flex items-center bg-blue-600 text-white px-2 py-0.5 rounded-md text-xs mr-3">
+                  NEW
+                </span>
+                7 March 2025 Update: Multiple Sites and Multiple Developable Areas can now be incorporated into a single report.
+              </div>
             </div>
           </div>
         </div>
-      </div>
-      
-      <PlanningMapView 
-        ref={planningMapRef}
-        feature={primaryFeature} 
-        onScreenshotCapture={handlePlanningScreenshotsCapture}
-        developableArea={developableArea}
-        showDevelopableArea={showDevelopableArea}
-      />
-
-      {/* Property selection and Developable Area panels - 3 column layout */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-        <PropertyListSelector 
-          onSelect={handleSiteSelection}
-          selectedFeatures={selectedSiteFeatures}
-        />
-        <DevelopableAreaSelector 
-          onLayerSelect={handleDevelopableAreaSelect} 
-          selectedFeature={primaryFeature}
+        
+        <PlanningMapView 
+          ref={planningMapRef}
+          feature={primaryFeature} 
+          onScreenshotCapture={handlePlanningScreenshotsCapture}
+          developableArea={developableArea}
           showDevelopableArea={showDevelopableArea}
-          setShowDevelopableArea={setShowDevelopableArea}
-          useDevelopableAreaForBounds={useDevelopableAreaForBounds}
-          setUseDevelopableAreaForBounds={setUseDevelopableAreaForBounds}
-        />
-        <DevelopableAreaOptions
-          selectedLayers={developableArea ? [1] : []} // Pass a non-empty array when developableArea exists
-          showDevelopableArea={showDevelopableArea}
-          setShowDevelopableArea={setShowDevelopableArea}
-          useDevelopableAreaForBounds={useDevelopableAreaForBounds}
-          setUseDevelopableAreaForBounds={setUseDevelopableAreaForBounds}
-        />
-      </div>
-      
-      <div className="bg-white p-6 rounded-lg shadow mb-4">
-        <SlidePreview 
-          selectedFeature={primaryFeature}
-          selectedFeatures={selectedSiteFeatures}
-          screenshot={previewScreenshot}
         />
 
-        <div className="flex items-center justify-between mt-4 mb-2 pb-2 border-b border-gray-200">
-          <div className="flex items-center gap-4">
-            <label className="inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={Object.values(selectedSlides).every(Boolean)}
-                onChange={(e) => {
-                  const value = e.target.checked;
-                  const updatedSlides = {};
-                  Object.keys(selectedSlides).forEach(key => {
-                    updatedSlides[key] = value;
-                  });
-                  setSelectedSlides(updatedSlides);
-                }}
-                className="w-3.5 h-3.5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-              />
-              <span className="font-medium ml-2">{Object.values(selectedSlides).every(Boolean) ? 'Deselect All' : 'Select All'}</span>
-            </label>
-          </div>
-        </div>
-
-        {isGenerating && (
-          <Timer 
-            isRunning={isGenerating} 
-            onComplete={handleTimerComplete}
+        {/* Property selection and Developable Area panels - 3 column layout */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <PropertyListSelector 
+            onSelect={handleSiteSelection}
+            selectedFeatures={selectedSiteFeatures}
           />
-        )}
+          <DevelopableAreaSelector 
+            onLayerSelect={handleDevelopableAreaSelect} 
+            selectedFeature={primaryFeature}
+            showDevelopableArea={showDevelopableArea}
+            setShowDevelopableArea={setShowDevelopableArea}
+            useDevelopableAreaForBounds={useDevelopableAreaForBounds}
+            setUseDevelopableAreaForBounds={setUseDevelopableAreaForBounds}
+          />
+          <DevelopableAreaOptions
+            selectedLayers={developableArea ? [1] : []} // Pass a non-empty array when developableArea exists
+            showDevelopableArea={showDevelopableArea}
+            setShowDevelopableArea={setShowDevelopableArea}
+            useDevelopableAreaForBounds={useDevelopableAreaForBounds}
+            setUseDevelopableAreaForBounds={setUseDevelopableAreaForBounds}
+          />
+        </div>
+        
+        <div className="bg-white p-6 rounded-lg shadow mb-4">
+          <SlidePreview 
+            selectedFeature={primaryFeature}
+            selectedFeatures={selectedSiteFeatures}
+            screenshot={previewScreenshot}
+          />
 
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            {slideOptions.map((option) => {
-              const isCompleted = completedSteps.includes(option.id);
-              const isActive = currentStep === option.id;
-              const Icon = option.icon;
-              const isDisabled = option.id === 'feasibility' && !selectedSlides.development;
-
-              return (
-                <div
-                  key={option.id}
-                  className={`
-                    relative p-3 rounded-xl border transition-all transform
-                    ${isActive ? 'slide-card-active border-gray-500 shadow-lg' : 'border-gray-200'}
-                    ${isDisabled ? 'opacity-50 cursor-not-allowed group' : 'hover:shadow-md hover:scale-105 hover:border-gray-400 cursor-pointer'}
-                    ${selectedSlides[option.id] ? 'bg-gray-100 selected-card' : 'bg-white hover:bg-gray-50'}
-                  `}
-                  onClick={() => {
-                    if (!isGenerating && !isDisabled) {
-                      if (option.id === 'feasibility') {
-                        // When selecting feasibility, ensure development is also selected
-                        setSelectedSlides(prev => ({
-                          ...prev,
-                          development: true,
-                          feasibility: !prev.feasibility
-                        }));
-                      } else if (option.id === 'development' && selectedSlides.feasibility) {
-                        // If development is being deselected and feasibility is selected,
-                        // also deselect feasibility
-                        setSelectedSlides(prev => ({
-                          ...prev,
-                          development: false,
-                          feasibility: false
-                        }));
-                      } else {
-                        setSelectedSlides(prev => ({
-                          ...prev,
-                          [option.id]: !prev[option.id]
-                        }));
-                      }
-                    }
+          <div className="flex items-center justify-between mt-4 mb-2 pb-2 border-b border-gray-200">
+            <div className="flex items-center gap-4">
+              <label className="inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={Object.values(selectedSlides).every(Boolean)}
+                  onChange={(e) => {
+                    const value = e.target.checked;
+                    setSelectedSlides(
+                      Object.keys(selectedSlides).reduce((acc, key) => ({
+                        ...acc,
+                        [key]: value
+                      }), {})
+                    );
                   }}
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <div className={`
-                      slide-icon p-2.5 rounded-xl transition-all duration-300
-                      ${isCompleted ? 'bg-green-100' : selectedSlides[option.id] ? 'bg-gray-200' : 'bg-gray-100'}
-                      ${selectedSlides[option.id] ? 'scale-110' : ''}
-                    `}>
-                      {option.id === 'feasibility' ? (
-                        <div className="flex items-center space-x-2">
-                          <Calculator 
-                            className={`w-6 h-6 ${isCompleted ? 'text-green-600' : selectedSlides[option.id] ? 'text-gray-900' : 'text-gray-600'}`} 
+                  className="w-4 h-4 text-blue-600 rounded"
+                  disabled={isGenerating}
+                />
+                <span className="font-medium ml-2">{Object.values(selectedSlides).every(Boolean) ? 'Deselect All' : 'Select All'}</span>
+              </label>
+              <div className="flex items-center">
+                <div className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    id="enableEmailNotifications"
+                    checked={enableEmailNotifications}
+                    onChange={() => {
+                      const newValue = !enableEmailNotifications;
+                      setEnableEmailNotifications(newValue);
+                      if (userInfo?.email) {
+                        saveNotificationPreference(userInfo.email, newValue);
+                      }
+                    }}
+                    className="sr-only peer"
+                    disabled={!emailServiceAvailable || isGenerating}
+                  />
+                  <div className={`w-11 h-6 ${!emailServiceAvailable ? 'bg-gray-200' : 'bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[""] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600'}`}></div>
+                  <span className="ml-3 text-sm font-medium text-gray-900 flex items-center">
+                    <Mail className="h-4 w-4 mr-1" />
+                    {emailServiceAvailable === false ? (
+                      <span className="text-gray-500 flex items-center">
+                        Email notifications unavailable 
+                        <span className="ml-1 group relative">
+                          <HelpCircle className="h-4 w-4 text-gray-400" />
+                          <span className="hidden group-hover:block absolute left-0 bottom-6 bg-gray-800 text-white text-xs rounded p-2 w-48 z-10">
+                            Email service is not configured or unavailable.
+                          </span>
+                        </span>
+                      </span>
+                    ) : (
+                      <span>
+                        <span className="font-medium">Email notifications</span>
+                        {userInfo?.email && (
+                          <span className="ml-1 text-xs text-gray-500">({userInfo.email})</span>
+                        )}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {isGenerating && (
+              <Timer 
+                isRunning={isGenerating} 
+                onComplete={handleTimerComplete}
+              />
+            )}
+          </div>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {slideOptions.map((option) => {
+                const isCompleted = completedSteps.includes(option.id);
+                const isActive = currentStep === option.id;
+                const Icon = option.icon;
+                const isDisabled = option.id === 'feasibility' && !selectedSlides.development;
+
+                return (
+                  <div
+                    key={option.id}
+                    className={`
+                      relative p-4 rounded-lg border transition-all
+                      ${isActive ? 'slide-card-active border-blue-400 shadow-lg' : ''}
+                      ${isDisabled ? 'opacity-50 cursor-not-allowed group' : 'hover:shadow-md cursor-pointer'}
+                    `}
+                    onClick={() => {
+                      if (!isGenerating && !isDisabled) {
+                        if (option.id === 'feasibility') {
+                          // When selecting feasibility, ensure development is also selected
+                          setSelectedSlides(prev => ({
+                            ...prev,
+                            development: true,
+                            feasibility: !prev.feasibility
+                          }));
+                        } else if (option.id === 'development' && selectedSlides.feasibility) {
+                          // If development is being deselected and feasibility is selected,
+                          // also deselect feasibility
+                          setSelectedSlides(prev => ({
+                            ...prev,
+                            development: false,
+                            feasibility: false
+                          }));
+                        } else {
+                          setSelectedSlides(prev => ({
+                            ...prev,
+                            [option.id]: !prev[option.id]
+                          }));
+                        }
+                      }
+                    }}
+                  >
+                    <div className="flex items-start justify-between mb-1.5">
+                      <div className={`slide-icon p-1.5 rounded-lg ${isCompleted ? 'bg-green-100' : 'bg-gray-100'}`}>
+                        {option.id === 'feasibility' ? (
+                          <div className="flex items-center space-x-2">
+                            <Calculator 
+                              className={`w-4 h-4 ${isCompleted ? 'text-green-600' : 'text-gray-600'}`} 
+                              strokeWidth={1.5} 
+                            />
+                            <span className="px-1.5 py-0.5 text-[10px] bg-blue-100 text-blue-800 rounded">Beta</span>
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setShowFeasibilitySettings(true);
+                              }}
+                              className="flex items-center space-x-1 px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors"
+                            >
+                              <Settings2 className="w-3 h-3" />
+                              <span>Settings</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <Icon 
+                            className={`w-4 h-4 ${isCompleted ? 'text-green-600' : 'text-gray-600'}`} 
                             strokeWidth={1.5} 
                           />
-                          <span className="px-1.5 py-0.5 text-[10px] bg-gray-100 text-gray-800 rounded-lg">Beta</span>
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setShowFeasibilitySettings(true);
-                            }}
-                            className="flex items-center space-x-1 px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                          >
-                            <Settings2 className="w-3 h-3" />
-                            <span>Settings</span>
-                          </button>
-                        </div>
-                      ) : (
-                        <Icon 
-                          className={`w-6 h-6 ${isCompleted ? 'text-green-600' : selectedSlides[option.id] ? 'text-gray-900' : 'text-gray-600'}`} 
-                          strokeWidth={1.5} 
-                        />
-                      )}
-                    </div>
-                    <div className="checkbox-wrapper">
+                        )}
+                      </div>
                       <input
                         type="checkbox"
                         id={option.id}
                         checked={selectedSlides[option.id]}
                         onChange={(e) => e.stopPropagation()}
                         disabled={isGenerating}
-                        className={`w-4 h-4 rounded border-gray-300 focus:ring-gray-500 checkbox-animated ${selectedSlides[option.id] ? 'checkbox-checked' : ''}`}
+                        className="w-3.5 h-3.5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                       />
                     </div>
+                    
+                    <h3 className="font-medium text-sm text-gray-900">{option.label}</h3>
+                    
+                    {isGenerating && selectedSlides[option.id] && (
+                      <div className="mt-1">
+                        {isCompleted ? (
+                          <div className="flex items-center text-green-600 text-xs">
+                            <svg className="w-3 h-3 mr-0.5" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                            Complete
+                          </div>
+                        ) : isActive ? (
+                          <div className="flex items-center space-x-1.5 text-xs text-blue-500">
+                            <div className="w-2.5 h-2.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                            <span className="truncate">{getStepDescription(option.id)}</span>
+                          </div>
+                        ) : (
+                          <div className="text-xs text-gray-400">Pending</div>
+                        )}
+                      </div>
+                    )}
+
+                    {isDisabled && (
+                      <div className="absolute invisible group-hover:visible bg-gray-900 text-white text-xs rounded py-1 px-2 -top-12 left-1/2 transform -translate-x-1/2 w-64 text-center after:content-[''] after:absolute after:top-full after:left-1/2 after:-translate-x-1/2 after:border-4 after:border-transparent after:border-t-gray-900">
+                        In order to generate feasibility slide, please select the development slide as the feasibility slide requires data to be passed from the development slide.
+                      </div>
+                    )}
+
+                    {isActive && (
+                      <div 
+                        className="absolute inset-0 border-2 border-blue-400 rounded-lg animate-pulse pointer-events-none"
+                        style={{ animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}
+                      />
+                    )}
                   </div>
-                  
-                  <h3 className={`font-medium text-sm ${selectedSlides[option.id] ? 'text-gray-900' : 'text-gray-700'}`}>{option.label}</h3>
-                  
-                  {isGenerating && selectedSlides[option.id] && (
-                    <div className="mt-1">
-                      {isCompleted ? (
-                        <div className="flex items-center text-green-600 text-xs">
-                          <svg className="w-3 h-3 mr-0.5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                          </svg>
-                          Complete
-                        </div>
-                      ) : isActive ? (
-                        <div className="flex items-center space-x-1.5 text-xs text-gray-500">
-                          <div className="w-2.5 h-2.5 border-2 border-gray-500 border-t-transparent rounded-full animate-spin" />
-                          <span className="truncate">{getStepDescription(option.id)}</span>
-                        </div>
-                      ) : (
-                        <div className="text-xs text-gray-400">Pending</div>
-                      )}
-                    </div>
-                  )}
+                );
+              })}
+            </div>
 
-                  {isDisabled && (
-                    <div className="absolute invisible group-hover:visible bg-gray-900 text-white text-xs rounded py-1 px-2 -top-12 left-1/2 transform -translate-x-1/2 w-64 text-center after:content-[''] after:absolute after:top-full after:left-1/2 after:-translate-x-1/2 after:border-4 after:border-transparent after:border-t-gray-900">
-                      In order to generate feasibility slide, please select the development slide as the feasibility slide requires data to be passed from the development slide.
-                    </div>
-                  )}
-
-                  {isActive && (
-                    <div 
-                      className="absolute inset-0 border-2 border-blue-400 rounded-lg animate-pulse pointer-events-none"
-                      style={{ animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="mt-6">
-            <button
-              onClick={generatePropertyReport}
-              disabled={isGenerating || !selectedFeatures.length || Object.values(selectedSlides).every(v => !v)}
-              className={`
-                w-full px-4 py-3 rounded-lg font-medium
-                ${isGenerating || !selectedFeatures.length || Object.values(selectedSlides).every(v => !v)
-                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                  : 'bg-blue-600 text-white hover:bg-blue-700'}
-                flex items-center justify-center gap-2 transition-colors
-              `}
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Generating Report...
-                </>
-              ) : (
-                <>
-                  <FileStack className="w-7 h-7" />
-                  Generate Report
-                </>
-              )}
-            </button>
+            <div className="mt-6">
+              <button
+                onClick={generatePropertyReport}
+                disabled={isGenerating || !selectedFeatures.length || Object.values(selectedSlides).every(v => !v)}
+                className={`
+                  w-full px-4 py-3 rounded-lg font-medium
+                  ${isGenerating || !selectedFeatures.length || Object.values(selectedSlides).every(v => !v)
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'}
+                  flex items-center justify-center gap-2 transition-colors
+                `}
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Generating Report...
+                  </>
+                ) : (
+                  <>
+                    <Calculator className="w-5 h-5" />
+                    Generate Report
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -2014,8 +2059,6 @@ const ReportGenerator = ({
               site_suitability__suburb: primaryFeature.properties.copiedFrom?.site_suitability__suburb
             }
           } : null}
-          map={planningMapRef.current}  // Pass the map ref directly
-          developableArea={developableArea}  // Pass the complete developableArea object for maximum flexibility
         />
 
         <Chat
@@ -2047,7 +2090,79 @@ const ReportGenerator = ({
 
               <div className="flex-1 overflow-y-auto p-8">
                 <div className="space-y-6">
-                  {/* How to Use steps */}
+                  {[
+                    {
+                      step: 1,
+                      title: "Disable VPN",
+                      content: "Temporarily turn off Harmony / VPN."
+                    },
+                    {
+                      step: 2,
+                      title: "Search Property",
+                      content: "Use Land iQ Site Search to identify the property of interest."
+                    },
+                    {
+                      step: 3,
+                      title: "Generate Shortlist",
+                      content: "In Site Search, select the property and generate a shortlist using that selection."
+                    },
+                    {
+                      step: 4,
+                      title: "Activate Drawing Layer",
+                      content: "Left-click on the 'Site Boundary' drawing layer to activate it."
+                    },
+                    {
+                      step: 5,
+                      title: "Create Property Boundary",
+                      content: "Right click on the property on the map and wait until you see the shortlist appear and your property highlighted - then hover over the little arrow and click 'Create'."
+                    },
+                    {
+                      step: 6,
+                      title: "Complete Property Coverage",
+                      content: "If it didn't create a polygon that covers the whole property, click on the part that was added first and then right click along the boundary of any missing parts of the property and select 'Merge'. Do this until the complete property is covered. Once complete, on the left panel change the usage to be 'Site Boundary'."
+                    },
+                    {
+                      step: 7,
+                      title: "Add Developable Area (Optional)",
+                      content: "If you want to include a developable area, left-click on the 'Developable Area' drawing layer on the left panel and use Giraffe's drawing tools to draw the boundary. Once complete, on the left panel change the usage to be 'Developable Area'."
+                    },
+                    {
+                      step: 8,
+                      title: "Select Area Type",
+                      content: "On the right panel, select the developable area to use (just the Site Boundary or the Developable Area you've just drawn)."
+                    },
+                    {
+                      step: 9,
+                      title: "Configure Visibility",
+                      content: "Confirm in the check-box if you want to show the developable area as a blue-dash line or not in the report (uncheck this if you have selected to just use the Site Boundary and not a separate Developable Area)."
+                    },
+                    {
+                      step: 10,
+                      title: "Review and Generate",
+                      content: "A preview will load of the cover slide and if everything looks good to go, select the slides you want (default is all slides) and click on the blue 'Generate Report' button."
+                    },
+                    {
+                      step: 11,
+                      title: "Wait for Generation",
+                      content: "Report will generate and for a full report should take approximately 4 minutes to produce. If any of the slides fail or you would like to produce a sub-set of the full report you can check the appropriate slides and select Generate Report again as needed."
+                    }
+                  ].map((item, index) => (
+                    <motion.div
+                      key={item.step}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                      className="relative pl-12 pr-4"
+                    >
+                      <div className="absolute left-0 top-0 flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 font-semibold">
+                        {item.step}
+                      </div>
+                      <div>
+                        <h4 className="text-lg font-medium text-gray-900 mb-2">{item.title}</h4>
+                        <p className="text-gray-600 leading-relaxed">{item.content}</p>
+                      </div>
+                    </motion.div>
+                  ))}
                 </div>
               </div>
             </motion.div>

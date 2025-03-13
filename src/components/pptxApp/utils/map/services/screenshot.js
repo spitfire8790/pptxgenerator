@@ -1875,7 +1875,7 @@ async function getRoadFeatures(centerX, centerY, size) {
   }
 }
 
-export async function captureRoadsMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
+export async function captureRoadsMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false, showLabels = true) {
   if (!feature) return null;
   console.log('Starting roads capture...', {
     featureType: feature.type,
@@ -2059,19 +2059,33 @@ export async function captureRoadsMap(feature, developableArea = null, showDevel
       console.warn('Failed to load road labels:', error);
     }
 
+    // IMPORTANT: Draw boundaries AFTER all other layers to ensure visibility
+
     // Draw all developable areas AFTER all layers if they exist
     if (developableArea?.features?.length > 0 && showDevelopableArea) {
       console.log('Drawing developable area boundaries...');
-      // Draw all developable areas without labels
-      drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width, false);
+      // Draw all developable areas with labels if requested
+      drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width, showLabels);
     }
 
-    // Draw boundaries with increased visibility
-    drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, {
-      showLabels: false,
-      strokeStyle: 'rgba(255, 0, 0, 0.8)',  // Red boundary for better visibility
-      lineWidth: 3  // Thicker line
-    });
+    // Draw feature boundaries with increased visibility - last so they appear on top
+    console.log('Drawing feature boundaries...');
+    if (feature.type === 'FeatureCollection' && feature.features?.length > 0) {
+      feature.features.forEach(f => {
+        drawFeatureBoundaries(ctx, f, centerX, centerY, size, config.width, {
+          showLabels: showLabels,
+          strokeStyle: 'rgba(255, 0, 0, 0.9)',  // More opaque red boundary 
+          lineWidth: 4  // Thicker line
+        });
+      });
+    } else {
+      // Single feature case
+      drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, {
+        showLabels: showLabels,
+        strokeStyle: 'rgba(255, 0, 0, 0.9)',  // More opaque red boundary
+        lineWidth: 4  // Thicker line
+      });
+    }
 
     // Add legend with adjusted spacing and formatting
     const legendHeight = 500; // Reduced height to be more compact
@@ -2767,7 +2781,7 @@ export async function checkLMROverlap(feature, centerX, centerY, size) {
   }
 }
 
-export async function captureUDPPrecinctMap(feature, developableArea = null, showDevelopableArea = false, useDevelopableAreaForBounds = false) {
+export async function captureUDPPrecinctMap(feature, developableArea = null, showDevelopableArea = false, useDevelopableAreaForBounds = false, showLabels = true) {
   if (!feature) return null;
   console.log('Starting UDP precinct map capture...', {
     featureType: feature.type,
@@ -2999,21 +3013,31 @@ export async function captureUDPPrecinctMap(feature, developableArea = null, sho
       console.error('Failed to load UDP precincts:', error);
     }
 
-    // Draw all features
+    // IMPORTANT: Draw developable area and feature boundaries AFTER all other layers
+    
+    // Draw developable areas if they exist and are requested to be shown
+    if (developableArea?.features?.length > 0 && showDevelopableArea) {
+      console.log('Drawing developable area boundaries...');
+      drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width, showLabels);
+    }
+
+    // Draw all features with increased visibility
     if (feature.type === 'FeatureCollection' && feature.features?.length > 0) {
       console.log('Drawing multiple features:', feature.features.length);
       feature.features.forEach((f, index) => {
         drawFeatureBoundaries(ctx, f, centerX, centerY, size, config.width, {
-          showLabels: true, // Always show labels for multiple features
-          strokeStyle: '#FF0000',
-          lineWidth: 6
+          showLabels: showLabels, // Use the showLabels parameter
+          strokeStyle: 'rgba(255, 0, 0, 0.9)', // More opaque red
+          lineWidth: 6 // Keep thick line width for visibility
         });
       });
     } else {
       // Single feature case
       console.log('Drawing single feature');
       drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, {
-        showLabels: false
+        showLabels: showLabels, // Use the showLabels parameter
+        strokeStyle: 'rgba(255, 0, 0, 0.9)', // More opaque red
+        lineWidth: 6 // Keep thick line width for visibility
       });
     }
 
@@ -3595,7 +3619,7 @@ function drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, s
   });
 }
 
-export async function capturePTALMap(feature, developableArea = null, showDevelopableArea = false, useDevelopableAreaForBounds = false) {
+export async function capturePTALMap(feature, developableArea = null, showDevelopableArea = false, useDevelopableAreaForBounds = false, showLabels = true) {
   if (!feature) {
     console.log('No feature provided, returning null');
     return null;
@@ -3858,15 +3882,23 @@ export async function capturePTALMap(feature, developableArea = null, showDevelo
       console.error('Failed to get PTAL data from Giraffe:', giraffError);
     }
 
-    // Draw all features
+    // IMPORTANT: Draw developable area and feature boundaries AFTER all other layers
+    
+    // Draw developable areas if they exist and are requested to be shown
+    if (developableArea?.features?.length > 0 && showDevelopableArea) {
+      console.log('Drawing developable area boundaries...');
+      drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.width, showLabels);
+    }
+
+    // Draw all features with increased visibility
     if (feature.type === 'FeatureCollection' && feature.features?.length > 0) {
       console.log('Drawing multiple features:', feature.features.length);
       feature.features.forEach((f, index) => {
         try {
           drawFeatureBoundaries(ctx, f, centerX, centerY, size, config.width, {
-            showLabels: true, // Always show labels for multiple features
-            strokeStyle: '#FF0000',
-            lineWidth: 6
+            showLabels: showLabels, // Use showLabels parameter 
+            strokeStyle: 'rgba(255, 0, 0, 0.9)', // More opaque red for visibility
+            lineWidth: 6  // Thick line for visibility
           });
         } catch (drawError) {
           console.warn(`Error drawing feature ${index}:`, drawError);
@@ -3876,7 +3908,11 @@ export async function capturePTALMap(feature, developableArea = null, showDevelo
       // Single feature case
       console.log('Drawing single feature');
       try {
-        drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width);
+        drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, {
+          showLabels: showLabels, // Use showLabels parameter
+          strokeStyle: 'rgba(255, 0, 0, 0.9)', // More opaque red for visibility
+          lineWidth: 6 // Thick line for visibility
+        });
       } catch (drawError) {
         console.warn('Error drawing feature:', drawError);
       }

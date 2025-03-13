@@ -81,14 +81,29 @@ export async function addDevelopmentSlide(pptx, properties) {
 
     // Prepare feature data for screenshots
     // Use the combinedGeometry if it exists (for multiple properties), otherwise create a single feature
-    const featureToUse = properties.combinedGeometry || {
-      type: 'Feature',
-      geometry: {
-        type: 'Polygon',
-        coordinates: [properties.site__geometry]
-      },
-      properties: properties
-    };
+    const featureToUse = properties.combinedGeometry || (() => {
+      // Check if site__geometry exists and is valid
+      if (!properties.site__geometry || !Array.isArray(properties.site__geometry)) {
+        console.warn('Invalid or missing site__geometry, creating fallback geometry');
+        return {
+          type: 'Feature',
+          geometry: {
+            type: 'Polygon',
+            coordinates: []
+          },
+          properties: properties
+        };
+      }
+      
+      return {
+        type: 'Feature',
+        geometry: {
+          type: 'Polygon',
+          coordinates: [properties.site__geometry]
+        },
+        properties: properties
+      };
+    })();
 
     // If we have a FeatureCollection, make sure each feature has the necessary properties
     if (featureToUse.type === 'FeatureCollection' && featureToUse.features) {
@@ -99,6 +114,13 @@ export async function addDevelopmentSlide(pptx, properties) {
         // Ensure each feature has the LGA property
         if (!feature.properties.site_suitability__LGA && properties.site_suitability__LGA) {
           feature.properties.site_suitability__LGA = properties.site_suitability__LGA;
+        }
+        
+        // Ensure geometry exists
+        if (!feature.geometry) {
+          feature.geometry = { type: 'Polygon', coordinates: [] };
+        } else if (!feature.geometry.coordinates) {
+          feature.geometry.coordinates = [];
         }
       });
     }
