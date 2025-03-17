@@ -213,6 +213,12 @@ const ConstructionDataModal = ({ open = true, onClose, constructionData }) => {
   const prepareData = () => {
     let data = [];
     
+    // Check if API request had an error first
+    if (constructionData && constructionData.error) {
+      console.error('Construction data API error:', constructionData.error);
+      return [];
+    }
+    
     // Use the preprocessed constructionCostsRaw array which already has all the needed fields
     if (constructionData && Array.isArray(constructionData.constructionCostsRaw)) {
       console.log('Construction data found:', constructionData.constructionCostsRaw.length);
@@ -614,163 +620,189 @@ const ConstructionDataModal = ({ open = true, onClose, constructionData }) => {
               <X className="w-5 h-5" />
             </button>
           </div>
-          <div className="flex items-center justify-between text-sm text-gray-600 mt-1">
-            <div>
-              Based on {stats.count} development applications.
+          {constructionData.error ? (
+            <div className="text-red-500 mt-1">
+              Error: {constructionData.error}
             </div>
-          </div>
-        </div>
-
-        <div className="p-4 border-b bg-gray-50 flex-shrink-0">
-          <div className="flex items-center justify-between space-x-4">
-            <div className="flex items-center space-x-2">
-              <span className="text-sm font-medium text-gray-700">Density:</span>
-              <select
-                className="border border-gray-300 rounded px-2 py-1 text-sm"
-                value={selectedDensity}
-                onChange={(e) => setSelectedDensity(e.target.value)}
-              >
-                <option value="all">All Types</option>
-                <option value="medium">Medium Density</option>
-                <option value="high">High Density</option>
-              </select>
-            </div>
-            <div className="flex-grow">
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search className="h-4 w-4 text-gray-400" />
-                </div>
-                <input
-                  type="text"
-                  className="block w-full pl-10 pr-3 py-1 border border-gray-300 rounded-md leading-5 text-sm"
-                  placeholder="Search all columns..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
+          ) : (
+            <div className="flex items-center justify-between text-sm text-gray-600 mt-1">
+              <div>
+                Based on {stats.count} development applications.
               </div>
             </div>
-          </div>
+          )}
         </div>
 
-        <div className="flex-grow flex flex-col overflow-hidden">
-          {/* Data visualization section at the top - Height doubled */}
-          <div className="p-4 flex-shrink-0" style={{ height: '470px' }}> {/* Increased height to 420px from 320px */}
-            <h3 className="text-lg font-medium mb-4">Median Construction Cost by Development Type</h3>
-            <div style={{ height: '450px' }}> {/* Increased chart height to accommodate legend */}
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={chartData}
-                  margin={{ top: 5, right: 30, left: 20, bottom: 80 }}
-                  barCategoryGap="0%" // Set to 0% to remove gap between categories
-                  barGap={8} // Set fixed gap between bars in pixels
-                  maxBarSize={120} // Set maximum bar width
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="name" 
-                    tick={{ fontSize: 11 }}
-                    interval={0}
-                    angle={-45}
-                    textAnchor="end"
-                    height={80}
-                  />
-                  <YAxis 
-                    tickFormatter={formatCurrency} 
-                    width={80}
-                  />
-                  <Tooltip 
-                    formatter={(value) => [`${formatCurrency(value)}`, 'Cost per m² GFA']}
-                    labelFormatter={(value) => [`${value} (${chartData.find(d => d.name === value)?.count || 0} developments)`]}
-                  />
-                  <Bar 
-                    dataKey="value" 
-                    radius={[4, 4, 0, 0]}
-                    fill="#4c6ef5"
+        {constructionData.error ? (
+          <div className="flex-grow flex flex-col items-center justify-center p-8">
+            <HardHat className="w-16 h-16 text-gray-300 mb-4" />
+            <h3 className="text-xl font-medium text-gray-700 mb-2">Unable to load construction data</h3>
+            <p className="text-gray-500 mb-6 text-center max-w-2xl">
+              There was an error fetching construction data from the ePlanning API. 
+              This usually happens when the API is temporarily unavailable or the selected area 
+              doesn't have enough construction certificates data.
+            </p>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="p-4 border-b bg-gray-50 flex-shrink-0">
+              <div className="flex items-center justify-between space-x-4">
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm font-medium text-gray-700">Density:</span>
+                  <select
+                    className="border border-gray-300 rounded px-2 py-1 text-sm"
+                    value={selectedDensity}
+                    onChange={(e) => setSelectedDensity(e.target.value)}
                   >
-                    {/* Add data labels */}
-                    <LabelList 
-                      dataKey="value" 
-                      position="insideTop" 
-                      formatter={formatChartLabel}
-                      style={{ 
-                        fill: 'white', 
-                        fontWeight: 'bold',
-                        fontSize: '11px',
-                        textShadow: '0 0 2px rgba(0,0,0,0.7)'
-                      }} 
+                    <option value="all">All Types</option>
+                    <option value="medium">Medium Density</option>
+                    <option value="high">High Density</option>
+                  </select>
+                </div>
+                <div className="flex-grow">
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Search className="h-4 w-4 text-gray-400" />
+                    </div>
+                    <input
+                      type="text"
+                      className="block w-full pl-10 pr-3 py-1 border border-gray-300 rounded-md leading-5 text-sm"
+                      placeholder="Search all columns..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
                     />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
 
-          {/* Data table section below chart */}
-          <div className="flex-grow overflow-auto p-4 relative">
-            {/* Add proper sticky header with z-index and box-shadow for visual separation */}
-            <table className="min-w-full border divide-y divide-gray-200">
-              <thead className="sticky top-0 z-20 bg-gray-50 shadow-sm">
-                <tr>
-                  <SortableHeader column="address" label="Address" />
-                  <SortableHeader column="developmentType" label="Type" />
-                  <SortableHeader column="landArea" label="Land Area" />
-                  <SortableHeader column="gfa" label="GFA (m²)" />
-                  <SortableHeader column="totalCost" label="Cost" />
-                  <SortableHeader column="costPerM2" label="Cost $/m² GFA" />
-                  <SortableHeader column="fsr" label="FSR" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 bg-white text-sm">
-                {sortedData.map((item) => (
-                  <tr key={item.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => handleRowClick(item)}>
-                    <td className="px-4 py-2">{item.address}</td>
-                    <td className="px-4 py-2">
-                      {/* Only show the development type in black, no grey subtext */}
-                      <div className="font-medium">{item.developmentType}</div>
-                    </td>
-                    {/* Align table cells with headers */}
-                    <td className="px-4 py-2 text-left">{item.landArea === 0 ? 'N/A' : `${Math.round(item.landArea).toLocaleString('en-AU')} m²`}</td>
-                    <td className="px-4 py-2 text-left">{item.gfa === 0 ? 'N/A' : `${Math.round(item.gfa).toLocaleString('en-AU')} m²`}</td>
-                    <td className="px-4 py-2 text-right">{formatMillions(item.totalCost)}</td>
-                    {/* Remove decimals from cost/m2 */}
-                    <td className="px-4 py-2 text-left font-medium">
-                      {item.costPerM2 === 0 ? 'N/A' : `$${Math.round(item.costPerM2).toLocaleString('en-AU')}/m²`}
-                    </td>
-                    <td className="px-4 py-2 text-right">{formatFSR(item.gfa, item.landArea)}</td>
-                  </tr>
-                ))}
-                {sortedData.length === 0 && (
-                  <tr>
-                    <td colSpan="7" className="px-4 py-2 text-center text-gray-500">No data available</td>
-                  </tr>
-                )}
-              </tbody>
-              <tfoot className="bg-gray-50 font-medium">
-                <tr>
-                  <td className="px-4 py-2 text-left" colSpan="5">Summary ({sortedData.length} developments)</td>
-                  <td className="px-4 py-2 text-left">{formatCurrency(stats.median)}</td>
-                  <td className="px-4 py-2"></td>
-                </tr>
-              </tfoot>
-            </table>
-            
-            {/* Render the filter modal */}
-            <FilterModal />
-          </div>
-        </div>
+            <div className="flex-grow flex flex-col overflow-hidden">
+              {/* Data visualization section at the top - Height doubled */}
+              <div className="p-4 flex-shrink-0" style={{ height: '470px' }}> {/* Increased height to 420px from 320px */}
+                <h3 className="text-lg font-medium mb-4">Median Construction Cost by Development Type</h3>
+                <div style={{ height: '450px' }}> {/* Increased chart height to accommodate legend */}
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={chartData}
+                      margin={{ top: 5, right: 30, left: 20, bottom: 80 }}
+                      barCategoryGap="0%" // Set to 0% to remove gap between categories
+                      barGap={8} // Set fixed gap between bars in pixels
+                      maxBarSize={120} // Set maximum bar width
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis 
+                        dataKey="name" 
+                        tick={{ fontSize: 11 }}
+                        interval={0}
+                        angle={-45}
+                        textAnchor="end"
+                        height={80}
+                      />
+                      <YAxis 
+                        tickFormatter={formatCurrency} 
+                        width={80}
+                      />
+                      <Tooltip 
+                        formatter={(value) => [`${formatCurrency(value)}`, 'Cost per m² GFA']}
+                        labelFormatter={(value) => [`${value} (${chartData.find(d => d.name === value)?.count || 0} developments)`]}
+                      />
+                      <Bar 
+                        dataKey="value" 
+                        radius={[4, 4, 0, 0]}
+                        fill="#4c6ef5"
+                      >
+                        {/* Add data labels */}
+                        <LabelList 
+                          dataKey="value" 
+                          position="insideTop" 
+                          formatter={formatChartLabel}
+                          style={{ 
+                            fill: 'white', 
+                            fontWeight: 'bold',
+                            fontSize: '11px',
+                            textShadow: '0 0 2px rgba(0,0,0,0.7)'
+                          }} 
+                        />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
 
-        {/* Remove the legend section */}
-        <div className="p-4 border-t text-xs text-gray-500">
-          <details>
-            <summary className="cursor-pointer font-medium">Development Type Categories</summary>
-            <div className="mt-2">
-              <p className="mb-2">Development types are shown in the table and chart, categorized by density type.</p>
+              {/* Data table section below chart */}
+              <div className="flex-grow overflow-auto p-4 relative">
+                {/* Add proper sticky header with z-index and box-shadow for visual separation */}
+                <table className="min-w-full border divide-y divide-gray-200">
+                  <thead className="sticky top-0 z-20 bg-gray-50 shadow-sm">
+                    <tr>
+                      <SortableHeader column="address" label="Address" />
+                      <SortableHeader column="developmentType" label="Type" />
+                      <SortableHeader column="landArea" label="Land Area" />
+                      <SortableHeader column="gfa" label="GFA (m²)" />
+                      <SortableHeader column="totalCost" label="Cost" />
+                      <SortableHeader column="costPerM2" label="Cost $/m² GFA" />
+                      <SortableHeader column="fsr" label="FSR" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 bg-white text-sm">
+                    {sortedData.map((item) => (
+                      <tr key={item.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => handleRowClick(item)}>
+                        <td className="px-4 py-2">{item.address}</td>
+                        <td className="px-4 py-2">
+                          {/* Only show the development type in black, no grey subtext */}
+                          <div className="font-medium">{item.developmentType}</div>
+                        </td>
+                        {/* Align table cells with headers */}
+                        <td className="px-4 py-2 text-left">{item.landArea === 0 ? 'N/A' : `${Math.round(item.landArea).toLocaleString('en-AU')} m²`}</td>
+                        <td className="px-4 py-2 text-left">{item.gfa === 0 ? 'N/A' : `${Math.round(item.gfa).toLocaleString('en-AU')} m²`}</td>
+                        <td className="px-4 py-2 text-right">{formatMillions(item.totalCost)}</td>
+                        {/* Remove decimals from cost/m2 */}
+                        <td className="px-4 py-2 text-left font-medium">
+                          {item.costPerM2 === 0 ? 'N/A' : `$${Math.round(item.costPerM2).toLocaleString('en-AU')}/m²`}
+                        </td>
+                        <td className="px-4 py-2 text-right">{formatFSR(item.gfa, item.landArea)}</td>
+                      </tr>
+                    ))}
+                    {sortedData.length === 0 && (
+                      <tr>
+                        <td colSpan="7" className="px-4 py-2 text-center text-gray-500">No data available</td>
+                      </tr>
+                    )}
+                  </tbody>
+                  <tfoot className="bg-gray-50 font-medium">
+                    <tr>
+                      <td className="px-4 py-2 text-left" colSpan="5">Summary ({sortedData.length} developments)</td>
+                      <td className="px-4 py-2 text-left">{formatCurrency(stats.median)}</td>
+                      <td className="px-4 py-2"></td>
+                    </tr>
+                  </tfoot>
+                </table>
+                
+                {/* Render the filter modal */}
+                <FilterModal />
+              </div>
             </div>
-          </details>
-        </div>
+
+            {/* Remove the legend section */}
+            <div className="p-4 border-t text-xs text-gray-500">
+              <details>
+                <summary className="cursor-pointer font-medium">Development Type Categories</summary>
+                <div className="mt-2">
+                  <p className="mb-2">Development types are shown in the table and chart, categorized by density type.</p>
+                </div>
+              </details>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
 };
 
-export default ConstructionDataModal; 
+export default ConstructionDataModal;
