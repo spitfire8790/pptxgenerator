@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { X, Bed, Bath, Car, ChevronDown, ChevronUp, ArrowUpDown } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { X, Bed, Bath, Car, ChevronDown, ChevronUp, ArrowUpDown, LineChart as LineChartIcon } from 'lucide-react';
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { rpc } from '@gi-nx/iframe-sdk';
 
 const formatPrice = (price) => {
@@ -47,6 +47,8 @@ const MedianPriceModal = ({ open = true, onClose, salesData }) => {
   const [selectedDensity, setSelectedDensity] = useState('all');
   const [selectedPropertyType, setSelectedPropertyType] = useState('all');
   const [sortConfig, setSortConfig] = useState({ key: 'sold_date', direction: 'desc' });
+  const [showTimeChart, setShowTimeChart] = useState(true);
+  const [timeChartGroupBy, setTimeChartGroupBy] = useState('bedroom'); // 'property' or 'bedroom'
 
   if (!open) return null;
 
@@ -149,6 +151,159 @@ const MedianPriceModal = ({ open = true, onClose, salesData }) => {
       formattedMedian: formatPrice(median)
     };
   }).sort((a, b) => a.bedrooms - b.bedrooms);
+
+  // Calculate median prices over time grouped by property type or bedroom count
+  const calculateMedianPricesOverTime = () => {
+    // Get periods (month/year) from all sales
+    const allPeriods = new Set();
+    processedSalesData.forEach(sale => {
+      if (!sale.sold_date) return;
+      
+      const [day, month, year] = sale.sold_date.split('/');
+      // Create a more readable period format (e.g., "Feb-2024")
+      const date = new Date(year, parseInt(month) - 1, 1); // month is 0-based in JS Date
+      const monthName = date.toLocaleString('en-AU', { month: 'short' });
+      const period = `${monthName}-${year}`;
+      allPeriods.add(period);
+    });
+    
+    const sortedPeriods = Array.from(allPeriods).sort((a, b) => {
+      // Parse "Feb-2024" format
+      const [monthA, yearA] = a.split('-');
+      const [monthB, yearB] = b.split('-');
+      // Convert month names to month numbers (0-11)
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const monthNumA = monthNames.indexOf(monthA);
+      const monthNumB = monthNames.indexOf(monthB);
+      
+      const dateA = new Date(parseInt(yearA), monthNumA, 1);
+      const dateB = new Date(parseInt(yearB), monthNumB, 1);
+      return dateA - dateB;
+    });
+    
+    if (timeChartGroupBy === 'property') {
+      // Get unique property types
+      const propertyTypes = new Set();
+      processedSalesData.forEach(sale => {
+        if (sale.property_type) {
+          propertyTypes.add(capitalizeFirstLetter(sale.property_type.trim()));
+        }
+      });
+      
+      // Only use the top 5 property types to avoid chart clutter
+      const topPropertyTypes = Array.from(propertyTypes).slice(0, 5);
+      
+      // Group sales by period and property type
+      const salesByPeriodAndType = {};
+      
+      // Initialize periods for all property types (ensures consistent data points)
+      sortedPeriods.forEach(period => {
+        salesByPeriodAndType[period] = {};
+        topPropertyTypes.forEach(type => {
+          salesByPeriodAndType[period][type] = [];
+        });
+      });
+      
+      // Fill in the sales data
+      processedSalesData.forEach(sale => {
+        if (!sale.sold_date || !sale.property_type) return;
+        
+        const [day, month, year] = sale.sold_date.split('/');
+        // Create proper format for period
+        const date = new Date(year, parseInt(month) - 1, 1);
+        const monthName = date.toLocaleString('en-AU', { month: 'short' });
+        const period = `${monthName}-${year}`;
+        const propertyType = capitalizeFirstLetter(sale.property_type.trim());
+        
+        if (topPropertyTypes.includes(propertyType) && salesByPeriodAndType[period] && salesByPeriodAndType[period][propertyType]) {
+          salesByPeriodAndType[period][propertyType].push(sale.price);
+        }
+      });
+      
+      // Calculate median for each period and property type
+      return sortedPeriods.map(period => {
+        const result = { period };
+        
+        topPropertyTypes.forEach(type => {
+          const prices = salesByPeriodAndType[period][type];
+          if (prices.length > 0) {
+            const sortedPrices = [...prices].sort((a, b) => a - b);
+            result[type] = sortedPrices[Math.floor(sortedPrices.length / 2)];
+          } else {
+            result[type] = null; // No data for this period/type
+          }
+        });
+        
+        return result;
+      });
+    } else {
+      // Group by bedroom count
+      // Get unique bedroom counts
+      const bedroomCounts = new Set();
+      processedSalesData.forEach(sale => {
+        if (typeof sale.bedrooms === 'number') {
+          bedroomCounts.add(sale.bedrooms);
+        }
+      });
+      
+      // Only use bedroom counts 1-5 to avoid chart clutter
+      const validBedroomCounts = Array.from(bedroomCounts)
+        .filter(count => count >= 1 && count <= 5)
+        .sort((a, b) => a - b);
+      
+      // Group sales by period and bedroom count
+      const salesByPeriodAndBedrooms = {};
+      
+      // Initialize periods for all bedroom counts
+      sortedPeriods.forEach(period => {
+        salesByPeriodAndBedrooms[period] = {};
+        validBedroomCounts.forEach(count => {
+          salesByPeriodAndBedrooms[period][count] = [];
+        });
+      });
+      
+      // Fill in the sales data
+      processedSalesData.forEach(sale => {
+        if (!sale.sold_date || typeof sale.bedrooms !== 'number') return;
+        
+        const [day, month, year] = sale.sold_date.split('/');
+        // Create formatted period
+        const date = new Date(year, parseInt(month) - 1, 1);
+        const monthName = date.toLocaleString('en-AU', { month: 'short' });
+        const period = `${monthName}-${year}`;
+        
+        if (validBedroomCounts.includes(sale.bedrooms) && 
+            salesByPeriodAndBedrooms[period] && 
+            salesByPeriodAndBedrooms[period][sale.bedrooms]) {
+          salesByPeriodAndBedrooms[period][sale.bedrooms].push(sale.price);
+        }
+      });
+      
+      // Calculate median for each period and bedroom count
+      return sortedPeriods.map(period => {
+        const result = { period };
+        
+        validBedroomCounts.forEach(count => {
+          const prices = salesByPeriodAndBedrooms[period][count];
+          if (prices.length > 0) {
+            const sortedPrices = [...prices].sort((a, b) => a - b);
+            result[`${count} BR`] = sortedPrices[Math.floor(sortedPrices.length / 2)];
+          } else {
+            result[`${count} BR`] = null; // No data for this period/count
+          }
+        });
+        
+        return result;
+      });
+    }
+  };
+  
+  const medianPricesOverTime = calculateMedianPricesOverTime();
+  
+  // Get keys for the line chart (property types or bedroom counts)
+  const timeChartKeys = timeChartGroupBy === 'property' 
+    ? Object.keys(medianPricesOverTime[0] || {}).filter(key => key !== 'period')
+    : Object.keys(medianPricesOverTime[0] || {}).filter(key => key !== 'period');
 
   // Calculate sales counts by year
   const salesCounts = processedSalesData.reduce((acc, sale) => {
@@ -261,47 +416,183 @@ const MedianPriceModal = ({ open = true, onClose, salesData }) => {
         </div>
 
         <div className="flex-1 overflow-hidden p-4 flex flex-col">
-          {medianPrices.length > 0 && (
+          {(medianPrices.length > 0 || medianPricesOverTime.length > 0) && (
             <div className="mb-6 flex-shrink-0">
-              <h3 className="text-lg font-medium mb-4">
-                Median Prices by Bedroom Count
-                {processedSalesData.length > 0 && (
-                  <span className="text-sm font-normal text-gray-600 ml-2">
-                    (Median: {processedSalesData.map(s => s.bedrooms).sort((a, b) => a - b)[Math.floor(processedSalesData.length / 2)]} bedrooms, {formatPrice(processedSalesData.map(s => s.price).sort((a, b) => a - b)[Math.floor(processedSalesData.length / 2)])})
-                  </span>
+              <div className="flex flex-col space-y-2 mb-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-medium">
+                    {showTimeChart ? 'Median Sales Price Over Time' : 'Median Prices by Bedroom Count'}
+                    {processedSalesData.length > 0 && !showTimeChart && (
+                      <span className="text-sm font-normal text-gray-600 ml-2">
+                        (Median: {processedSalesData.map(s => s.bedrooms).sort((a, b) => a - b)[Math.floor(processedSalesData.length / 2)]} bedrooms, {formatPrice(processedSalesData.map(s => s.price).sort((a, b) => a - b)[Math.floor(processedSalesData.length / 2)])})
+                      </span>
+                    )}
+                  </h3>
+                  <button
+                    onClick={() => setShowTimeChart(!showTimeChart)}
+                    className="flex items-center px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-sm rounded-md transition-colors"
+                  >
+                    <LineChartIcon className="w-4 h-4 mr-1" />
+                    {showTimeChart ? 'Show by Bedroom' : 'Show Over Time'}
+                  </button>
+                </div>
+                
+                {showTimeChart && (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm font-medium text-gray-700">Density:</span>
+                      <div className="flex bg-gray-100 rounded-md p-1">
+                        <button
+                          onClick={() => setSelectedDensity('all')}
+                          className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                            selectedDensity === 'all' 
+                              ? 'bg-white shadow-sm text-blue-700' 
+                              : 'text-gray-600 hover:text-gray-900'
+                          }`}
+                        >
+                          All
+                        </button>
+                        <button
+                          onClick={() => setSelectedDensity('medium')}
+                          className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                            selectedDensity === 'medium' 
+                              ? 'bg-white shadow-sm text-blue-700' 
+                              : 'text-gray-600 hover:text-gray-900'
+                          }`}
+                        >
+                          Medium
+                        </button>
+                        <button
+                          onClick={() => setSelectedDensity('high')}
+                          className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                            selectedDensity === 'high' 
+                              ? 'bg-white shadow-sm text-blue-700' 
+                              : 'text-gray-600 hover:text-gray-900'
+                          }`}
+                        >
+                          High
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm font-medium text-gray-700">Group by:</span>
+                      <div className="flex bg-gray-100 rounded-md p-1">
+                        <button
+                          onClick={() => setTimeChartGroupBy('property')}
+                          className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                            timeChartGroupBy === 'property' 
+                              ? 'bg-white shadow-sm text-blue-700' 
+                              : 'text-gray-600 hover:text-gray-900'
+                          }`}
+                        >
+                          Property Type
+                        </button>
+                        <button
+                          onClick={() => setTimeChartGroupBy('bedroom')}
+                          className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                            timeChartGroupBy === 'bedroom' 
+                              ? 'bg-white shadow-sm text-blue-700' 
+                              : 'text-gray-600 hover:text-gray-900'
+                          }`}
+                        >
+                          Bedroom Count
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 )}
-              </h3>
+              </div>
+              
               <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={medianPrices} margin={{ top: 5, right: 30, left: 20, bottom: 35 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis 
-                      dataKey="bedrooms" 
-                      label={{ 
-                        value: 'Number of Bedrooms', 
-                        position: 'bottom', 
-                        offset: 0,
-                        dy: 20
-                      }}
-                      tickMargin={10}
-                    />
-                    <YAxis tickFormatter={(value) => formatPrice(value)} />
-                    <Tooltip
-                      formatter={(value) => formatPrice(value)}
-                      labelFormatter={(value) => `${value} Bedrooms`}
-                    />
-                    <Bar 
-                      dataKey="median" 
-                      fill="#3B82F6"
-                      label={{
-                        position: 'center',
-                        fill: 'white',
-                        fontWeight: 'bold',
-                        formatter: (value) => formatPrice(value)
-                      }}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
+                {!showTimeChart ? (
+                  // Bar chart for median prices by bedroom count
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={medianPrices} margin={{ top: 5, right: 30, left: 20, bottom: 35 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis 
+                        dataKey="bedrooms" 
+                        label={{ 
+                          value: 'Number of Bedrooms', 
+                          position: 'bottom', 
+                          offset: 0,
+                          dy: 20
+                        }}
+                        tickMargin={10}
+                      />
+                      <YAxis tickFormatter={(value) => formatPrice(value)} />
+                      <Tooltip
+                        formatter={(value) => formatPrice(value)}
+                        labelFormatter={(value) => `${value} Bedrooms`}
+                      />
+                      <Bar 
+                        dataKey="median" 
+                        fill="#3B82F6"
+                        label={{
+                          position: 'center',
+                          fill: 'white',
+                          fontWeight: 'bold',
+                          formatter: (value) => formatPrice(value)
+                        }}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  // Line chart for median prices over time
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={medianPricesOverTime} margin={{ top: 5, right: 30, left: 20, bottom: 35 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis 
+                        dataKey="period"
+                        label={{ 
+                          value: 'Time Period', 
+                          position: 'bottom', 
+                          offset: 0,
+                          dy: 20
+                        }}
+                        tickMargin={10}
+                      />
+                      <YAxis tickFormatter={(value) => formatPrice(value)} />
+                      <Tooltip
+                        formatter={(value) => formatPrice(value)}
+                        labelFormatter={(value) => `Period: ${value}`}
+                        contentStyle={{ backgroundColor: 'white', border: '1px solid #ddd' }}
+                      />
+                      <Legend 
+                        layout="horizontal" 
+                        verticalAlign="top" 
+                        align="center"
+                        wrapperStyle={{ paddingBottom: 10 }}
+                      />
+                      {/* Color palette for lines */}
+                      {timeChartKeys.map((key, index) => {
+                        // Define a set of colors for the lines
+                        const colors = [
+                          '#3B82F6', // blue
+                          '#10B981', // green
+                          '#F59E0B', // amber
+                          '#EF4444', // red
+                          '#8B5CF6', // purple
+                          '#EC4899', // pink
+                          '#6366F1'  // indigo
+                        ];
+                        return (
+                          <Line 
+                            key={key}
+                            type="monotone" 
+                            dataKey={key} 
+                            name={key}
+                            stroke={colors[index % colors.length]}
+                            strokeWidth={2}
+                            dot={{ r: 3 }}
+                            activeDot={{ r: 6 }}
+                            connectNulls={true}
+                          />
+                        );
+                      })}
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
               </div>
             </div>
           )}
@@ -368,4 +659,4 @@ const MedianPriceModal = ({ open = true, onClose, salesData }) => {
   );
 };
 
-export default MedianPriceModal; 
+export default MedianPriceModal;
