@@ -2,6 +2,76 @@ import { convertCmValues } from '../utils/units';
 import * as turf from '@turf/turf';
 import { formatAddresses } from '../utils/addressFormatting';
 
+// Add import for CSV parsing if not already available in the project
+import Papa from 'papaparse';
+
+// Cache for electorates data to avoid repeated fetching
+let electoratesCache = null;
+
+// Function to fetch and parse electorates data
+const getElectoratesData = async () => {
+  if (electoratesCache) {
+    return electoratesCache;
+  }
+  
+  try {
+    const response = await fetch('/electorates.csv');
+    const csvText = await response.text();
+    
+    const result = Papa.parse(csvText, {
+      header: true,
+      skipEmptyLines: true
+    });
+    
+    // Create a map for faster lookups
+    const electoratesMap = {};
+    result.data.forEach(row => {
+      electoratesMap[row.ELECTORATE] = {
+        name: row.NAME,
+        surname: row.SURNAME,
+        party: row.PARTY
+      };
+    });
+    
+    electoratesCache = electoratesMap;
+    return electoratesMap;
+  } catch (error) {
+    console.error('Error loading electorates data:', error);
+    return {};
+  }
+};
+
+// Lookup function to get member information for an electorate
+const getElectorateMemberInfo = (electoratesMap, electorate) => {
+  if (!electorate || electorate === 'Not specified') {
+    return 'Not specified';
+  }
+  
+  const memberInfo = electoratesMap[electorate];
+  if (!memberInfo) {
+    return electorate;
+  }
+  
+  return `${electorate} (Local Member: ${memberInfo.name} ${memberInfo.surname} - ${memberInfo.party})`;
+};
+
+// Function to format electorates with member info for multiple properties
+const formatElectoratesWithMemberInfo = (electoratesMap, electorates) => {
+  if (!electorates || electorates === 'Not specified') {
+    return 'Not specified';
+  }
+  
+  // Handle case with single electorate
+  if (!electorates.includes(',')) {
+    return getElectorateMemberInfo(electoratesMap, electorates);
+  }
+  
+  // Handle multiple electorates
+  const electorateList = electorates.split(',').map(e => e.trim());
+  return electorateList.map(electorate => 
+    getElectorateMemberInfo(electoratesMap, electorate)
+  ).join(', ');
+};
 
 const styles = {
   title: {
@@ -255,8 +325,12 @@ const aggregateNumericalValues = (properties, key, formatFn = null) => {
   return formatFn ? formatFn(total) : `${total.toLocaleString()} (total)`;
 };
 
-export function addPropertySnapshotSlide(pptx, properties) {
+// Export function as async to handle loading electorate data
+export async function addPropertySnapshotSlide(pptx, properties) {
   const slide = pptx.addSlide({ masterName: 'NSW_MASTER' });
+  
+  // Load electorate data
+  const electoratesMap = await getElectoratesData();
   
   // Determine if we're dealing with multiple properties
   const isMultipleProperties = properties.isMultipleProperties || 
@@ -354,6 +428,9 @@ export function addPropertySnapshotSlide(pptx, properties) {
     ? formatNumericalValuesWithLabels(allProperties, 'site_suitability__height_of_building', 'm', null, false)
     : properties.site_suitability__height_of_building ? `${properties.site_suitability__height_of_building}m` : 'Not specified';
 
+  // Get formatted electorate value with local member information
+  const formattedElectorateValue = formatElectoratesWithMemberInfo(electoratesMap, electorateValue);
+
   // Build table data with unique/aggregated values
   const tableData = [
     // Headers
@@ -369,7 +446,7 @@ export function addPropertySnapshotSlide(pptx, properties) {
       }
     }, 'Address', addressText],
     ['LGA', lgaValue],
-    ['Electorate', electorateValue],
+    ['Electorate', formattedElectorateValue],
     ['Land Owning Agency', landOwningAgencyValue],
     ['Lot/DP', lotDpValue],
     ['Site Area', areaValue],
@@ -499,4 +576,4 @@ export function addPropertySnapshotSlide(pptx, properties) {
   slide.addText('2', convertCmValues(styles.pageNumber));
 
   return slide;
-} 
+}

@@ -309,6 +309,8 @@ const ReportGenerator = ({
   const [showChat, setShowChat] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState('default');
+  const [showNewsTicker, setShowNewsTicker] = useState(false); // Add state to control news ticker visibility
+  const [showDevelopableAreaOptions, setShowDevelopableAreaOptions] = useState(false);
   
   // Use the first selected feature as the primary for display
   const primaryFeature = selectedSiteFeatures.length > 0 ? selectedSiteFeatures[0] : null;
@@ -1385,7 +1387,9 @@ const ReportGenerator = ({
         
         reportDate,
         selectedSlides,
-          
+
+        // Data from Land iQ
+
         site_suitability__principal_zone_identifier: primaryFeature.properties.copiedFrom?.site_suitability__principal_zone_identifier,
         site_suitability__area: primaryFeature.properties.copiedFrom?.site_suitability__area,
         site_suitability__site_width: primaryFeature.properties.copiedFrom?.site_suitability__site_width,
@@ -1396,14 +1400,16 @@ const ReportGenerator = ({
         site_suitability__height_of_building: primaryFeature.properties.copiedFrom?.site_suitability__height_of_building,
         site_suitability__NSW_government_agency: primaryFeature.properties.copiedFrom?.site_suitability__NSW_government_agency,
         site_suitability__landzone: primaryFeature.properties.copiedFrom?.site_suitability__landzone,
-        site__geometry: primaryFeature.geometry.type === 'Polygon' ? 
-                        primaryFeature.geometry.coordinates[0] : 
-                        primaryFeature.geometry.coordinates,
         site__address: primaryFeature.properties.copiedFrom?.site__address || 'Unnamed Location',
         site__property_id: primaryFeature.properties.copiedFrom?.site__property_id,
         site_suitability__LGA: primaryFeature.properties.copiedFrom?.site_suitability__LGA,
         site_suitability__electorate: primaryFeature.properties.copiedFrom?.site_suitability__electorate,
         site_suitability__suburb: primaryFeature.properties.copiedFrom?.site_suitability__suburb?.toUpperCase(),
+
+        site__geometry: primaryFeature.geometry.type === 'Polygon' ? 
+                        primaryFeature.geometry.coordinates[0] : 
+                        primaryFeature.geometry.coordinates,
+
         developableArea: developableArea?.features || null,
         showDevelopableArea,
         scores: {}, // Initialize empty scores object that will be populated by each slide
@@ -1414,10 +1420,8 @@ const ReportGenerator = ({
         combinedArea, // Add the combined area calculation
         combinedGeometry, // Add the combined geometry
         ...screenshots,
-        // Explicitly include flood and bushfire features if they exist in the screenshots
         site_suitability__floodFeatures: screenshots.site_suitability__floodFeatures || primaryFeature.properties?.site_suitability__floodFeatures,
         site_suitability__bushfireFeatures: screenshots.site_suitability__bushfireFeatures || primaryFeature.properties?.site_suitability__bushfireFeatures,
-        // Explicitly include TEC and biodiversity features if they exist in the screenshots
         site_suitability__tecFeatures: screenshots.site_suitability__tecFeatures || primaryFeature.properties?.site_suitability__tecFeatures,
         site_suitability__biodiversityFeatures: screenshots.site_suitability__biodiversityFeatures || primaryFeature.properties?.site_suitability__biodiversityFeatures,
         // Include any features stored during screenshot capture
@@ -1752,41 +1756,44 @@ const ReportGenerator = ({
         </div>
         <div className="h-1 bg-[#da2244] mt-2 rounded-full"></div>
         
-        {/* Animated scrolling news ticker */}
-        <div className="mt-2 py-2 bg-blue-50 rounded-md overflow-hidden border border-blue-200">
-          <div className="news-ticker-container overflow-hidden">
-            <div className="news-ticker-content flex items-center whitespace-nowrap text-blue-800 font-medium px-4">
-              <span className="inline-flex items-center bg-blue-600 text-white px-2 py-0.5 rounded-md text-xs mr-3">
-                NEW
-              </span>
-              17 March 2025 Update: Bernie has agreed to buy the team coffee in the office at 4PSQ tomorrow.
+        {/* Animated scrolling news ticker - hidden but kept for later reuse */}
+        {showNewsTicker && (
+          <div className="mt-2 py-2 bg-blue-50 rounded-md overflow-hidden border border-blue-200">
+            <div className="news-ticker-container overflow-hidden">
+              <div className="news-ticker-content flex items-center whitespace-nowrap text-blue-800 font-medium px-4">
+                <span className="inline-flex items-center bg-blue-600 text-white px-2 py-0.5 rounded-md text-xs mr-3">
+                  NEW
+                </span>
+                18 March 2025 Update: Bernie has agreed to buy the team coffee in the office at 4PSQ tomorrow.
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
       
-      {/* Property selection and Developable Area panels - 3 column layout */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+      {/* Property selection and Developable Area panels - changed to 2-column layout */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
         <PropertyListSelector 
           onSelect={handleSiteSelection}
           selectedFeatures={selectedSiteFeatures}
         />
-        <DevelopableAreaSelector 
-          onLayerSelect={handleDevelopableAreaSelect} 
-          selectedFeature={primaryFeature}
-          showDevelopableArea={showDevelopableArea}
-          setShowDevelopableArea={setShowDevelopableArea}
-          useDevelopableAreaForBounds={useDevelopableAreaForBounds}
-          setUseDevelopableAreaForBounds={setUseDevelopableAreaForBounds}
-        />
-        <DevelopableAreaOptions
-          selectedLayers={developableArea ? [1] : []} // Pass a non-empty array when developableArea exists
-          showDevelopableArea={showDevelopableArea}
-          setShowDevelopableArea={setShowDevelopableArea}
-          useDevelopableAreaForBounds={useDevelopableAreaForBounds}
-          setUseDevelopableAreaForBounds={setUseDevelopableAreaForBounds}
-          developableArea={developableArea}  // Pass the complete developableArea object for maximum flexibility
-        />
+        <div className="relative">
+          <DevelopableAreaSelector 
+            onLayerSelect={handleDevelopableAreaSelect} 
+            selectedFeature={primaryFeature}
+            showDevelopableArea={showDevelopableArea}
+            setShowDevelopableArea={setShowDevelopableArea}
+            useDevelopableAreaForBounds={useDevelopableAreaForBounds}
+            setUseDevelopableAreaForBounds={setUseDevelopableAreaForBounds}
+          />
+          <button 
+            onClick={() => setShowDevelopableAreaOptions(true)}
+            className="absolute top-3 right-3 p-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-full shadow-sm transition-colors duration-200 flex items-center justify-center"
+            title="Developable Area Options"
+          >
+            <Settings2 className="w-5 h-5" />
+          </button>
+        </div>
       </div>
       
       <div className="bg-white p-6 rounded-lg shadow mb-4">
@@ -1798,22 +1805,37 @@ const ReportGenerator = ({
 
         <div className="flex items-center justify-between mt-4 mb-2 pb-2 border-b border-gray-200">
           <div className="flex items-center gap-4">
-            <label className="inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={Object.values(selectedSlides).every(Boolean)}
-                onChange={(e) => {
-                  const value = e.target.checked;
-                  const updatedSlides = {};
-                  Object.keys(selectedSlides).forEach(key => {
-                    updatedSlides[key] = value;
-                  });
-                  setSelectedSlides(updatedSlides);
-                }}
-                className="w-3.5 h-3.5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-              />
-              <span className="font-medium ml-2">{Object.values(selectedSlides).every(Boolean) ? 'Deselect All' : 'Select All'}</span>
-            </label>
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                const newValue = !Object.values(selectedSlides).every(Boolean);
+                const updatedSlides = {};
+                Object.keys(selectedSlides).forEach(key => {
+                  updatedSlides[key] = newValue;
+                });
+                setSelectedSlides(updatedSlides);
+              }}
+              className={`
+                flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium
+                transition-all duration-300 transform hover:scale-105
+                ${Object.values(selectedSlides).every(Boolean) 
+                  ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md' 
+                  : 'bg-white text-blue-600 border-2 border-blue-600 hover:bg-blue-50'
+                }
+              `}
+            >
+              {Object.values(selectedSlides).every(Boolean) ? (
+                <>
+                  <LayersIcon className="w-5 h-5 animate-pulse" />
+                  <span>Deselect All</span>
+                </>
+              ) : (
+                <>
+                  <LayersIcon className="w-5 h-5" />
+                  <span>Select All Slides</span>
+                </>
+              )}
+            </button>
           </div>
         </div>
 
@@ -2019,6 +2041,51 @@ const ReportGenerator = ({
           onClose={() => setShowChat(false)}
         />
 
+        {/* Developable Area Options Modal */}
+        {showDevelopableAreaOptions && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] flex flex-col"
+            >
+              <div className="flex items-center justify-between p-4 border-b">
+                <div className="flex items-center">
+                  <Settings2 className="w-6 h-6 mr-2 text-blue-600" />
+                  <h2 className="text-xl font-semibold">Developable Area Options</h2>
+                </div>
+                <button
+                  onClick={() => setShowDevelopableAreaOptions(false)}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6">
+                <DevelopableAreaOptions
+                  selectedLayers={developableArea ? [1] : []}
+                  showDevelopableArea={showDevelopableArea}
+                  setShowDevelopableArea={setShowDevelopableArea}
+                  useDevelopableAreaForBounds={useDevelopableAreaForBounds}
+                  setUseDevelopableAreaForBounds={setUseDevelopableAreaForBounds}
+                  developableArea={developableArea}
+                />
+              </div>
+
+              <div className="border-t p-4 flex justify-end">
+                <button
+                  onClick={() => setShowDevelopableAreaOptions(false)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
         {/* How To Use Modal */}
         {showHowTo && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -2044,6 +2111,70 @@ const ReportGenerator = ({
               <div className="flex-1 overflow-y-auto p-8">
                 <div className="space-y-6">
                   {/* How to Use steps */}
+                  <div className="bg-gray-50 p-4 rounded-lg border-l-4 border-blue-500">
+                    <p className="text-gray-700 mb-2">Welcome to the Property Report Generator! Follow these simple steps to generate comprehensive property reports.</p>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div className="flex">
+                      <div className="flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 font-bold mr-3">1</div>
+                      <div>
+                        <h3 className="font-semibold mb-1">Select Properties</h3>
+                        <p className="text-gray-700">Use the Property List Selector panel to choose one or more properties you want to analyze.</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex">
+                      <div className="flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 font-bold mr-3">2</div>
+                      <div>
+                        <h3 className="font-semibold mb-1">Define Developable Areas (Optional)</h3>
+                        <p className="text-gray-700">If needed, use the Developable Area Selector to define specific areas within the properties for development analysis.</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex">
+                      <div className="flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 font-bold mr-3">3</div>
+                      <div>
+                        <h3 className="font-semibold mb-1">Select Slides</h3>
+                        <p className="text-gray-700">Choose which slides you want to include in your report by checking/unchecking the respective options. You can select all slides or just those you need.</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex">
+                      <div className="flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 font-bold mr-3">4</div>
+                      <div>
+                        <h3 className="font-semibold mb-1">Configure Feasibility Settings (Optional)</h3>
+                        <p className="text-gray-700">If you've selected the Feasibility slide, click the settings icon to customize feasibility parameters for different density scenarios.</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex">
+                      <div className="flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 font-bold mr-3">5</div>
+                      <div>
+                        <h3 className="font-semibold mb-1">Generate Report</h3>
+                        <p className="text-gray-700">Click the "Generate Report" button and wait for the report to be created. You'll see progress for each slide in real-time.</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-yellow-50 p-4 rounded-lg border-l-4 border-yellow-400 mt-4">
+                    <h3 className="font-semibold mb-1">Additional Features:</h3>
+                    <ul className="list-disc ml-5 space-y-1 mt-2">
+                      <li>Use the <strong>Leaderboard</strong> to see report generation statistics</li>
+                      <li>Report <strong>Issues</strong> if you encounter any problems</li>
+                      <li>Use the <strong>Chat</strong> feature for assistance</li>
+                      <li>Check <strong>Notifications</strong> for updates on your reports</li>
+                    </ul>
+                  </div>
+                  
+                  <div className="bg-green-50 p-4 rounded-lg border-l-4 border-green-500 flex items-start">
+                    <div className="flex-shrink-0 mr-3">
+                      <svg className="w-6 h-6 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <p className="text-gray-700">Once your report is generated, it will automatically download as a PowerPoint file. You can then view, edit, and share it as needed.</p>
+                  </div>
                 </div>
               </div>
             </motion.div>

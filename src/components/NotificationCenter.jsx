@@ -13,21 +13,21 @@ const NotificationCenter = ({ userEmail }) => {
     if (userEmail) {
       loadNotifications();
     }
-    
+
     // Set up an interval to periodically check for new notifications
     const intervalId = setInterval(() => {
       if (userEmail && isActive) {
         loadNotifications();
       }
     }, 30000); // Check every 30 seconds
-    
+
     return () => clearInterval(intervalId);
   }, [userEmail, isActive]);
 
   const loadNotifications = () => {
     const userNotifications = getUserNotifications(userEmail);
     setNotifications(userNotifications);
-    
+
     // Count unread notifications
     const unread = userNotifications.filter(notification => !notification.read).length;
     setUnreadCount(unread);
@@ -36,6 +36,22 @@ const NotificationCenter = ({ userEmail }) => {
   const handleNotificationClick = (notificationId) => {
     const success = markNotificationAsRead(notificationId);
     if (success) {
+      loadNotifications(); // Reload to update UI
+    }
+  };
+
+  const handleMarkAllAsRead = () => {
+    const unreadNotifications = notifications.filter(notification => !notification.read);
+    let allSuccess = true;
+
+    unreadNotifications.forEach(notification => {
+      const success = markNotificationAsRead(notification.id);
+      if (!success) {
+        allSuccess = false;
+      }
+    });
+
+    if (allSuccess && unreadNotifications.length > 0) {
       loadNotifications(); // Reload to update UI
     }
   };
@@ -74,18 +90,30 @@ const NotificationCenter = ({ userEmail }) => {
         aria-label="Notifications"
         title="Notifications"
       >
-        <Bell 
-          size={20} 
-          className={isActive ? "text-blue-600" : "text-gray-800"} 
+        <Bell
+          size={20}
+          className={isActive ? "text-blue-600" : "text-gray-800"}
         />
         {unreadCount > 0 && isActive && <span className="notification-badge">{unreadCount}</span>}
       </button>
-      
+
       {isOpen && (
         <div className="notification-panel absolute top-12 right-0 w-80 max-h-[400px] bg-white shadow-lg rounded-lg z-50 overflow-hidden flex flex-col">
           <div className="p-3 border-b border-gray-200 font-bold flex justify-between items-center">
             <span>Notifications {isActive ? '' : '(Disabled)'}</span>
             <div className="flex items-center space-x-2">
+              {isActive && unreadCount > 0 && (
+                <button
+                  className="text-xs text-blue-600 hover:text-blue-800"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleMarkAllAsRead();
+                  }}
+                  title="Mark all as read"
+                >
+                  Read all
+                </button>
+              )}
               <button
                 className={`p-1 rounded-full ${isActive ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'}`}
                 onClick={(e) => {
@@ -105,7 +133,7 @@ const NotificationCenter = ({ userEmail }) => {
               </button>
             </div>
           </div>
-          
+
           <ul className="overflow-y-auto p-0 m-0 list-none flex-grow max-h-[320px]">
             {!isActive ? (
               <li className="py-8 px-4 text-center text-gray-500">
@@ -152,9 +180,9 @@ const NotificationCenter = ({ userEmail }) => {
               ))
             )}
           </ul>
-          
+
           <div className="p-2 border-t border-gray-200 text-xs text-center text-gray-500">
-            Using local notification storage
+            Notifications
           </div>
         </div>
       )}
