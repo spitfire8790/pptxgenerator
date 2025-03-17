@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { generateReport } from '../../lib/powerpoint';
+
+// Import Slides
+
 import { addCoverSlide } from './slides/coverSlide';
 import { addPropertySnapshotSlide } from './slides/propertySnapshotSlide';
 import { addPrimarySiteAttributesSlide } from './slides/primarySiteAttributesSlide';
@@ -18,32 +21,37 @@ import { addPermissibilitySlide } from './slides/permissibilitySlide';
 import { addDevelopmentSlide } from './slides/developmentSlide';
 import { addFeasibilitySlide } from './slides/feasibilitySlide';
 import area from '@turf/area';
+
+// Import Screenshots
+
 import { 
   captureMapScreenshot, 
-  capturePrimarySiteAttributesMap, 
-  captureContourMap, 
-  captureRegularityMap, 
-  captureHeritageMap, 
-  captureAcidSulfateMap, 
-  captureWaterMainsMap, 
-  captureSewerMap, 
-  capturePowerMap,
-  captureGeoscapeMap,
-  captureRoadsMap,
-  captureUDPPrecinctMap,
-  captureFloodMap,
-  captureBushfireMap,
-  capturePTALMap,
-  captureContaminationMap,
-  captureTECMap,
-  captureBiodiversityMap,
-  captureHistoricalImagery
+  captureRegularityMap,  
 } from './utils/map/services/screenshot';
+import { capturePrimarySiteAttributesMap } from './utils/map/services/screenshots/primarySiteAttributesScreenshot';
+import { captureContourMap } from './utils/map/services/screenshots/contourScreenshot';
+import { captureZoningMap } from './utils/map/services/screenshots/zoningScreenshot';
+import { captureFSRMap } from './utils/map/services/screenshots/fsrScreenshot';
+import { captureHOBMap } from './utils/map/services/screenshots/hobScreenshot';
+import { captureHeritageMap } from './utils/map/services/screenshots/heritageScreenshot';
+import { captureAcidSulfateMap } from './utils/map/services/screenshots/acidSulphateScreenshot';
+import { captureWaterMainsMap } from './utils/map/services/screenshots/waterMainsScreenshot';
+import { captureSewerMap } from './utils/map/services/screenshots/sewerMainsScreenshot';
+import { capturePowerMap } from './utils/map/services/screenshots/powerMainsScreenshot';
+import { captureGeoscapeMap } from './utils/map/services/screenshots/geoscapeScreenshot';
+import { captureRoadsMap } from './utils/map/services/screenshots/roadScreenshot';
+import { captureUDPPrecinctMap } from './utils/map/services/screenshots/strategicScreenshot';
+import { capturePTALMap } from './utils/map/services/screenshots/ptalScreenshot';
+import { captureFloodMap } from './utils/map/services/screenshots/floodScreenshot';
+import { captureBushfireMap } from './utils/map/services/screenshots/bushfireScreenshot';
+import { captureTECMap } from './utils/map/services/screenshots/tecScreenshot';
+import { captureBiodiversityMap } from './utils/map/services/screenshots/biodiversityScreenshot';
+import { captureContaminationMap } from './utils/map/services/screenshots/contaminationScreenshot';
+import { captureHistoricalImagery } from './utils/map/services/screenshots/historicalImageryScreenshot';
 import { captureGPRMap } from './utils/map/services/screenshots/contextScreenshot';
 import { clearServiceCache } from './utils/map/services/wmsService';
 import { SCREENSHOT_TYPES } from './utils/map/config/screenshotTypes';
 import SlidePreview from './SlidePreview';
-import PlanningMapView from './PlanningMapView';
 import PptxGenJS from 'pptxgenjs';
 import DevelopableAreaSelector, { DevelopableAreaOptions } from './DevelopableAreaSelector';
 import { checkUserClaims } from './utils/auth/tokenUtils';
@@ -238,7 +246,6 @@ const ReportGenerator = ({
   const [developableArea, setDevelopableArea] = useState(null);
   const [showDevelopableArea, setShowDevelopableArea] = useState(true);
   const [useDevelopableAreaForBounds, setUseDevelopableAreaForBounds] = useState(false);
-  const planningMapRef = useRef();
   const [currentStep, setCurrentStep] = useState(null);
   const [completedSteps, setCompletedSteps] = useState([]);
   const [progress, setProgress] = useState(0);
@@ -895,6 +902,14 @@ const ReportGenerator = ({
       
       addLog('Starting report generation...', 'default');
       
+      // Initialize pptx instance early to avoid reference errors
+      const pptx = new PptxGenJS();
+      
+      // Set document properties
+      pptx.title = getCombinedSiteName();
+      pptx.subject = `Property Analysis for ${getPropertiesDescription()}`;
+      pptx.author = "Property Analysis Tool";
+  
       if (selectedSlides.cover) {
         addLog('Capturing cover screenshot...', 'image');
         try {
@@ -985,8 +1000,6 @@ const ReportGenerator = ({
       }
       
       if (selectedSlides.planning) {
-        await planningMapRef.current?.captureScreenshots();
-        
         // Use featureToCapture for multiple features
         let featureToCapture;
         if (selectedSiteFeatures.length > 1) {
@@ -1001,30 +1014,27 @@ const ReportGenerator = ({
           featureToCapture = primaryFeature;
         }
         
-        screenshots.zoningScreenshot = await captureMapScreenshot(
+        // Directly capture planning screenshots instead of using planningMapRef
+        screenshots.zoningScreenshot = await captureZoningMap(
           featureToCapture, 
-          SCREENSHOT_TYPES.ZONING, 
-          true, 
           developableArea, 
           showDevelopableArea, 
           useDevelopableAreaForBounds, 
           false, // Don't show feature labels
           false  // Don't show developable area labels
         );
-        screenshots.fsrScreenshot = await captureMapScreenshot(
+        
+        screenshots.fsrScreenshot = await captureFSRMap(
           featureToCapture, 
-          SCREENSHOT_TYPES.FSR, 
-          true, 
           developableArea, 
           showDevelopableArea, 
           useDevelopableAreaForBounds, 
           false, // Don't show feature labels
           false  // Don't show developable area labels
         );
-        screenshots.hobScreenshot = await captureMapScreenshot(
+        
+        screenshots.hobScreenshot = await captureHOBMap(
           featureToCapture, 
-          SCREENSHOT_TYPES.HOB, 
-          true, 
           developableArea, 
           showDevelopableArea, 
           useDevelopableAreaForBounds, 
@@ -1103,15 +1113,21 @@ const ReportGenerator = ({
         }
         const waterMains = await captureWaterMainsMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
         screenshots.waterMainsScreenshot = waterMains?.image;
-        screenshots.waterFeatures = waterMains?.features;
+        screenshots.waterFeatures = waterMains?.features || [];
         
         const sewer = await captureSewerMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
         screenshots.sewerScreenshot = sewer?.image;
-        screenshots.sewerFeatures = sewer?.features;
+        screenshots.sewerFeatures = sewer?.features || [];
         
         const power = await capturePowerMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
+        console.log('Power screenshot data received:', {
+          hasImage: Boolean(power?.image),
+          hasFeatures: Boolean(power?.features),
+          featuresLength: power?.features?.length || 0,
+          featuresType: power?.features ? typeof power.features : 'N/A'
+        });
         screenshots.powerScreenshot = power?.image;
-        screenshots.powerFeatures = power?.features;
+        screenshots.powerFeatures = power?.features || [];
       }
       
       if (selectedSlides.utilisation) {
@@ -1151,9 +1167,9 @@ const ReportGenerator = ({
         // Run all map operations in parallel instead of sequentially
         addLog('Generating access maps in parallel...', 'info');
         const [roadsResult, udpPrecinctsResult, ptalScreenshot] = await Promise.all([
-          captureRoadsMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true),
-          captureUDPPrecinctMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true),
-          capturePTALMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true)
+          captureRoadsMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true, showDevelopableArea),
+          captureUDPPrecinctMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true, showDevelopableArea),
+          capturePTALMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true, showDevelopableArea)
         ]);
 
         // Create propertyData if not already created
@@ -1275,7 +1291,7 @@ const ReportGenerator = ({
         } else {
           featureToCapture = primaryFeature;
         }
-        const tecMapResult = await captureTECMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
+        const tecMapResult = await captureTECMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, false, false);
         screenshots.tecMapScreenshot = tecMapResult?.dataURL;
         
         // Store the TEC features for scoring
@@ -1284,7 +1300,7 @@ const ReportGenerator = ({
           console.log('Stored TEC features from map capture:', tecMapResult.tecFeatures);
         }
         
-        const biodiversityMapResult = await captureBiodiversityMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, true);
+        const biodiversityMapResult = await captureBiodiversityMap(featureToCapture, developableArea, showDevelopableArea, useDevelopableAreaForBounds, false, false);
         screenshots.biodiversityMapScreenshot = biodiversityMapResult?.dataURL;
         
         // Store the biodiversity features for scoring
@@ -1329,13 +1345,6 @@ const ReportGenerator = ({
         day: 'numeric'
       });
 
-      const pptx = new PptxGenJS();
-      
-      // Set document properties
-      pptx.title = getCombinedSiteName();
-      pptx.subject = `Property Analysis for ${getPropertiesDescription()}`;
-      pptx.author = "Property Analysis Tool";
-  
       // Prepare data for all selected properties
       const propertiesData = selectedSiteFeatures.map(feature => {
         const props = feature.properties?.copiedFrom || {};
@@ -1538,7 +1547,9 @@ const ReportGenerator = ({
         featureToCapture, 
         developableArea, 
         showDevelopableArea, 
-        useDevelopableAreaForBounds
+        useDevelopableAreaForBounds,
+        true, // Show feature labels
+        showDevelopableArea // Match showDevelopableArea for labels
       );
       
       setPreviewScreenshot(coverScreenshot);
@@ -1549,13 +1560,6 @@ const ReportGenerator = ({
         gprFeatures: gprResult?.features
       });
     }
-  };
-
-  const handlePlanningScreenshotsCapture = (planningScreenshots) => {
-    setScreenshots(prev => ({
-      ...prev,
-      ...planningScreenshots
-    }));
   };
 
   const handleDevelopableAreaSelect = (layerData) => {
@@ -1755,20 +1759,12 @@ const ReportGenerator = ({
               <span className="inline-flex items-center bg-blue-600 text-white px-2 py-0.5 rounded-md text-xs mr-3">
                 NEW
               </span>
-              7 March 2025 Update: Multiple Sites and Multiple Developable Areas can now be incorporated into a single report.
+              17 March 2025 Update: Bernie has agreed to buy the team coffee in the office at 4PSQ tomorrow.
             </div>
           </div>
         </div>
       </div>
       
-      <PlanningMapView 
-        ref={planningMapRef}
-        feature={primaryFeature} 
-        onScreenshotCapture={handlePlanningScreenshotsCapture}
-        developableArea={developableArea}
-        showDevelopableArea={showDevelopableArea}
-      />
-
       {/* Property selection and Developable Area panels - 3 column layout */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
         <PropertyListSelector 
@@ -1789,6 +1785,7 @@ const ReportGenerator = ({
           setShowDevelopableArea={setShowDevelopableArea}
           useDevelopableAreaForBounds={useDevelopableAreaForBounds}
           setUseDevelopableAreaForBounds={setUseDevelopableAreaForBounds}
+          developableArea={developableArea}  // Pass the complete developableArea object for maximum flexibility
         />
       </div>
       
@@ -2014,7 +2011,6 @@ const ReportGenerator = ({
               site_suitability__suburb: primaryFeature.properties.copiedFrom?.site_suitability__suburb
             }
           } : null}
-          map={planningMapRef.current}  // Pass the map ref directly
           developableArea={developableArea}  // Pass the complete developableArea object for maximum flexibility
         />
 

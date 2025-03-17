@@ -235,32 +235,44 @@ export async function addEnviroSlide(pptx, properties) {
     console.log('Raw TEC features:', properties.site_suitability__tecFeatures);
 
     // Check if we have the required data
-    if (properties.developableArea && properties.site_suitability__tecFeatures) {
+    if (properties.developableArea && properties.site_suitability__tecFeatures !== undefined) {
       try {
         console.log('=== Starting TEC Score Calculation ===');
         console.log('Developable area geometry:', JSON.stringify(properties.developableArea[0].geometry));
         
         // Ensure we have a valid FeatureCollection structure
-        const tecFeatureCollection = properties.site_suitability__tecFeatures;
+        const tecFeatureCollection = properties.site_suitability__tecFeatures || { type: 'FeatureCollection', features: [] };
         
-        console.log('Using TEC FeatureCollection:', tecFeatureCollection);
-        
-        const result = scoringCriteria.tec.calculateScore(tecFeatureCollection, properties.developableArea);
-        console.log('\nScore Calculation Result:');
-        console.log('- Score:', result.score);
-        console.log('- Coverage:', result.coverage ? `${result.coverage.toFixed(2)}%` : 'N/A');
-        console.log('- Description:', scoringCriteria.tec.getScoreDescription(result));
-        console.log('=== End TEC Score Calculation ===\n');
-        
-        tecScore = result.score;
-        tecText = scoringCriteria.tec.getScoreDescription(result);
+        // If no TEC features or empty collection, set score to 3 (not impacted by TEC)
+        if (!tecFeatureCollection || !tecFeatureCollection.features || tecFeatureCollection.features.length === 0) {
+          console.log('No TEC features found - setting score to 3');
+          tecScore = 3;
+          tecText = 'The developable area is not impacted by TEC.';
+          
+          // Store the TEC score in site_suitability properties
+          if (!properties.site_suitability__scores) {
+            properties.site_suitability__scores = {};
+          }
+          properties.site_suitability__scores.tec = tecScore;
+        } else {
+          console.log('Using TEC FeatureCollection:', tecFeatureCollection);
+          
+          const result = scoringCriteria.tec.calculateScore(tecFeatureCollection, properties.developableArea);
+          console.log('\nScore Calculation Result:');
+          console.log('- Score:', result.score);
+          console.log('- Coverage:', result.coverage ? `${result.coverage.toFixed(2)}%` : 'N/A');
+          console.log('- Description:', scoringCriteria.tec.getScoreDescription(result));
+          console.log('=== End TEC Score Calculation ===\n');
+          
+          tecScore = result.score;
+          tecText = scoringCriteria.tec.getScoreDescription(result);
 
-        // Store the TEC score in site_suitability properties
-        if (!properties.site_suitability__scores) {
-          properties.site_suitability__scores = {};
+          // Store the TEC score in site_suitability properties
+          if (!properties.site_suitability__scores) {
+            properties.site_suitability__scores = {};
+          }
+          properties.site_suitability__scores.tec = tecScore;
         }
-        properties.site_suitability__scores.tec = tecScore;
-
       } catch (error) {
         console.error('Error calculating TEC score:', error);
         console.error('Error details:', {
@@ -269,13 +281,32 @@ export async function addEnviroSlide(pptx, properties) {
           developableArea: properties.developableArea ? 'exists' : 'missing',
           tecFeatures: properties.site_suitability__tecFeatures ? 'exists' : 'missing'
         });
-        tecText = 'Error calculating TEC impact.';
+        tecScore = 3; // Default to high score in case of error
+        tecText = 'The developable area is not impacted by TEC.';
+        
+        // Store the TEC score in site_suitability properties
+        if (!properties.site_suitability__scores) {
+          properties.site_suitability__scores = {};
+        }
+        properties.site_suitability__scores.tec = tecScore;
       }
     } else {
       console.log('Missing required data for TEC score:', {
         developableArea: properties.developableArea ? 'exists' : 'missing',
         tecFeatures: properties.site_suitability__tecFeatures ? 'exists' : 'missing'
       });
+      
+      // If developable area exists but TEC data is missing, assume no impact
+      if (properties.developableArea) {
+        tecScore = 3;
+        tecText = 'The developable area is not impacted by TEC.';
+        
+        // Store the TEC score
+        if (!properties.site_suitability__scores) {
+          properties.site_suitability__scores = {};
+        }
+        properties.site_suitability__scores.tec = tecScore;
+      }
     }
 
     // Update the box color based on score

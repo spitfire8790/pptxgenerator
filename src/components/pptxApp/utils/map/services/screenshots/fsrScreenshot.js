@@ -10,10 +10,14 @@ import { calculateBounds } from '../../utils/boundsUtils';
 import { drawFeatureBoundaries, drawDevelopableAreaBoundaries, drawRoundedTextBox } from '../../utils/drawingUtils';
 import { getArcGISImage } from '../arcgisService';
 
+// Screenshot types
+const SCREENSHOT_TYPE_FSR = 'fsr';
+const SCREENSHOT_TYPE_AERIAL = 'aerial';
+
 // Layer configurations
-const LAYER_CONFIG_ZONING = {
-  url: 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/EPI_Primary_Planning_Layers/MapServer',
-  layerId: 2,
+const LAYER_CONFIG_FSR = {
+  url: 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/Principal_Planning_Layers/MapServer',
+  layerId: 4,
   size: 2048,
   width: 2048,
   height: 2048,
@@ -38,11 +42,11 @@ const LAYER_CONFIG_AERIAL = {
   fallbackSpatialReference: 102100
 };
 
-export async function captureZoningMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false, showLabels = true, showDevelopableAreaLabels = true) {
+export async function captureFSRMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false, showLabels = true, showDevelopableAreaLabels = true) {
     if (!feature) return null;
     
     try {
-      const config = LAYER_CONFIG_ZONING;
+      const config = LAYER_CONFIG_FSR;
       const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
       
       console.log('Raw coordinates:', { centerX, centerY, size });
@@ -83,13 +87,13 @@ export async function captureZoningMap(feature, developableArea = null, showDeve
       }
   
       try {
-        // 2. Zoning layer - Use arcgisService for consistent CRS handling
-        console.log('Loading zoning layer...');
-        const zoningLayer = await getArcGISImage(config, centerX, centerY, size);
-        console.log('Zoning layer loaded');
-        drawImage(ctx, zoningLayer, canvas.width, canvas.height, 0.7);
+        // 2. FSR layer - Use arcgisService for consistent CRS handling
+        console.log('Loading FSR layer...');
+        const fsrLayer = await getArcGISImage(config, centerX, centerY, size);
+        console.log('FSR layer loaded');
+        drawImage(ctx, fsrLayer, canvas.width, canvas.height, 0.7);
       } catch (error) {
-        console.warn('Failed to load zoning layer:', error);
+        console.warn('Failed to load FSR layer:', error);
       }
   
       // Draw boundaries
@@ -105,8 +109,7 @@ export async function captureZoningMap(feature, developableArea = null, showDeve
   
       return canvas.toDataURL('image/png', 1.0);
     } catch (error) {
-      console.error('Failed to capture zoning map:', error);
+      console.error('Failed to capture FSR map:', error);
       return null;
     }
   }
-

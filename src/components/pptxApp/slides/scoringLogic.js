@@ -21,30 +21,45 @@ const scoringCriteria = {
       hob: 10
     },
     calculateScore: (zones, fsr, hob) => {
+      console.log('=== Planning Score Calculation Start ===');
+      console.log('Input validation:', { zones, fsr, hob });
+      
       // Default score if no data
-      if (!zones || zones.length === 0) return 0;
+      if (!zones || zones.length === 0) {
+        console.log('No zones provided - returning score 0');
+        return 0;
+      }
 
       // Check if any zone matches high score criteria
       const hasHighScoreZone = zones.some(zone => scoringCriteria.planning.highScoreZones.includes(zone));
       const hasMediumScoreZone = zones.some(zone => scoringCriteria.planning.mediumScoreZones.includes(zone));
+      
+      console.log('Zone match results:', { hasHighScoreZone, hasMediumScoreZone });
 
       // Convert FSR and HoB to numbers and handle null/undefined
       const numFSR = parseFloat(fsr) || 0;
       const numHoB = parseFloat(hob) || 0;
+      
+      console.log('Numeric values:', { numFSR, numHoB });
+      console.log('Thresholds:', scoringCriteria.planning.thresholds);
 
       if (hasHighScoreZone) {
         // Check if meets threshold for high score
         if (numFSR > scoringCriteria.planning.thresholds.fsr || 
             numHoB > scoringCriteria.planning.thresholds.hob) {
+          console.log('High score zone with favorable density controls - score 3');
           return 3;
         }
+        console.log('High score zone but lower density controls - score 2');
         return 2; // High score zone but doesn't meet FSR/HoB thresholds
       }
 
       if (hasMediumScoreZone) {
+        console.log('Medium score zone - score 2');
         return 2;
       }
 
+      console.log('Other zone type - score 1');
       return 1; // Default score for any other zones
     },
     getScoreDescription: (score) => {

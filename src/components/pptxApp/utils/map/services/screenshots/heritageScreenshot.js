@@ -1,4 +1,8 @@
+import { LAYER_CONFIGS } from '../../config/layerConfigs';
+import { SCREENSHOT_TYPES } from '../../config/screenshotTypes';
 import { calculateMercatorParams } from '../../utils/coordinates';
+import { getWMSImage } from '../wmsService';
+import { getArcGISImage } from '../arcgisService';
 import { createCanvas, drawImage, drawBoundary, drawPolyline } from '../../utils/canvas';
 import { proxyRequest } from '../../../services/proxyService';
 import { loadImage } from '../../utils/image';
@@ -8,16 +12,15 @@ import { getPTALToken } from '../tokenService';
 import * as turf from '@turf/turf';
 import { calculateBounds } from '../../utils/boundsUtils';
 import { drawFeatureBoundaries, drawDevelopableAreaBoundaries, drawRoundedTextBox } from '../../utils/drawingUtils';
-import { getArcGISImage } from '../arcgisService';
 
 // Layer configurations
-const LAYER_CONFIG_ZONING = {
+const LAYER_CONFIG_HERITAGE = {
   url: 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/EPI_Primary_Planning_Layers/MapServer',
-  layerId: 2,
+  layerId: 0,
   size: 2048,
   width: 2048,
   height: 2048,
-  padding: 0.2,
+  padding: 0.3,
   dpi: 300,
   format: 'png32',
   transparent: true,
@@ -30,7 +33,7 @@ const LAYER_CONFIG_AERIAL = {
   opacity: 1,
   width: 2048,
   height: 2048,
-  padding: 0.2,
+  padding: 0.3,
   dpi: 300,
   fallbackUrl: 'https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer',
   fallbackFormat: 'png32',
@@ -38,11 +41,11 @@ const LAYER_CONFIG_AERIAL = {
   fallbackSpatialReference: 102100
 };
 
-export async function captureZoningMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false, showLabels = true, showDevelopableAreaLabels = true) {
+export async function captureHeritageMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false) {
     if (!feature) return null;
     
     try {
-      const config = LAYER_CONFIG_ZONING;
+      const config = LAYER_CONFIG_HERITAGE;
       const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
       
       console.log('Raw coordinates:', { centerX, centerY, size });
@@ -83,30 +86,55 @@ export async function captureZoningMap(feature, developableArea = null, showDeve
       }
   
       try {
-        // 2. Zoning layer - Use arcgisService for consistent CRS handling
-        console.log('Loading zoning layer...');
-        const zoningLayer = await getArcGISImage(config, centerX, centerY, size);
-        console.log('Zoning layer loaded');
-        drawImage(ctx, zoningLayer, canvas.width, canvas.height, 0.7);
+        // 2. Heritage layer - Use arcgisService for consistent CRS handling
+        console.log('Loading heritage layer...');
+        const heritageLayer = await getArcGISImage(config, centerX, centerY, size);
+        console.log('Heritage layer loaded');
+        drawImage(ctx, heritageLayer, canvas.width, canvas.height, 0.8);
       } catch (error) {
-        console.warn('Failed to load zoning layer:', error);
+        console.warn('Failed to load heritage layer:', error);
       }
   
       // Draw boundaries
       drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.size || config.width, {
         strokeStyle: '#FF0000',
         lineWidth: 6,
-        showLabels: showLabels
+        showLabels: false
       });
   
       if (developableArea?.features?.length > 0 && showDevelopableArea) {
-        drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.size || config.width, showDevelopableAreaLabels);
+        drawDevelopableAreaBoundaries(ctx, developableArea, centerX, centerY, size, config.size || config.width, false);
+      }
+  
+      try {
+        // Load and draw the legend image
+        console.log('Loading legend image...');
+        const legendImage = await loadImage('/legends/heritage-layer-legend.png');
+        
+        // Position the legend in the bottom right with padding
+        const padding = 30;
+        const legendWidth = 450;  // Match the width from the image
+        const legendHeight = 600; // Match the height from the image
+        const legendX = canvas.width - legendWidth - padding;
+        const legendY = canvas.height - legendHeight - padding;
+  
+        // Draw legend background
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2;
+        ctx.fillRect(legendX, legendY, legendWidth, legendHeight);
+        ctx.strokeRect(legendX, legendY, legendWidth, legendHeight);
+  
+        // Draw the legend image
+        ctx.drawImage(legendImage, legendX, legendY, legendWidth, legendHeight);
+        console.log('Legend image drawn');
+      } catch (error) {
+        console.warn('Failed to load or draw legend image:', error);
       }
   
       return canvas.toDataURL('image/png', 1.0);
     } catch (error) {
-      console.error('Failed to capture zoning map:', error);
+      console.error('Failed to capture heritage map:', error);
       return null;
     }
   }
-

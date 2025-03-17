@@ -1,5 +1,7 @@
 import { convertCmValues } from '../utils/units';
-import { captureWaterMainsMap, captureSewerMap, capturePowerMap } from '../utils/map/services/screenshot';
+import { captureWaterMainsMap } from '../utils/map/services/screenshots/waterMainsScreenshot';
+import { captureSewerMap } from '../utils/map/services/screenshots/sewerMainsScreenshot';
+import { capturePowerMap } from '../utils/map/services/screenshots/powerMainsScreenshot';
 import scoringCriteria from './scoringLogic';
 import { formatAddresses } from '../utils/addressFormatting';
 
@@ -165,6 +167,13 @@ export async function addServicingSlide(pptx, propertyData) {
     console.log('Water Features:', propertyData.waterFeatures);
     console.log('Water Features type:', typeof propertyData.waterFeatures);
     console.log('Water Features structure:', JSON.stringify(propertyData.waterFeatures, null, 2));
+    
+    // Add power features debugging
+    console.log('Power Features:', propertyData.powerFeatures);
+    console.log('Power Features type:', typeof propertyData.powerFeatures);
+    console.log('Power Features length:', propertyData.powerFeatures ? propertyData.powerFeatures.length : 'null');
+    console.log('Power Features structure:', JSON.stringify(propertyData.powerFeatures, null, 2));
+    
     console.log('Developable Area:', propertyData.developableArea);
     
     // Check if we have developable areas and validate the format

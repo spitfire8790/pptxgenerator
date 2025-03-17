@@ -175,7 +175,7 @@ export async function createScoringSlide(pres, propertyData) {
       developableArea: getScoreValue(propertyData.scores?.developableArea),
       contours: getScoreValue(propertyData.scores?.contours),
       siteRegularity: getScoreValue(propertyData.scores?.siteRegularity),
-      zoning: getScoreValue(propertyData.scores?.zoning),
+      zoning: getScoreValue(propertyData.scores?.planning),
       heritage: getScoreValue(propertyData.scores?.heritage),
       acidSulfateSoils: getScoreValue(propertyData.scores?.acidSulfateSoils),
       servicing: getScoreValue(propertyData.scores?.servicing),

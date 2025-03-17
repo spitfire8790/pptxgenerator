@@ -1,6 +1,6 @@
 import { convertCmValues } from '../utils/units';
 import scoringCriteria from './scoringLogic';
-import { captureContaminationMap } from '../utils/map/services/screenshot';
+import { captureContaminationMap } from '../utils/map/services/screenshots/contaminationScreenshot';
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
 import { formatAddresses } from '../utils/addressFormatting';
 

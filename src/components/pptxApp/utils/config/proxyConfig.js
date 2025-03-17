@@ -10,6 +10,9 @@ export const PROXY_CONFIG = {
     'mapuat3.environment.nsw.gov.au',
     'spatial.industry.nsw.gov.au',
     'sims.spatial.nsw.gov.au',
-    'spatialportalarcgis.dpie.nsw.gov.au'
+    'spatialportalarcgis.dpie.nsw.gov.au',
+    'services-ap1.arcgis.com',
+    'services.arcgis.com',
+    'layers-node-ehcce5pxxq-ts.a.run.app'
   ]
 };

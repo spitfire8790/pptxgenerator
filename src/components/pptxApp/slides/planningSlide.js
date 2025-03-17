@@ -579,7 +579,11 @@ export async function addPlanningSlide(pptx, properties) {
         } else {
           fsrText = `The developable area${properties.developableArea.length > 1 ? 's have' : ' has'} a maximum FSR of ${developableAreaFSR}:1.`;
         }
+      } else if (properties.developableArea && properties.developableArea.length > 0) {
+        // When we have developable areas but no FSR values were found
+        fsrText = `The developable area${properties.developableArea.length > 1 ? 's have' : ' has'} no FSR specified.`;
       } else if (properties.site_suitability__floorspace_ratio) {
+        // Only fall back to site data if no developable areas exist
         fsrText = `The site has a maximum FSR of ${properties.site_suitability__floorspace_ratio}:1.`;
       } else {
         fsrText = 'The site has no FSR specified.';
@@ -684,7 +688,11 @@ export async function addPlanningSlide(pptx, properties) {
       } else {
         hobText = `The developable area${properties.developableArea.length > 1 ? 's have' : ' has'} a maximum HoB of ${developableAreaHoB} metres.`;
       }
+    } else if (properties.developableArea && properties.developableArea.length > 0) {
+      // When we have developable areas but no HoB values were found
+      hobText = `The developable area${properties.developableArea.length > 1 ? 's have' : ' has'} no HoB specified.`;
     } else if (properties.site_suitability__height_of_building) {
+      // Only fall back to site data if no developable areas exist
       hobText = `The site has a maximum HoB of ${properties.site_suitability__height_of_building} metres.`;
     } else {
       hobText = 'The site has no HoB specified.';
@@ -740,8 +748,8 @@ export async function addPlanningSlide(pptx, properties) {
         { text: scoreDescription }
       ], convertCmValues(styles.scoreText));
 
-      // Store the planning score in the properties object
-      properties.scores.zoning = planningScore;
+      // Store the planning score in the properties object - use planning key, not zoning
+      properties.scores.planning = planningScore;
 
       // Add footer line
       slide.addShape(pptx.shapes.RECTANGLE, convertCmValues(styles.footerLine));

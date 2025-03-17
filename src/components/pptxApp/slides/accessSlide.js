@@ -1,7 +1,9 @@
 import { convertCmValues } from '../utils/units';
 import scoringCriteria from './scoringLogic';
 import { proxyRequest } from '../utils/services/proxyService';
-import { captureRoadsMap, captureUDPPrecinctMap, capturePTALMap } from '../utils/map/services/screenshot';
+import { captureRoadsMap } from '../utils/map/services/screenshots/roadScreenshot';
+import { captureUDPPrecinctMap } from '../utils/map/services/screenshots/strategicScreenshot';
+import { capturePTALMap } from '../utils/map/services/screenshots/ptalScreenshot';
 import { formatAddresses } from '../utils/addressFormatting';
 
 const styles = {
@@ -112,173 +114,506 @@ export async function addAccessSlide(pptx, propertyData) {
         .filter(Boolean) // Remove null entries
     } : null;
     
-    // Use the combinedGeometry if it exists (for multiple properties), otherwise create a single feature
-    const featureToUse = propertyData.combinedGeometry || {
-      type: 'Feature',
-      geometry: {
-        type: 'Polygon',
-        coordinates: [propertyData.site__geometry]
-      },
-      properties: propertyData
-    };
+    // Get feature geometries from all possible sources
+    let featureToUse = null;
 
-    // If we don't have valid geometry, throw an error
+    // Add detailed logging of each potential geometry source
+    console.log('CombinedGeometry:', JSON.stringify(propertyData.combinedGeometry));
+    console.log('SiteGeometry:', JSON.stringify(propertyData.site__geometry));
+    console.log('DevelopableArea sample:', propertyData.developableArea ? JSON.stringify(propertyData.developableArea[0]) : 'null');
+    console.log('AllProperties sample:', propertyData.allProperties ? JSON.stringify(propertyData.allProperties[0]) : 'null');
+
+    // First, try combined geometry (for multiple properties)
+    if (propertyData.combinedGeometry) {
+      console.log('Using combinedGeometry for multiple properties');
+      
+      // Handle string JSON format (common in some APIs)
+      if (typeof propertyData.combinedGeometry === 'string') {
+        try {
+          console.log('combinedGeometry is a string, trying to parse as JSON');
+          propertyData.combinedGeometry = JSON.parse(propertyData.combinedGeometry);
+          console.log('Successfully parsed combinedGeometry string');
+        } catch (e) {
+          console.error('Failed to parse combinedGeometry string:', e);
+        }
+      }
+      
+      // Validate combinedGeometry structure
+      if (typeof propertyData.combinedGeometry === 'object') {
+        if (!propertyData.combinedGeometry.geometry && propertyData.combinedGeometry.features) {
+          // It might be a FeatureCollection - use first feature
+          console.log('combinedGeometry appears to be a FeatureCollection, using first feature');
+          featureToUse = propertyData.combinedGeometry.features[0];
+        } else if (propertyData.combinedGeometry.geometry) {
+          // It's already a Feature
+          featureToUse = propertyData.combinedGeometry;
+        } else if (propertyData.combinedGeometry.type === 'Polygon' || 
+                  propertyData.combinedGeometry.type === 'MultiPolygon' ||
+                  propertyData.combinedGeometry.coordinates) {
+          // It's a raw geometry object, wrap it
+          console.log('combinedGeometry appears to be a raw geometry, wrapping as Feature');
+          featureToUse = {
+            type: 'Feature',
+            geometry: propertyData.combinedGeometry,
+            properties: propertyData
+          };
+        } else {
+          console.warn('combinedGeometry has unexpected structure:', propertyData.combinedGeometry);
+        }
+      } else {
+        console.warn('combinedGeometry is not an object:', typeof propertyData.combinedGeometry);
+      }
+    }
+
+    // Then try site__geometry
+    if (!featureToUse && propertyData.site__geometry) {
+      console.log('Trying site__geometry:', JSON.stringify(propertyData.site__geometry).substring(0, 100));
+      
+      // Check different formats that site__geometry might be in
+      if (Array.isArray(propertyData.site__geometry)) {
+        if (propertyData.site__geometry.length > 0) {
+          // Check if it's coordinates array or array of features
+          if (Array.isArray(propertyData.site__geometry[0])) {
+            // Looks like coordinates
+            console.log('site__geometry appears to be coordinates array');
+            featureToUse = {
+              type: 'Feature',
+              geometry: {
+                type: 'Polygon',
+                coordinates: [propertyData.site__geometry]
+              },
+              properties: propertyData
+            };
+          } else if (typeof propertyData.site__geometry[0] === 'object') {
+            // Might be features array
+            console.log('site__geometry appears to be features array, using first');
+            if (propertyData.site__geometry[0].geometry) {
+              featureToUse = propertyData.site__geometry[0];
+              featureToUse.properties = propertyData;
+            } else {
+              console.warn('First item in site__geometry array is not a valid feature');
+            }
+          } else {
+            console.warn('site__geometry array has unexpected structure:', propertyData.site__geometry[0]);
+          }
+        } else {
+          console.warn('site__geometry is an empty array');
+        }
+      } else if (typeof propertyData.site__geometry === 'object') {
+        // Might be a direct geometry object
+        console.log('site__geometry appears to be a geometry object');
+        featureToUse = {
+          type: 'Feature',
+          geometry: propertyData.site__geometry,
+          properties: propertyData
+        };
+      } else {
+        console.warn('site__geometry has unexpected type:', typeof propertyData.site__geometry);
+      }
+    }
+
+    // Try to use the developable area if available
+    if (!featureToUse && formattedDevelopableArea && formattedDevelopableArea.features && formattedDevelopableArea.features.length > 0) {
+      console.log('Using developable area with', formattedDevelopableArea.features.length, 'features');
+      console.log('First developable area feature:', JSON.stringify(formattedDevelopableArea.features[0]).substring(0, 200));
+      
+      // Find the first feature with valid geometry
+      for (let i = 0; i < formattedDevelopableArea.features.length; i++) {
+        const feature = formattedDevelopableArea.features[i];
+        if (feature && feature.geometry && feature.geometry.coordinates) {
+          console.log(`Found valid geometry in developable area feature ${i}`);
+          featureToUse = { ...feature };
+          featureToUse.properties = { ...propertyData, ...feature.properties };
+          break;
+        }
+      }
+      
+      if (!featureToUse) {
+        console.warn('No valid features found in developable area');
+      }
+    }
+
+    // Check for allProperties array (for multiple properties)
+    if (!featureToUse && propertyData.allProperties && Array.isArray(propertyData.allProperties) && propertyData.allProperties.length > 0) {
+      console.log('Trying to construct feature from allProperties array with', propertyData.allProperties.length, 'properties');
+      
+      // Try to find a property with geometry
+      for (let i = 0; i < propertyData.allProperties.length; i++) {
+        const prop = propertyData.allProperties[i];
+        console.log(`Checking property ${i} for geometry`);
+        
+        let geometry = null;
+        
+        if (prop.site__geometry) {
+          console.log(`Property ${i} has site__geometry`);
+          geometry = prop.site__geometry;
+        } else if (prop.geometry) {
+          console.log(`Property ${i} has direct geometry`);
+          geometry = prop.geometry;
+        } else if (prop.site && prop.site.geometry) {
+          console.log(`Property ${i} has site.geometry`);
+          geometry = prop.site.geometry;
+        }
+        
+        if (geometry) {
+          featureToUse = {
+            type: 'Feature',
+            geometry: Array.isArray(geometry) ? { type: 'Polygon', coordinates: [geometry] } : geometry,
+            properties: propertyData
+          };
+          console.log(`Created feature from property ${i}`);
+          break;
+        }
+      }
+    }
+
+    // Last resort - try to handle any stringified geometry
     if (!featureToUse) {
-      throw new Error('No valid geometry data found in property data');
+      try {
+        // Check if any of the geometry fields might be stringified JSON
+        if (typeof propertyData.combinedGeometry === 'string' && propertyData.combinedGeometry.includes('{')) {
+          console.log('Attempting to parse stringified combinedGeometry');
+          const parsedGeometry = JSON.parse(propertyData.combinedGeometry);
+          featureToUse = {
+            type: 'Feature',
+            geometry: parsedGeometry.geometry || parsedGeometry,
+            properties: propertyData
+          };
+        } else if (typeof propertyData.site__geometry === 'string' && propertyData.site__geometry.includes('[')) {
+          console.log('Attempting to parse stringified site__geometry');
+          const parsedGeometry = JSON.parse(propertyData.site__geometry);
+          featureToUse = {
+            type: 'Feature',
+            geometry: {
+              type: 'Polygon',
+              coordinates: [parsedGeometry]
+            },
+            properties: propertyData
+          };
+        }
+        
+        // Check for site_geometry (with single underscore) which is used in some APIs
+        if (!featureToUse && propertyData.site_geometry) {
+          console.log('Trying site_geometry (single underscore)');
+          if (Array.isArray(propertyData.site_geometry)) {
+            featureToUse = {
+              type: 'Feature',
+              geometry: {
+                type: 'Polygon',
+                coordinates: [propertyData.site_geometry]
+              },
+              properties: propertyData
+            };
+          } else if (typeof propertyData.site_geometry === 'object') {
+            featureToUse = {
+              type: 'Feature',
+              geometry: propertyData.site_geometry,
+              properties: propertyData
+            };
+          } else if (typeof propertyData.site_geometry === 'string' && propertyData.site_geometry.includes('[')) {
+            // Try to parse string
+            const parsedGeometry = JSON.parse(propertyData.site_geometry);
+            featureToUse = {
+              type: 'Feature',
+              geometry: {
+                type: 'Polygon',
+                coordinates: [parsedGeometry]
+              },
+              properties: propertyData
+            };
+          }
+        }
+      } catch (parseError) {
+        console.error('Error parsing stringified geometry:', parseError);
+      }
+    }
+
+    // Final validation of the selected feature
+    if (featureToUse) {
+      console.log('Selected feature:', {
+        type: featureToUse.type,
+        hasGeometry: !!featureToUse.geometry,
+        geometryType: featureToUse.geometry?.type,
+        hasCoordinates: !!featureToUse.geometry?.coordinates,
+        coordinatesLength: featureToUse.geometry?.coordinates ? 
+                          (Array.isArray(featureToUse.geometry.coordinates) ? featureToUse.geometry.coordinates.length : 'not array') : 'no coordinates',
+        coordinatesSample: featureToUse.geometry?.coordinates ? 
+                          JSON.stringify(featureToUse.geometry.coordinates).substring(0, 100) : 'none'
+      });
+
+      // Check for empty or invalid coordinates
+      if (featureToUse.geometry && (!featureToUse.geometry.coordinates || 
+          (Array.isArray(featureToUse.geometry.coordinates) && featureToUse.geometry.coordinates.length === 0))) {
+        console.warn('Feature has empty coordinates, checking for alternative geometry sources');
+        
+        // Try to get coordinates from another source
+        if (propertyData.site__geometry && Array.isArray(propertyData.site__geometry) && propertyData.site__geometry.length > 0) {
+          console.log('Using site__geometry as fallback for empty coordinates');
+          featureToUse.geometry = {
+            type: 'Polygon',
+            coordinates: [propertyData.site__geometry]
+          };
+        } else if (propertyData.developableArea && propertyData.developableArea.length > 0 && 
+                   propertyData.developableArea[0].geometry && propertyData.developableArea[0].geometry.coordinates) {
+          console.log('Using developableArea geometry as fallback for empty coordinates');
+          featureToUse.geometry = propertyData.developableArea[0].geometry;
+        }
+      }
+    }
+
+    // If we still don't have valid geometry, check if we have partial geometry we can fix
+    if (!featureToUse || !featureToUse.geometry || !featureToUse.geometry.coordinates) {
+      console.log('No fully valid geometry found, checking for fixable geometries');
+      
+      // Check if we have geometry without proper coordinates
+      if (featureToUse && featureToUse.geometry && !featureToUse.geometry.coordinates && featureToUse.geometry.type) {
+        console.log('Found geometry without coordinates, attempting to fix');
+        
+        // Common case: geometry with missing coordinates
+        // Try to find coordinates from any other source
+        if (propertyData.site__geometry && Array.isArray(propertyData.site__geometry)) {
+          console.log('Fixing geometry with site__geometry coordinates');
+          featureToUse.geometry.coordinates = [propertyData.site__geometry];
+          featureToUse.geometry.type = 'Polygon';
+        } 
+        else if (propertyData.site_geometry && Array.isArray(propertyData.site_geometry)) {
+          console.log('Fixing geometry with site_geometry coordinates');
+          featureToUse.geometry.coordinates = [propertyData.site_geometry];
+          featureToUse.geometry.type = 'Polygon';
+        }
+        // Check if coordinates is a string that needs parsing
+        else if (featureToUse.geometry.coordinates === null && 
+                typeof featureToUse.geometry.rawCoordinates === 'string') {
+          try {
+            console.log('Attempting to parse rawCoordinates string');
+            featureToUse.geometry.coordinates = JSON.parse(featureToUse.geometry.rawCoordinates);
+          } catch(e) {
+            console.error('Failed to parse rawCoordinates:', e);
+          }
+        }
+      }
+    }
+
+    // Final error check
+    if (!featureToUse || !featureToUse.geometry || !featureToUse.geometry.coordinates) {
+      console.error('No valid geometry found in property data:', {
+        hasCombinedGeometry: !!propertyData.combinedGeometry,
+        combinedGeometryType: propertyData.combinedGeometry ? typeof propertyData.combinedGeometry : 'none',
+        hasSiteGeometry: !!propertyData.site__geometry,
+        siteGeometryType: propertyData.site__geometry ? (Array.isArray(propertyData.site__geometry) ? 'array' : typeof propertyData.site__geometry) : 'none',
+        hasGeometry: !!propertyData.geometry,
+        hasSite: !!propertyData.site,
+        hasSiteWithGeometry: !!(propertyData.site && propertyData.site.geometry),
+        hasDevelopableArea: !!(propertyData.developableArea && propertyData.developableArea.length > 0),
+        developableAreaLength: propertyData.developableArea ? propertyData.developableArea.length : 0,
+        hasAllProperties: !!(propertyData.allProperties && Array.isArray(propertyData.allProperties) && propertyData.allProperties.length > 0),
+        allPropertiesLength: propertyData.allProperties ? propertyData.allProperties.length : 0
+      });
+      
+      throw new Error('No valid geometry data found in property data. Check console for details.');
     }
     
     // Create an object to store all screenshots
     const screenshots = {};
     
-    // Run all map operations in parallel
+    // Generate access maps in parallel
     console.log('Generating access maps in parallel...');
-    
-    // First get the roads map and features
-    const roadsResult = await captureRoadsMap(
-      featureToUse, 
-      formattedDevelopableArea, 
-      true, // Always show developable areas for roads map
-      false, // Don't use developable area for bounds
-      true   // Show feature boundaries
-    );
 
-    // Store the road features in propertyData
-    if (roadsResult?.roadFeatures) {
-      console.log('Road features extracted from map:', roadsResult.roadFeatures);
-      propertyData.roadFeatures = roadsResult.roadFeatures;
-    } else {
-      console.warn('No road features found in roadsResult:', roadsResult);
-      // Try to get road features from the feature properties if available
-      if (featureToUse.properties?.roadFeatures) {
-        console.log('Using road features from feature properties');
-        propertyData.roadFeatures = featureToUse.properties.roadFeatures;
+    // First get the roads map and features
+    try {
+      console.log('Capturing roads map...');
+      const roadsResult = await captureRoadsMap(
+        featureToUse, 
+        formattedDevelopableArea,
+        propertyData.showDevelopableArea !== undefined ? propertyData.showDevelopableArea : true, // Use user toggle
+        true, // useDevelopableAreaForBounds - keep true to include developable area in bounds
+        false  // showLabels - set to false to remove "Subject Site" labels
+      );
+      
+      // Store the road features in propertyData
+      if (roadsResult?.roadFeatures) {
+        console.log('Road features extracted from map:', roadsResult.roadFeatures);
+        propertyData.roadFeatures = roadsResult.roadFeatures;
       } else {
-        console.warn('No road features found in feature properties either');
-        propertyData.roadFeatures = []; // Initialize with empty array to avoid undefined
+        console.warn('No road features found in roadsResult');
+        // Try to get road features from the feature properties if available
+        if (featureToUse.properties?.roadFeatures) {
+          console.log('Using road features from feature properties');
+          propertyData.roadFeatures = featureToUse.properties.roadFeatures;
+        } else {
+          console.warn('No road features found in feature properties either');
+          propertyData.roadFeatures = []; // Initialize with empty array to avoid undefined
+        }
       }
+      
+      // Store the screenshot
+      if (roadsResult?.dataURL) {
+        screenshots.roadsScreenshot = roadsResult.dataURL;
+      }
+    } catch (roadsError) {
+      console.error('Error capturing roads map:', roadsError);
+      propertyData.roadFeatures = propertyData.roadFeatures || [];
     }
 
     // Log the road features before scoring
     console.log('Road features before scoring:', propertyData.roadFeatures);
 
     // Now calculate the roads score with the loaded features
-    const roadsScoreResult = scoringCriteria.roads.calculateScore(
-      propertyData.roadFeatures, 
-      propertyData.developableArea,
-      propertyData.isMultipleProperties ? propertyData.allProperties : null
-    );
-    const roadsDescription = scoringCriteria.roads.getScoreDescription(roadsScoreResult);
+    let roadsScoreResult;
+    let roadsDescription;
+    try {
+      roadsScoreResult = scoringCriteria.roads.calculateScore(
+        propertyData.roadFeatures, 
+        propertyData.developableArea,
+        propertyData.isMultipleProperties ? propertyData.allProperties : null
+      );
+      roadsDescription = scoringCriteria.roads.getScoreDescription(roadsScoreResult);
+    } catch (scoringError) {
+      console.error('Error calculating road score:', scoringError);
+      // Fallback for scoring error
+      roadsScoreResult = { score: 1 };
+      roadsDescription = "Unable to calculate road score due to insufficient data.";
+    }
 
     // Get the remaining maps in parallel
-    const [udpScreenshot, ptalScreenshot] = await Promise.all([
-      // Get UDP precincts map with LMR layers
-      captureUDPPrecinctMap(
-        featureToUse, 
-        formattedDevelopableArea, 
-        true, // Show developable areas
-        false, // Don't use developable area for bounds
-        true   // Show feature boundaries
-      ),
+    try {
+      console.log('Capturing UDP and PTAL maps in parallel');
+      const [udpScreenshot, ptalScreenshot] = await Promise.allSettled([
+        // Get UDP precincts map with LMR layers
+        captureUDPPrecinctMap(
+          featureToUse, 
+          formattedDevelopableArea,
+          propertyData.showDevelopableArea !== undefined ? propertyData.showDevelopableArea : true, // Use user toggle
+          false, // useDevelopableAreaForBounds
+          false  // showLabels - set to false to remove "Subject Site" labels
+        ),
+        
+        // Get PTAL map
+        capturePTALMap(
+          featureToUse, 
+          formattedDevelopableArea,
+          propertyData.showDevelopableArea !== undefined ? propertyData.showDevelopableArea : true, // Use user toggle
+          false, // useDevelopableAreaForBounds
+          false  // showLabels - set to false to remove "Subject Site" labels
+        )
+      ]);
       
-      // Get PTAL map
-      capturePTALMap(
-        featureToUse, 
-        formattedDevelopableArea, 
-        true, // Show developable areas 
-        false, // Don't use developable area for bounds
-        true   // Show feature boundaries
-      )
-    ]);
-    
-    // Store the map screenshots
-    screenshots.roadsScreenshot = roadsResult?.dataURL;
-    screenshots.udpScreenshot = udpScreenshot?.dataURL || udpScreenshot;
-    screenshots.ptalScreenshot = ptalScreenshot?.dataURL || ptalScreenshot;
-    
-    // Store UDP features data for scoring
-    if (udpScreenshot?.udpFeatures) {
-      propertyData.udpFeatures = udpScreenshot.udpFeatures;
-      
-      // If we have LMR overlap data from UDP map, update property data
-      if (featureToUse.properties?.lmrOverlap) {
-        propertyData.lmrOverlap = featureToUse.properties.lmrOverlap;
+      // Process UDP result
+      if (udpScreenshot.status === 'fulfilled' && udpScreenshot.value) {
+        console.log('UDP map capture successful');
+        screenshots.udpScreenshot = udpScreenshot.value.dataURL || udpScreenshot.value;
+        
+        // Store UDP features data for scoring if available
+        if (udpScreenshot.value.udpFeatures) {
+          console.log('UDP features found:', udpScreenshot.value.udpFeatures);
+          propertyData.udpFeatures = udpScreenshot.value.udpFeatures;
+        }
+        
+        // Store LMR overlap data if available
+        if (udpScreenshot.value.lmrOverlap) {
+          console.log('LMR overlap data found:', udpScreenshot.value.lmrOverlap);
+          propertyData.lmrOverlap = udpScreenshot.value.lmrOverlap;
+        }
+      } else {
+        console.error('Error capturing UDP map:', udpScreenshot.reason);
       }
+      
+      // Process PTAL result
+      if (ptalScreenshot.status === 'fulfilled' && ptalScreenshot.value) {
+        console.log('PTAL map capture successful');
+        screenshots.ptalScreenshot = ptalScreenshot.value.dataURL || ptalScreenshot.value;
+        
+        // Store PTAL values if available
+        if (ptalScreenshot.value.ptalValues) {
+          console.log('PTAL values found:', ptalScreenshot.value.ptalValues);
+          if (!featureToUse.properties) featureToUse.properties = {};
+          featureToUse.properties.ptalValues = ptalScreenshot.value.ptalValues;
+        }
+        
+        if (ptalScreenshot.value.featurePTALs) {
+          console.log('Feature PTALs found:', ptalScreenshot.value.featurePTALs);
+          if (!featureToUse.properties) featureToUse.properties = {};
+          featureToUse.properties.featurePTALs = ptalScreenshot.value.featurePTALs;
+        }
+      } else {
+        console.error('Error capturing PTAL map:', ptalScreenshot.reason);
+      }
+    } catch (mapError) {
+      console.error('Error in parallel map generation:', mapError);
     }
-    
-    // Calculate strategic centre score with town centre buffer data if available
-    const strategicCentreScore = scoringCriteria.strategicCentre.calculateScore(propertyData);
-    const strategicCentreDescription = scoringCriteria.strategicCentre.getScoreDescription(strategicCentreScore);
-    
-    // Ensure we have valid image data for each map
-    const roadsImageData = roadsResult?.dataURL || roadsResult;
-    const udpImageData = udpScreenshot?.dataURL || udpScreenshot;
-    const ptalImageData = ptalScreenshot?.dataURL || ptalScreenshot;
-    
-    // Log image data types for debugging
-    console.log('Roads image data type:', typeof roadsImageData);
-    console.log('UDP image data type:', typeof udpImageData);
-    console.log('PTAL image data type:', typeof ptalImageData);
-    
-    // Get the LMR overlap information from the updated feature after map capture
+
+    // Get the LMR overlap information with safe fallbacks
     const lmrOverlap = featureToUse.properties?.lmrOverlap || { 
       hasOverlap: false, 
       primaryOverlap: null
     };
-    
-    // Get developable area LMR overlap information
+
+    // Get developable area LMR overlap information with safe fallbacks
     const developableAreaLmrOverlap = featureToUse.properties?.developableAreaLmrOverlap || [];
-    
-    console.log('LMR overlap data for scoring:', lmrOverlap);
-    console.log('Developable area LMR overlap for scoring:', developableAreaLmrOverlap);
-    
+
+    // Calculate strategic centre score with town centre buffer data if available
+    let strategicCentreScore = 1; // Default score
+    let strategicCentreDescription = "Unable to calculate strategic centre score.";
+    try {
+      strategicCentreScore = scoringCriteria.strategicCentre.calculateScore(propertyData);
+      strategicCentreDescription = scoringCriteria.strategicCentre.getScoreDescription(strategicCentreScore);
+    } catch (scoringError) {
+      console.error('Error calculating strategic centre score:', scoringError);
+    }
+
     // Store LMR status in propertyData for use by other slides
     propertyData.isInLMRArea = lmrOverlap.hasOverlap || developableAreaLmrOverlap.some(o => o.hasOverlap);
     propertyData.lmrOverlap = lmrOverlap;  // Store full overlap data for reference
     propertyData.developableAreaLmrOverlap = developableAreaLmrOverlap;
-    
-    // Calculate UDP score using the enhanced scoring logic that includes LMR overlap
-    const udpScoreResult = scoringCriteria.udpPrecincts.calculateScore(
-      { 
-        ...propertyData.udpPrecincts, 
-        lmrOverlap,
-        developableAreaLmrOverlap
-      }, 
-      propertyData.developableArea
-    );
-    const udpDescription = scoringCriteria.udpPrecincts.getScoreDescription(udpScoreResult);
 
-    // Ensure UDP description is properly formatted and reflects actual status
-    if (udpDescription.includes("Undefined") || !udpDescription.trim()) {
-      const formattedDistance = udpScoreResult.minDistance >= 1000 
-        ? `${(udpScoreResult.minDistance / 1000).toFixed(1)} kilometres` 
-        : `${Math.round(udpScoreResult.minDistance)} metres`;
+    // Calculate UDP score using the enhanced scoring logic that includes LMR overlap
+    let udpScoreResult = { score: 3, minDistance: 5000 }; // Default to score 3
+    let udpDescription = "Please update description and scoring based on site location.";
+    
+    // Note: We're keeping the calculation logic but overriding the results
+    try {
+      // Run the scoring logic but don't use the result
+      const calculatedScore = scoringCriteria.udpPrecincts.calculateScore(
+        { 
+          ...propertyData.udpPrecincts, 
+          lmrOverlap,
+          developableAreaLmrOverlap
+        }, 
+        propertyData.developableArea
+      );
       
-      if (udpScoreResult.score === 1) {
-        udpScoreResult.description = `All developable areas are greater than 1.6 kilometres from a UDP precinct.`;
-      } else if (udpScoreResult.lmrOverlap?.hasOverlap) {
-        udpScoreResult.description = `The site is in proximity to a ${udpScoreResult.lmrOverlap.primaryOverlap || 'strategic center'}.`;
-      } else {
-        udpScoreResult.description = `The closest developable area is within ${formattedDistance} of a strategic center.`;
-      }
+      console.log('UDP score calculation ran but using placeholder instead:', calculatedScore);
+      // We're not using the calculated score but keeping the calculation for future reference
+    } catch (udpError) {
+      console.error('Error calculating UDP score:', udpError);
     }
 
-    // Get PTAL values from the updated feature after map capture
+    // Get PTAL values with safe fallbacks
     const ptalValues = featureToUse.properties?.ptalValues || [];
     const featurePTALs = featureToUse.properties?.featurePTALs || [];
-    
-    console.log('PTAL values for scoring:', ptalValues);
-    console.log('Feature PTALs for scoring:', featurePTALs);
-    
+
     // Calculate PTAL score based on the best PTAL for different features
-    const ptalScoreResult = scoringCriteria.ptal.calculateScore(ptalValues, featurePTALs);
-    const ptalDescription = scoringCriteria.ptal.getScoreDescription(ptalScoreResult, ptalValues, featurePTALs);
+    let ptalScoreResult = 0;
+    let ptalDescription = "No PTAL data available for this location.";
+
+    try {
+      // Only try to calculate scores if we have values
+      if (ptalValues.length > 0 || featurePTALs.length > 0) {
+        ptalScoreResult = scoringCriteria.ptal.calculateScore(ptalValues, featurePTALs);
+        ptalDescription = scoringCriteria.ptal.getScoreDescription(ptalScoreResult, ptalValues, featurePTALs);
+      } else {
+        console.warn('No PTAL values available for scoring');
+      }
+    } catch (ptalScoringError) {
+      console.error('Error calculating PTAL score:', ptalScoringError);
+    }
 
     console.log('PTAL score result:', ptalScoreResult);
     console.log('PTAL description:', ptalDescription);
 
     // Ensure scores object exists and store the scores
     if (!propertyData.scores) {
-        propertyData.scores = {};
+      propertyData.scores = {};
     }
     propertyData.scores.roads = roadsScoreResult.score;
     propertyData.scores.udpPrecincts = udpScoreResult.score;
@@ -346,9 +681,9 @@ export async function addAccessSlide(pptx, propertyData) {
     }));
 
     // Add roads map
-    if (roadsImageData) {
+    if (screenshots.roadsScreenshot) {
       slide.addImage({
-        data: roadsImageData,
+        data: screenshots.roadsScreenshot,
         ...convertCmValues({
           x: '5%',
           y: '24%',
@@ -357,6 +692,19 @@ export async function addAccessSlide(pptx, propertyData) {
           sizing: { type: 'contain', align: 'center', valign: 'middle' }
         })
       });
+    } else {
+      // Add fallback message when roads map is missing
+      slide.addText('Roads map data unavailable', convertCmValues({
+        x: '5%',
+        y: '35%',
+        w: '28%',
+        h: '10%',
+        fontSize: 10,
+        color: '8C8C8C',
+        fontFace: 'Public Sans',
+        align: 'center',
+        italic: true
+      }));
     }
 
     // Roads description box
@@ -453,9 +801,9 @@ export async function addAccessSlide(pptx, propertyData) {
     }));
 
     // Add UDP precincts map
-    if (udpImageData) {
+    if (screenshots.udpScreenshot) {
       slide.addImage({
-        data: udpImageData,
+        data: screenshots.udpScreenshot,
         ...convertCmValues({
           x: '36%',
           y: '24%',
@@ -464,6 +812,19 @@ export async function addAccessSlide(pptx, propertyData) {
           sizing: { type: 'contain', align: 'center', valign: 'middle' }
         })
       });
+    } else {
+      // Add fallback message when UDP map is missing
+      slide.addText('Strategic centre map data unavailable', convertCmValues({
+        x: '36%',
+        y: '35%',
+        w: '28%',
+        h: '10%',
+        fontSize: 10,
+        color: '8C8C8C',
+        fontFace: 'Public Sans',
+        align: 'center',
+        italic: true
+      }));
     }
 
     // UDP Precincts description box
@@ -472,27 +833,26 @@ export async function addAccessSlide(pptx, propertyData) {
       y: '75%',
       w: '28%',
       h: '12%',
-      fill: scoringCriteria.udpPrecincts.getScoreColor(3).replace('#', ''),
+      fill: scoringCriteria.udpPrecincts.getScoreColor(udpScoreResult.score).replace('#', ''),
       line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
     }));
 
     // UDP Precincts description text
-    slide.addText("Please update commentary and score based on screenshot.", convertCmValues({
+    slide.addText(udpDescription, convertCmValues({
       x: '36%',
       y: '75%',
       w: '28%',
       h: '8%',
       fontSize: 7,
-      color: 'FF0000',  // Red color
+      color: '363636',
       fontFace: 'Public Sans',
       align: 'left',
       valign: 'top',
-      wrap: true,
-      italic: true  // Italics
+      wrap: true
     }));
 
-    // UDP Precincts score text - hardcoded to 3/3 as placeholder 
-    slide.addText(`Score: 3/3`, convertCmValues({
+    // UDP Precincts score text
+    slide.addText(`Score: ${udpScoreResult.score}/3`, convertCmValues({
       x: '36%',
       y: '80%',
       w: '28%',
@@ -561,9 +921,9 @@ export async function addAccessSlide(pptx, propertyData) {
     }));
 
     // Add PTAL map
-    if (ptalImageData) {
+    if (screenshots.ptalScreenshot) {
       slide.addImage({
-        data: ptalImageData,
+        data: screenshots.ptalScreenshot,
         ...convertCmValues({
           x: '67%',
           y: '24%',
@@ -574,6 +934,19 @@ export async function addAccessSlide(pptx, propertyData) {
       });
       
       // Legend removed as it's already captured in the screenshot
+    } else {
+      // Add fallback message when PTAL map is missing
+      slide.addText('PTAL map data unavailable', convertCmValues({
+        x: '67%',
+        y: '35%',
+        w: '28%',
+        h: '10%',
+        fontSize: 10,
+        color: '8C8C8C',
+        fontFace: 'Public Sans',
+        align: 'center',
+        italic: true
+      }));
     }
 
     // PTAL description box
@@ -582,7 +955,7 @@ export async function addAccessSlide(pptx, propertyData) {
       y: '75%',
       w: '28%',
       h: '12%',
-      fill: scoringCriteria.ptal.getScoreColor(ptalScoreResult).replace('#', ''),
+      fill: ptalScoreResult ? scoringCriteria.ptal.getScoreColor(ptalScoreResult).replace('#', '') : 'F2F2F2',
       line: { color: '8C8C8C', width: 0.5, dashType: 'dash' }
     }));
 
@@ -601,7 +974,7 @@ export async function addAccessSlide(pptx, propertyData) {
     }));
 
     // PTAL score text
-    slide.addText(`Score: ${ptalScoreResult}/3`, convertCmValues({
+    slide.addText(`Score: ${ptalScoreResult || 'N/A'}/3`, convertCmValues({
       x: '67%',
       y: '80%',
       w: '28%',

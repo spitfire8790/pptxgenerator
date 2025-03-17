@@ -1,7 +1,7 @@
 import { convertCmValues } from '../utils/units';
 import scoringCriteria from './scoringLogic';
 import { proxyRequest } from '../utils/services/proxyService';
-import { captureStreetViewScreenshot } from '../utils/map/services/screenshot';
+import { captureStreetViewScreenshot } from '../utils/map/services/screenshots/streetViewScreenshot';
 import { formatAddresses } from '../utils/addressFormatting';
 
 const makeGeometryRequest = async (url, params) => {

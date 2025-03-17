@@ -1,4 +1,8 @@
+import { LAYER_CONFIGS } from '../../config/layerConfigs';
+import { SCREENSHOT_TYPES } from '../../config/screenshotTypes';
 import { calculateMercatorParams } from '../../utils/coordinates';
+import { getWMSImage } from '../wmsService';
+import { getArcGISImage } from '../arcgisService';
 import { createCanvas, drawImage, drawBoundary, drawPolyline } from '../../utils/canvas';
 import { proxyRequest } from '../../../services/proxyService';
 import { loadImage } from '../../utils/image';
@@ -8,41 +12,12 @@ import { getPTALToken } from '../tokenService';
 import * as turf from '@turf/turf';
 import { calculateBounds } from '../../utils/boundsUtils';
 import { drawFeatureBoundaries, drawDevelopableAreaBoundaries, drawRoundedTextBox } from '../../utils/drawingUtils';
-import { getArcGISImage } from '../arcgisService';
 
-// Layer configurations
-const LAYER_CONFIG_ZONING = {
-  url: 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/EPI_Primary_Planning_Layers/MapServer',
-  layerId: 2,
-  size: 2048,
-  width: 2048,
-  height: 2048,
-  padding: 0.2,
-  dpi: 300,
-  format: 'png32',
-  transparent: true,
-  showBoundary: true
-};
-
-const LAYER_CONFIG_AERIAL = {
-  url: 'https://api.metromap.com.au/ogc/gda2020/key/cstti1v27eq9nu61qu4g5hmzziouk84x211rfim0mb35cujvqpt1tufytqk575pe/service',
-  layers: 'Australia_latest',
-  opacity: 1,
-  width: 2048,
-  height: 2048,
-  padding: 0.2,
-  dpi: 300,
-  fallbackUrl: 'https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer',
-  fallbackFormat: 'png32',
-  fallbackTransparent: false,
-  fallbackSpatialReference: 102100
-};
-
-export async function captureZoningMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false, showLabels = true, showDevelopableAreaLabels = true) {
+export async function captureContourMap(feature, developableArea = null, showDevelopableArea = true, useDevelopableAreaForBounds = false, showLabels = false, showDevelopableAreaLabels = false) {
     if (!feature) return null;
     
     try {
-      const config = LAYER_CONFIG_ZONING;
+      const config = LAYER_CONFIGS[SCREENSHOT_TYPES.CONTOUR];
       const { centerX, centerY, size } = calculateBounds(feature, config.padding, developableArea, useDevelopableAreaForBounds);
       
       console.log('Raw coordinates:', { centerX, centerY, size });
@@ -52,9 +27,9 @@ export async function captureZoningMap(feature, developableArea = null, showDeve
       const ctx = canvas.getContext('2d', { alpha: true });
   
       try {
-        // 1. Aerial imagery (base) - Use Mercator coordinates
+        // 1. Aerial imagery (base) - Use Mercator coordinates like other working slides
         console.log('Loading aerial layer...');
-        const aerialConfig = LAYER_CONFIG_AERIAL;
+        const aerialConfig = LAYER_CONFIGS[SCREENSHOT_TYPES.AERIAL];
         const { bbox } = calculateMercatorParams(centerX, centerY, size);
         
         const params = new URLSearchParams({
@@ -77,22 +52,22 @@ export async function captureZoningMap(feature, developableArea = null, showDeve
         console.log('Aerial request URL:', url);
         const baseMap = await loadImage(url);
         console.log('Aerial layer loaded');
-        drawImage(ctx, baseMap, canvas.width, canvas.height, 0.7);
+        drawImage(ctx, baseMap, canvas.width, canvas.height, 0.4);
       } catch (error) {
         console.warn('Failed to load aerial layer:', error);
       }
   
       try {
-        // 2. Zoning layer - Use arcgisService for consistent CRS handling
-        console.log('Loading zoning layer...');
-        const zoningLayer = await getArcGISImage(config, centerX, centerY, size);
-        console.log('Zoning layer loaded');
-        drawImage(ctx, zoningLayer, canvas.width, canvas.height, 0.7);
+        // 2. Contour layer - Use arcgisService for consistent CRS handling
+        console.log('Loading contour layer...');
+        const contourLayer = await getArcGISImage(config, centerX, centerY, size);
+        console.log('Contour layer loaded');
+        drawImage(ctx, contourLayer, canvas.width, canvas.height, 0.9);
       } catch (error) {
-        console.warn('Failed to load zoning layer:', error);
+        console.warn('Failed to load contour layer:', error);
       }
   
-      // Draw boundaries
+      // Draw boundaries - These should use the raw coordinates since we're in GDA94
       drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.size || config.width, {
         strokeStyle: '#FF0000',
         lineWidth: 6,
@@ -105,8 +80,7 @@ export async function captureZoningMap(feature, developableArea = null, showDeve
   
       return canvas.toDataURL('image/png', 1.0);
     } catch (error) {
-      console.error('Failed to capture zoning map:', error);
+      console.error('Failed to capture contour map:', error);
       return null;
     }
   }
-
