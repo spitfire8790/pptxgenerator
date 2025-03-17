@@ -5,7 +5,7 @@ import { rpc } from '@gi-nx/iframe-sdk';
 
 const formatCurrency = (value) => {
   if (!value && value !== 0) return 'N/A';
-  return `$${value.toLocaleString('en-AU')}`;
+  return `$${Math.round(value).toLocaleString('en-AU')}`;
 };
 
 const formatMillions = (value) => {
@@ -235,26 +235,48 @@ const ConstructionDataModal = ({ open = true, onClose, constructionData }) => {
         return densityFilter && shouldIncludeType(item.developmentType);
       });
       
-      data = filteredData.map(item => {
-        // Map the development type to a standardized category
-        const standardizedType = mapToStandardizedType(item.developmentType);
+      // Process the data to remove duplicates by address
+      // Track processed addresses to avoid duplicates
+      const processedAddresses = new Set();
+      
+      data = filteredData
+        .map(item => {
+          // Map the development type to a standardized category
+          const standardizedType = mapToStandardizedType(item.developmentType);
+          
+          // Calculate FSR if not already available
+          const fsr = (item.landArea && item.landArea > 0) ? 
+            item.gfa / item.landArea : 0;
+          
+          return {
+            id: item.id || Math.random().toString(),
+            developmentType: item.developmentType || 'Unknown', // Keep original as primary
+            standardizedType: standardizedType, // Store standardized type as secondary
+            address: item.address || 'Unknown',
+            landArea: item.landArea || 0,
+            gfa: item.gfa || 0,
+            totalCost: item.totalCost || 0,
+            costPerM2: item.costPerM2 || 0,
+            fsr: fsr,
+            coordinates: item.coordinates
+          };
+        })
+        // Remove duplicate addresses, keeping only the first occurrence
+        .filter(item => {
+          if (!item.address || item.address === 'Unknown') return true;
+          
+          // Normalize address to handle small formatting differences
+          const normalizedAddress = item.address.toLowerCase().trim();
+          
+          if (processedAddresses.has(normalizedAddress)) {
+            return false; // Skip this duplicate
+          } else {
+            processedAddresses.add(normalizedAddress);
+            return true;
+          }
+        });
         
-        // Calculate FSR if not already available
-        const fsr = (item.landArea && item.landArea > 0) ? 
-          item.gfa / item.landArea : 0;
-        
-        return {
-          id: item.id || Math.random().toString(),
-          developmentType: item.developmentType || 'Unknown', // Keep original as primary
-          standardizedType: standardizedType, // Store standardized type as secondary
-          address: item.address || 'Unknown',
-          landArea: item.landArea || 0,
-          gfa: item.gfa || 0,
-          totalCost: item.totalCost || 0,
-          costPerM2: item.costPerM2 || 0,
-          fsr: fsr
-        };
-      });
+      console.log(`Removed ${filteredData.length - data.length} duplicate addresses, ${data.length} unique entries remain`);
     } else {
       console.warn('Construction data not found or has unexpected structure:', constructionData);
     }
@@ -277,18 +299,80 @@ const ConstructionDataModal = ({ open = true, onClose, constructionData }) => {
 
   // Calculate statistics for the current view
   const calculateStats = (data, valueField) => {
-    if (!data || data.length === 0) return { min: 0, max: 0, mean: 0, median: 0, count: 0 };
+    if (!data || data.length === 0) return { min: 0, max: 0, mean: 0, median: 0, stdDev: 0, count: 0 };
     
     const values = data.map(item => item[valueField] || 0).sort((a, b) => a - b);
     const sum = values.reduce((a, b) => a + b, 0);
+    const mean = sum / values.length;
+    
+    // Calculate standard deviation
+    const squaredDiffs = values.map(value => {
+      const diff = value - mean;
+      return diff * diff;
+    });
+    const avgSquaredDiff = squaredDiffs.reduce((a, b) => a + b, 0) / squaredDiffs.length;
+    const stdDev = Math.sqrt(avgSquaredDiff);
     
     return {
       min: values[0],
       max: values[values.length - 1],
-      mean: Math.round(sum / values.length),
+      mean: Math.round(mean),
       median: values[Math.floor(values.length / 2)],
+      stdDev: Math.round(stdDev),
       count: values.length
     };
+  };
+  
+  // Calculate statistics for each development type
+  const calculateDevelopmentTypeStats = () => {
+    const statsByType = {};
+    
+    data.forEach(item => {
+      if (!item.developmentType) return;
+      
+      if (!statsByType[item.developmentType]) {
+        statsByType[item.developmentType] = {
+          values: [],
+          count: 0
+        };
+      }
+      
+      if (item.costPerM2 && item.costPerM2 > 0) {
+        statsByType[item.developmentType].values.push(item.costPerM2);
+        statsByType[item.developmentType].count++;
+      }
+    });
+    
+    // Calculate statistics for each development type
+    Object.keys(statsByType).forEach(type => {
+      const values = statsByType[type].values.sort((a, b) => a - b);
+      
+      if (values.length === 0) {
+        statsByType[type].stats = { min: 0, max: 0, mean: 0, median: 0, stdDev: 0 };
+        return;
+      }
+      
+      const sum = values.reduce((a, b) => a + b, 0);
+      const mean = sum / values.length;
+      
+      // Calculate standard deviation
+      const squaredDiffs = values.map(value => {
+        const diff = value - mean;
+        return diff * diff;
+      });
+      const avgSquaredDiff = squaredDiffs.reduce((a, b) => a + b, 0) / squaredDiffs.length;
+      const stdDev = Math.sqrt(avgSquaredDiff);
+      
+      statsByType[type].stats = {
+        min: values[0],
+        max: values[values.length - 1],
+        mean: Math.round(mean),
+        median: values[Math.floor(values.length / 2)],
+        stdDev: Math.round(stdDev)
+      };
+    });
+    
+    return statsByType;
   };
 
   const stats = calculateStats(filteredData, 'costPerM2');
@@ -316,34 +400,33 @@ const ConstructionDataModal = ({ open = true, onClose, constructionData }) => {
       return acc;
     }, {});
     
+    // Get development type statistics for the chart tooltip
+    const typeStats = calculateDevelopmentTypeStats();
+    
     // Calculate weighted median for each group
     return Object.entries(grouped)
       .filter(([_, items]) => items.length > 0)
       .map(([type, items]) => {
-        // Calculate weighted median based on GFA
-        const totalGFA = items.reduce((sum, { gfa }) => sum + gfa, 0);
-        const halfTotalGFA = totalGFA / 2;
+        // Get the statistics for this development type
+        const stats = typeStats[type]?.stats || {
+          min: 0,
+          max: 0,
+          mean: 0,
+          median: 0,
+          stdDev: 0
+        };
         
-        // Sort by cost per m²
-        items.sort((a, b) => a.cost - b.cost);
-        
-        // Find weighted median
-        let cumulativeGFA = 0;
-        let medianCost = items[0].cost;
-        
-        for (const item of items) {
-          cumulativeGFA += item.gfa;
-          if (cumulativeGFA >= halfTotalGFA) {
-            medianCost = item.cost;
-            break;
-          }
-        }
+        // Use the statistics median for consistency between tooltip and bar chart
+        const medianCost = stats.median;
         
         return {
           name: type,
-          value: Math.round(medianCost),
+          // Use the calculated median from stats for consistency
+          value: medianCost,
           count: items.length,
-          totalGFA: totalGFA
+          totalGFA: items.reduce((sum, { gfa }) => sum + gfa, 0),
+          // Add statistics for this development type
+          stats: stats
         };
       })
       .sort((a, b) => b.value - a.value);  // Sort by median cost descending
@@ -708,10 +791,113 @@ const ConstructionDataModal = ({ open = true, onClose, constructionData }) => {
                         tickFormatter={formatCurrency} 
                         width={80}
                       />
-                      <Tooltip 
-                        formatter={(value) => [`${formatCurrency(value)}`, 'Cost per m² GFA']}
-                        labelFormatter={(value) => [`${value} (${chartData.find(d => d.name === value)?.count || 0} developments)`]}
-                      />
+                      {/* Custom tooltip component that shows statistics for each development type */}
+                      <Tooltip content={(props) => {
+                        const { active, payload, label } = props;
+                        
+                        if (!active || !payload || !payload.length) {
+                          return null;
+                        }
+                        
+                        const data = payload[0].payload;
+                        const stats = data.stats;
+                        
+                        // Calculate positions for visualization
+                        const min = stats.min;
+                        const max = stats.max;
+                        const median = stats.median;
+                        const stdDev = stats.stdDev;
+                        
+                        // Calculate the standard deviation range values
+                        const lowerBound = Math.max(min, median - stdDev);
+                        const upperBound = Math.min(max, median + stdDev);
+                        
+                        // Range for visualization
+                        const range = max - min;
+                        const vizWidth = 250; // Width of visualization in px - reduced to fit
+                        
+                        // Calculate pixel positions (0 to vizWidth)
+                        const getPosition = (value) => {
+                          return range === 0 ? vizWidth / 2 : ((value - min) / range) * vizWidth;
+                        };
+                        
+                        const medianPos = getPosition(median);
+                        const minStdDevPos = getPosition(lowerBound);
+                        const maxStdDevPos = getPosition(upperBound);
+                        
+                        return (
+                          <div className="bg-white p-4 rounded-lg shadow-md border border-gray-200 text-sm" style={{ width: '350px', maxWidth: '90vw' }}>
+                            <div className="font-semibold text-center mb-2 pb-1 border-b">
+                              {label} ({data.count} developments)
+                            </div>
+                            
+                            {/* Statistical Visualization */}
+                            <div className="mb-5 mt-3">
+                              <div className="relative h-24">
+                                {/* Min-Max Line */}
+                                <div 
+                                  className="absolute h-0.5 bg-gray-300" 
+                                  style={{ 
+                                    left: '0px',
+                                    width: `${vizWidth}px`,
+                                    top: '28px'
+                                  }}
+                                ></div>
+                                
+                                {/* Standard Deviation Range */}
+                                <div 
+                                  className="absolute h-4 bg-blue-100 rounded-sm" 
+                                  style={{ 
+                                    left: `${minStdDevPos}px`,
+                                    width: `${maxStdDevPos - minStdDevPos}px`,
+                                    top: '24px'
+                                  }}
+                                ></div>
+                                
+                                {/* Min Marker */}
+                                <div className="absolute" style={{ left: '0px', top: '8px' }}>
+                                  <div className="h-12 w-0.5 bg-gray-400"></div>
+                                  <div className="absolute -left-1 top-0 w-2 h-2 bg-gray-600 rounded-full"></div>
+                                  <div className="absolute -left-8 top-16 w-16 text-center text-xs text-gray-600">Min</div>
+                                  <div className="absolute -left-12 top-22 w-24 text-center text-xs font-medium">
+                                    {formatCurrency(min)}
+                                  </div>
+                                </div>
+                                
+                                {/* Median Marker */}
+                                <div className="absolute" style={{ left: `${medianPos}px`, top: '8px' }}>
+                                  <div className="h-12 w-0.5 bg-blue-500"></div>
+                                  <div className="absolute -left-1 top-0 w-2 h-2 bg-blue-600 rounded-full"></div>
+                                  <div className="absolute -left-8 top-16 w-16 text-center text-xs text-gray-600">Median</div>
+                                  <div className="absolute -left-12 top-22 w-24 text-center text-xs font-medium">
+                                    {formatCurrency(median)}
+                                  </div>
+                                </div>
+                                
+                                {/* Max Marker */}
+                                <div className="absolute" style={{ left: `${vizWidth}px`, top: '8px' }}>
+                                  <div className="h-12 w-0.5 bg-gray-400"></div>
+                                  <div className="absolute -left-1 top-0 w-2 h-2 bg-gray-600 rounded-full"></div>
+                                  <div className="absolute -left-8 top-16 w-16 text-center text-xs text-gray-600">Max</div>
+                                  <div className="absolute -left-12 top-22 w-24 text-center text-xs font-medium">
+                                    {formatCurrency(max)}
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {/* Std Deviation Range */}
+                              <div className="mt-12 flex justify-center">
+                                <div className="flex items-center">
+                                  <div className="w-3 h-3 bg-blue-100 rounded-sm mr-1"></div>
+                                  <span className="text-xs text-gray-600">
+                                    68% of values between {formatCurrency(lowerBound)} and {formatCurrency(upperBound)}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }} />
                       <Bar 
                         dataKey="value" 
                         radius={[4, 4, 0, 0]}

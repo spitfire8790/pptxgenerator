@@ -443,9 +443,31 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
       gfa = Math.min(gfa, maxGfaFor3Storeys);
     }
 
-    // Get construction cost and dwelling size from construction data
-    const constructionCostM2 = constructionData[density];
-    let dwellingSize = constructionData?.dwellingSizes?.[density] || 0;
+  // Get construction cost from construction data
+  // First try to get the median construction cost from the processed construction data
+  let constructionCostM2 = constructionData?.[density]; // Direct access to the median value
+  
+  // If not available, try to calculate it from the raw data if available
+  if ((!constructionCostM2 || constructionCostM2 === 0) && constructionData?.constructionCostsRaw) {
+    // Filter based on development types matching the density type
+    const typesForDensity = density === 'mediumDensity' ? MEDIUM_DENSITY_CC_TYPES : HIGH_DENSITY_CC_TYPES;
+    const relevantCosts = constructionData.constructionCostsRaw
+      .filter(item => typesForDensity.includes(item.developmentType) && item.costPerM2 > 0)
+      .map(item => item.costPerM2)
+      .sort((a, b) => a - b);
+    
+    // Calculate median if we have relevant costs
+    if (relevantCosts.length > 0) {
+      constructionCostM2 = relevantCosts[Math.floor(relevantCosts.length / 2)];
+    }
+  }
+  
+  // Default fallback if still not available
+  if (!constructionCostM2) {
+    constructionCostM2 = density === 'mediumDensity' ? 3500 : 3800;
+  }
+  
+  let dwellingSize = constructionData?.dwellingSizes?.[density] || 0;
 
     // Calculate dwelling size from bedroom-specific data if available
     if (constructionData?.dwellingSizesByBedroom?.[density]) {
