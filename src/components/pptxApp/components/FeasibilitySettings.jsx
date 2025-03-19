@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Ruler,
   Building2,
@@ -24,13 +24,36 @@ import {
   Settings2,
   Landmark,
   Map,
-  BarChart3
+  BarChart3,
+  CheckCircle2,
+  XCircle,
+  Check,
+  X,
+  ArrowUp,
+  ArrowDown,
+  ChevronUp,
+  ChevronDown,
+  Layers
 } from 'lucide-react';
+import * as turf from '@turf/turf';
 import FeasibilityCalculation from './FeasibilityCalculation';
 import FeasibilitySummary from './FeasibilitySummary';
 import ConstructionDataModal from './ConstructionDataModal';
 
-const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructionData, selectedFeature, onShowMedianPrices, onShowConstructionData, onShowDwellingSizeData, lmrOptions, onLMROptionChange, calculationResults }) => {
+const FeasibilitySettings = ({ 
+  settings, 
+  onSettingChange, 
+  salesData, 
+  constructionData, 
+  selectedFeature, 
+  developableArea, 
+  onShowMedianPrices, 
+  onShowConstructionData, 
+  onShowDwellingSizeData, 
+  lmrOptions, 
+  onLMROptionChange, 
+  calculationResults 
+}) => {
   // Define property type descriptions
   const densityDescriptions = {
     mediumDensity: "Includes: Terrace, Townhouse, Villa, Multi-dwelling housing, Multi-dwelling housing (terraces), Manor house",
@@ -68,6 +91,30 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
     enabled: false,
     fsr: null,
     hob: null
+  });
+
+  // Add state for LMR catchment check
+  const [lmrCatchmentData, setLmrCatchmentData] = useState({
+    isWithinCatchment: false,
+    location: null,
+    distance: null,
+    isLoading: true,
+    error: null
+  });
+
+  // Add state for LMR requirements check
+  const [lmrRequirementsCheck, setLmrRequirementsCheck] = useState({
+    siteArea: null,
+    siteWidth: null,
+    zone: null,
+    meetsMinArea: false,
+    meetsMinWidth: false,
+    eligibleZone: false,
+    applicableLmrControls: null,
+    currentFsr: null,
+    currentHob: null,
+    fsrIncrease: null,
+    hobIncrease: null
   });
 
   // Add function to handle custom control changes
@@ -782,20 +829,28 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
   const formatValue = (setting, value) => {
     if (!value && value !== 0) return 'N/A';
     
+    // For any money values or values that need commas
     if (setting === 'daApplicationFees' || 
         setting === 'dwellingPrice' || 
-        setting === 'pricePerM2') {
-      return value.toLocaleString('en-AU');
-    }
-    if (setting === 'constructionCostM2' || setting === 'assumedConstructionCostM2') {
-      return '$' + Math.round(value).toLocaleString('en-AU');
-    }
-    if (setting === 'dwellingSize') {
+        setting === 'pricePerM2' ||
+        setting === 'constructionCostM2' || 
+        setting === 'assumedConstructionCostM2') {
       return Math.round(value).toLocaleString('en-AU');
     }
+    
+    // For dwelling size and other whole numbers that need commas
+    if (setting === 'dwellingSize' || 
+        setting === 'projectPeriod' ||
+        setting === 'minimumLotSize') {
+      return Math.round(value).toLocaleString('en-AU');
+    }
+    
+    // For percentages
     if (setting === 'developmentContribution') {
       return (value * 100).toFixed(0);
     }
+    
+    // For ratio values shown as percentages
     if (setting.endsWith('Ratio') || 
         setting === 'agentsSalesCommission' || 
         setting === 'legalFeesOnSales' || 
@@ -805,7 +860,107 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
         setting === 'interestRate') {
       return (value * 100).toFixed(1);
     }
+    
+    // For other numbers that don't need special formatting
+    if (typeof value === 'number') {
+      return value.toLocaleString('en-AU');
+    }
+    
     return value.toString();
+  };
+
+  // Function to render the appropriate input for each setting
+  const renderInput = (setting, density) => {
+    const settingId = setting.id;
+    const value = settings[density][settingId];
+    const formattedValue = formatValue(settingId, value);
+    
+    // For calculated or read-only values, just display text
+    if (setting.isCalculated || setting.readOnly) {
+      return (
+        <div className="flex items-center justify-center">
+          <div className="relative inline-block">
+            <span className="text-sm">
+              {formattedValue}
+              {setting.unit ? ` ${setting.unit}` : ''}
+            </span>
+            
+            {setting.tooltip && (
+              <div className="inline-block ml-1 cursor-help" title={setting.tooltip(density)}>
+                <Info size={14} className="text-blue-500" />
+              </div>
+            )}
+            
+            {setting.showConstructionButton && (
+              <button 
+                onClick={onShowConstructionData}
+                className="ml-2 text-xs text-blue-600 hover:text-blue-800"
+                title="View construction cost data"
+              >
+                <FileSpreadsheet size={14} />
+              </button>
+            )}
+            
+            {settingId === 'dwellingPrice' && customDwellingPrice[density] && medianPrices[density] && (
+              <button
+                onClick={() => handleRevertPrice(density)}
+                className="ml-2 text-xs text-blue-600 hover:text-blue-800"
+                title="Revert to median price"
+              >
+                <RefreshCw size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
+    
+    // For editable values, render an input
+    return (
+      <div className="flex items-center justify-center">
+        <input
+          type="number"
+          min="0"
+          step={settingId.endsWith('Ratio') || 
+                settingId === 'agentsSalesCommission' || 
+                settingId === 'legalFeesOnSales' || 
+                settingId === 'marketingCosts' || 
+                settingId === 'profitAndRisk' || 
+                settingId === 'professionalFees' || 
+                settingId === 'interestRate' ? "0.1" : "1"}
+          value={settingId.endsWith('Ratio') || 
+                 settingId === 'agentsSalesCommission' || 
+                 settingId === 'legalFeesOnSales' || 
+                 settingId === 'marketingCosts' || 
+                 settingId === 'profitAndRisk' || 
+                 settingId === 'professionalFees' || 
+                 settingId === 'interestRate' ? (value * 100).toFixed(1) : value}
+          onChange={handleChange(settingId, density)}
+          className="w-24 px-2 py-1 border rounded text-right"
+        />
+        <span className="ml-1">{setting.unit || ''}</span>
+        
+        {settingId === 'dwellingPrice' && (
+          <button
+            onClick={onShowMedianPrices}
+            className="ml-2 text-xs text-blue-600 hover:text-blue-800"
+            title="View median prices"
+          >
+            <FileSpreadsheet size={14} />
+          </button>
+        )}
+        
+        {settingId === 'dwellingSize' && (
+          <button
+            onClick={onShowDwellingSizeData}
+            className="ml-2 text-xs text-blue-600 hover:text-blue-800"
+            title="View dwelling sizes"
+          >
+            <FileSpreadsheet size={14} />
+          </button>
+        )}
+      </div>
+    );
   };
 
   // Function to handle tab switching
@@ -827,127 +982,191 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
     }));
   };
 
-  // Function to render input fields
-  const renderInput = (setting, density) => {
-    // Handle dwelling price with revert option
-    if (setting.id === 'dwellingPrice') {
-      const derivedValues = calculateDerivedValues(density);
-      const displayValue = customDwellingPrice[density] 
-        ? settings[density][setting.id] 
-        : derivedValues[setting.id];
+  // Function to calculate site width using turf.js
+  const calculateSiteWidth = (geometry) => {
+    try {
+      if (!geometry) return null;
       
-      return (
-        <div className="flex items-center justify-center space-x-2">
-          <div className="flex items-center space-x-1">
-            <div className="relative w-32">
-              <input
-                type="text"
-                value={displayValue ? formatValue(setting.id, displayValue) : ''}
-                onChange={handleChange(setting.id, density)}
-                className="w-full px-2 py-1 border rounded text-right"
-              />
-              {setting.hasRevert && customDwellingPrice[density] && (
-                <button
-                  onClick={() => handleRevertPrice(density)}
-                  className="absolute right-2 top-1/2 transform -translate-y-1/2 text-blue-500 hover:text-blue-700"
-                  title={setting.tooltip}
-                >
-                  <RefreshCw size={14} />
-                </button>
-              )}
-            </div>
-            <span className="text-gray-500">{setting.unit}</span>
-          </div>
-          {setting.showSalesButton && (
-            <button
-              onClick={onShowMedianPrices}
-              className="text-blue-500 hover:text-blue-700 ml-2"
-              title="View sales data"
-            >
-              <Info size={16} />
-            </button>
-          )}
-        </div>
-      );
-    }
-    
-    // Handle median construction cost and median dwelling size (read-only with info button)
-    if ((setting.id === 'constructionCostM2' || setting.id === 'dwellingSize') && setting.isCalculated) {
-      const derivedValues = calculateDerivedValues(density);
-      const displayValue = derivedValues[setting.id];
+      // Convert geometry to a turf feature if it's not already
+      const feature = turf.feature(geometry);
       
-      return (
-        <div className="flex items-center justify-center space-x-2">
-          <div className="flex items-center space-x-1">
-            <span className="w-32 text-right">{displayValue ? formatValue(setting.id, displayValue) : 'N/A'}</span>
-            <span className="text-gray-500">{setting.unit}</span>
-          </div>
-          {setting.showConstructionButton && (
-            <button
-              onClick={setting.id === 'constructionCostM2' ? onShowConstructionData : onShowDwellingSizeData}
-              className="text-blue-500 hover:text-blue-700 ml-2"
-              title={`View ${setting.id === 'constructionCostM2' ? 'construction cost' : 'dwelling size'} data`}
-            >
-              <Info size={16} />
-            </button>
-          )}
-        </div>
-      );
-    }
-    
-    // Handle calculated values (read-only)
-    if (setting.isCalculated) {
-      const derivedValues = calculateDerivedValues(density);
-      const displayValue = derivedValues[setting.id];
+      // Calculate the bounding box of the geometry
+      const bbox = turf.bbox(feature);
       
-      return (
-        <div className="flex items-center justify-center space-x-1">
-          <div 
-            className="flex items-center space-x-1 cursor-help" 
-            title={setting.tooltip ? setting.tooltip(density) : ''}
-          >
-            <span className="w-32 text-right">{displayValue ? formatValue(setting.id, displayValue) : 'N/A'}</span>
-            <span className="text-gray-500">{setting.unit}</span>
-            {setting.tooltip && <Info size={14} className="text-gray-400 ml-1" />}
-          </div>
-        </div>
-      );
+      // Calculate the width (east-west distance)
+      const westPoint = turf.point([bbox[0], (bbox[1] + bbox[3]) / 2]);
+      const eastPoint = turf.point([bbox[2], (bbox[1] + bbox[3]) / 2]);
+      const width = turf.distance(westPoint, eastPoint, { units: 'meters' });
+      
+      // Calculate the height (north-south distance)
+      const southPoint = turf.point([(bbox[0] + bbox[2]) / 2, bbox[1]]);
+      const northPoint = turf.point([(bbox[0] + bbox[2]) / 2, bbox[3]]);
+      const height = turf.distance(southPoint, northPoint, { units: 'meters' });
+      
+      // Return the smaller of the two as a conservative estimate of site width
+      return Math.min(width, height);
+    } catch (error) {
+      console.error("Error calculating site width:", error);
+      return null;
     }
-    
-    // Handle regular inputs
-    return (
-      <div className="flex items-center justify-center space-x-1">
-        <input
-          type="text"
-          value={formatValue(setting.id, settings[density][setting.id])}
-          onChange={handleChange(setting.id, density)}
-          className="w-32 px-2 py-1 border rounded text-right"
-        />
-        <span className="text-gray-500">{setting.unit}</span>
-      </div>
-    );
   };
 
-  // Add function to revert to calculated values
-  const handleRevertToCalculated = (setting, density) => {
-    if (setting === 'dwellingSize') {
-      const defaultValue = constructionData?.dwellingSizes?.[density] || 80;
-      onSettingChange(setting, defaultValue, density);
-    } else if (setting === 'constructionCostM2') {
-      const defaultValue = constructionData?.[density] || 3500;
-      onSettingChange(setting, defaultValue, density);
-    } else if (setting === 'assumedDwellingSize') {
-      // For assumedDwellingSize, get the median and round down to nearest 10
-      const medianSize = constructionData?.dwellingSizes?.[density] || 80;
-      const assumedSize = density === 'highDensity' ? 75 : Math.floor(medianSize / 10) * 10;
-      onSettingChange(setting, assumedSize, density);
-    } else if (setting === 'assumedConstructionCostM2') {
-      // For assumedConstructionCostM2, get the median and round down to nearest 10
-      const medianCost = constructionData?.[density] || 3500;
-      const assumedCost = Math.floor(medianCost / 10) * 10;
-      onSettingChange(setting, assumedCost, density);
-    }
-  };
+  // Function to check if the site meets LMR requirements
+  useEffect(() => {
+    const checkLmrRequirements = () => {
+      if (!selectedFeature) return;
+      
+      try {
+        // Get the property geometry and zone
+        const geometry = selectedFeature.geometry || selectedFeature.properties?.copiedFrom?.site__geometry;
+        const zoneData = selectedFeature?.properties?.copiedFrom?.site_suitability__principal_zone_identifier || '';
+        const zoneCode = zoneData.split('-')[0]?.trim() || '';
+        
+        // This part is not working correctly - need to ensure we're using the developableArea prop
+        // Check if developable area is available and use it instead of the entire property
+        let siteArea = 0, siteGeometry = null;
+        
+        // First check for the developableArea prop directly - this is the one we need to use
+        if (developableArea && developableArea.features && developableArea.features.length > 0) {
+          // Calculate total area from all developable area features
+          siteArea = developableArea.features.reduce((total, feature) => {
+            return total + turf.area(feature.geometry);
+          }, 0);
+          
+          // Use the first developable area geometry for width calculation
+          siteGeometry = developableArea.features[0].geometry;
+          console.log('Using developableArea prop for LMR checks:', {
+            area: siteArea,
+            features: developableArea.features.length
+          });
+        }
+        // Only fall back to selectedFeature if the prop isn't available
+        else if (selectedFeature.properties?.developableArea || 
+            selectedFeature.properties?.copiedFrom?.developableArea) {
+          // Use developable area if available
+          const featureDevelopableArea = selectedFeature.properties?.developableArea || 
+                                 selectedFeature.properties?.copiedFrom?.developableArea;
+          
+          if (featureDevelopableArea && featureDevelopableArea.features && featureDevelopableArea.features.length > 0) {
+            // Calculate total area from all developable area features
+            siteArea = featureDevelopableArea.features.reduce((total, feature) => {
+              return total + turf.area(feature.geometry);
+            }, 0);
+            
+            // Use the first developable area geometry for width calculation
+            siteGeometry = featureDevelopableArea.features[0].geometry;
+            console.log('Using feature developableArea for LMR checks:', {
+              area: siteArea,
+              features: featureDevelopableArea.features.length
+            });
+          } else {
+            // Fallback to property area
+            siteArea = selectedFeature?.properties?.copiedFrom?.site_suitability__area || 
+                      (geometry ? turf.area(geometry) : 0);
+            siteGeometry = geometry;
+            console.log('Falling back to property area for LMR checks:', {
+              area: siteArea
+            });
+          }
+        } else {
+          // No developable area defined, use property area
+          siteArea = selectedFeature?.properties?.copiedFrom?.site_suitability__area || 
+                    (geometry ? turf.area(geometry) : 0);
+          siteGeometry = geometry;
+          console.log('No developable area found, using property area for LMR checks:', {
+            area: siteArea
+          });
+        }
+        
+        // Calculate or get site width from the appropriate geometry
+        let siteWidth = 0;
+        if (siteGeometry) {
+          siteWidth = calculateSiteWidth(siteGeometry);
+          console.log('Calculated site width from geometry:', siteWidth);
+        } else {
+          siteWidth = selectedFeature?.properties?.copiedFrom?.site_suitability__site_width || 0;
+          console.log('Using property site width:', siteWidth);
+        }
+        
+        // Get current controls
+        const currentFsr = selectedFeature?.properties?.copiedFrom?.site_suitability__floorspace_ratio || 0;
+        const currentHob = selectedFeature?.properties?.copiedFrom?.site_suitability__height_of_building || 0;
+        
+        // Determine applicable LMR controls based on zone and catchment distance
+        const isR1R2 = zoneCode === 'R1' || zoneCode === 'R2';
+        const isR3R4 = zoneCode === 'R3' || zoneCode === 'R4';
+        
+        let applicableLmrControls = null;
+        
+        if (isR1R2) {
+          applicableLmrControls = {
+            minArea: 500,
+            minWidth: 12,
+            fsr: 0.8,
+            hob: 9.5,
+            catchmentDistance: null
+          };
+        } else if (isR3R4) {
+          if (lmrCatchmentData.isWithinCatchment) {
+            if (lmrCatchmentData.distance === 400) {
+              applicableLmrControls = {
+                minArea: 0, // No minimum area specified for R3/R4
+                minWidth: 0, // No minimum width specified for R3/R4
+                fsr: 2.2,
+                hob: 22,
+                catchmentDistance: 400
+              };
+            } else if (lmrCatchmentData.distance === 800) {
+              applicableLmrControls = {
+                minArea: 0, // No minimum area specified for R3/R4
+                minWidth: 0, // No minimum width specified for R3/R4
+                fsr: 1.5,
+                hob: 17.5,
+                catchmentDistance: 800
+              };
+            }
+          }
+        }
+        
+        // Check if the site meets the requirements
+        const meetsMinArea = isR1R2 ? siteArea >= 500 : true; // Only R1/R2 have min area requirement
+        const meetsMinWidth = isR1R2 ? siteWidth >= 12 : true; // Only R1/R2 have min width requirement
+        const eligibleZone = isR1R2 || isR3R4;
+        
+        // Calculate FSR and HOB increase percentages
+        let fsrIncrease = 0;
+        let hobIncrease = 0;
+        
+        if (applicableLmrControls && currentFsr > 0) {
+          fsrIncrease = ((applicableLmrControls.fsr - currentFsr) / currentFsr) * 100;
+        }
+        
+        if (applicableLmrControls && currentHob > 0) {
+          hobIncrease = ((applicableLmrControls.hob - currentHob) / currentHob) * 100;
+        }
+        
+        // Store the results
+        setLmrRequirementsCheck({
+          siteArea,
+          siteWidth,
+          zone: zoneCode,
+          meetsMinArea,
+          meetsMinWidth,
+          eligibleZone,
+          applicableLmrControls,
+          currentFsr,
+          currentHob,
+          fsrIncrease,
+          hobIncrease
+        });
+        
+      } catch (error) {
+        console.error("Error checking LMR requirements:", error);
+      }
+    };
+    
+    checkLmrRequirements();
+  }, [selectedFeature, lmrCatchmentData, developableArea]);
 
   const showConstructionData = settings.mediumDensity.useLMR || settings.highDensity.useLMR;
 
@@ -957,6 +1176,157 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
       onSettingChange('minimumLotSize', 200, 'mediumDensity');
     }
   }, [settings]);
+
+  // Function to format location string (convert snake_case to Title Case)
+  const formatLocation = (location) => {
+    if (!location) return '';
+    
+    return location
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  };
+
+  // Function to check if a point is within a polygon
+  function isPointInPolygon(point, polygon) {
+    try {
+      // Implementation of the ray-casting algorithm
+      // point is [lon, lat], polygon is an array of [lon, lat] coordinates forming a polygon
+      
+      const x = point[0], y = point[1];
+      let inside = false;
+      
+      for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const xi = polygon[i][0], yi = polygon[i][1];
+        const xj = polygon[j][0], yj = polygon[j][1];
+        
+        const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+      }
+      
+      return inside;
+    } catch (error) {
+      console.error("Error checking if point is in polygon:", error);
+      return false;
+    }
+  }
+
+  // Function to check if the property is within any LMR catchment
+  useEffect(() => {
+    const checkLmrCatchment = async () => {
+      if (!selectedFeature) {
+        setLmrCatchmentData({
+          isWithinCatchment: false,
+          location: null,
+          distance: null,
+          isLoading: false,
+          error: null
+        });
+        return;
+      }
+      
+      try {
+        setLmrCatchmentData(prev => ({ ...prev, isLoading: true, error: null }));
+        
+        // Get the property coordinates
+        const geometry = selectedFeature.geometry || selectedFeature.properties?.copiedFrom?.site__geometry;
+        
+        if (!geometry) {
+          throw new Error("No geometry found for the selected property");
+        }
+        
+        // Get a representative point for the property
+        let propertyPoint;
+        if (geometry.type === 'Point') {
+          propertyPoint = geometry.coordinates;
+        } else if (geometry.type === 'Polygon') {
+          // Use the first coordinate as a representative point
+          propertyPoint = geometry.coordinates[0][0];
+        } else if (geometry.type === 'MultiPolygon') {
+          // Use the first coordinate of the first polygon
+          propertyPoint = geometry.coordinates[0][0][0];
+        } else {
+          throw new Error(`Unsupported geometry type: ${geometry.type}`);
+        }
+        
+        // Fetch the LMR catchment data
+        const response = await fetch('/LMR_Walking_Catchments_4326.geojson');
+        if (!response.ok) {
+          throw new Error(`Failed to fetch LMR catchment data: ${response.statusText}`);
+        }
+        
+        const catchmentData = await response.json();
+        
+        // First try to find the property in a 400m catchment
+        let isWithin400m = false;
+        let isWithin800m = false;
+        let matchingFeature400m = null;
+        let matchingFeature800m = null;
+        
+        for (const feature of catchmentData.features) {
+          // Check if this is a 400m catchment
+          const isFeature400m = feature.properties?.distance === 400;
+          
+          if (feature.geometry.type === 'Polygon') {
+            if (isPointInPolygon(propertyPoint, feature.geometry.coordinates[0])) {
+              if (isFeature400m) {
+                isWithin400m = true;
+                matchingFeature400m = feature;
+                break; // Found in 400m catchment, no need to check further
+              } else {
+                isWithin800m = true;
+                matchingFeature800m = feature;
+                // Don't break, keep looking for a 400m catchment
+              }
+            }
+          } else if (feature.geometry.type === 'MultiPolygon') {
+            for (const polygon of feature.geometry.coordinates) {
+              if (isPointInPolygon(propertyPoint, polygon[0])) {
+                if (isFeature400m) {
+                  isWithin400m = true;
+                  matchingFeature400m = feature;
+                  break; // Found in 400m catchment
+                } else {
+                  isWithin800m = true;
+                  matchingFeature800m = feature;
+                  // Don't break, keep looking for a 400m catchment
+                }
+              }
+            }
+            if (isWithin400m) break; // Exit outer loop if found in 400m catchment
+          }
+        }
+        
+        // Prioritize 400m catchment over 800m
+        const isWithin = isWithin400m || isWithin800m;
+        const matchingFeature = isWithin400m ? matchingFeature400m : matchingFeature800m;
+        const distance = isWithin400m ? 400 : (isWithin800m ? 800 : null);
+        
+        setLmrCatchmentData({
+          isWithinCatchment: isWithin,
+          location: matchingFeature?.properties?.location || null,
+          distance: distance,
+          isLoading: false,
+          error: null
+        });
+        
+      } catch (error) {
+        console.error("Error checking LMR catchment:", error);
+        setLmrCatchmentData({
+          isWithinCatchment: false,
+          location: null,
+          distance: null,
+          isLoading: false,
+          error: error.message
+        });
+      }
+    };
+    
+    checkLmrCatchment();
+  }, [selectedFeature]);
+
+  // Add state for LMR section visibility
+  const [showLMRSection, setShowLMRSection] = useState(false);
 
   return (
     <div className="p-4">
@@ -1079,6 +1449,241 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
                       </div>
                     </div>
                   </div>
+                )}
+              </div>
+
+              {/* Low Mid Rise Housing Section */}
+              <div className="mb-4 p-3 bg-white rounded-lg shadow-sm">
+                <div 
+                  className="flex items-center justify-between mb-3 cursor-pointer"
+                  onClick={() => setShowLMRSection(prev => !prev)}
+                >
+                  <h4 className="font-medium text-gray-700 flex items-center">
+                    <Building className="mr-2" size={16} />
+                    Low Mid Rise Housing
+                  </h4>
+                  <div className="text-gray-500">
+                    {showLMRSection ? (
+                      <ChevronUp size={18} />
+                    ) : (
+                      <ChevronDown size={18} />
+                    )}
+                  </div>
+                </div>
+
+                {showLMRSection && (
+                  <>
+                    {lmrCatchmentData.isLoading ? (
+                      <div className="flex items-center justify-center p-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 mr-2"></div>
+                        <span>Checking catchment areas...</span>
+                      </div>
+                    ) : lmrCatchmentData.error ? (
+                      <div className="text-red-500 text-sm">{lmrCatchmentData.error}</div>
+                    ) : lmrCatchmentData.isWithinCatchment ? (
+                      <div className="p-3 bg-green-50 border border-green-200 rounded-md">
+                        <div className="flex items-center text-green-700 font-medium">
+                          <CheckCircle2 className="mr-2" size={16} />
+                          Property is within {lmrCatchmentData.distance}m of the {formatLocation(lmrCatchmentData.location)} LMR area.
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-red-50 border border-red-200 rounded-md">
+                        <div className="flex items-center text-red-700 font-medium">
+                          <XCircle className="mr-2" size={16} />
+                          Property is not within an LMR walking catchment
+                        </div>
+                      </div>
+                    )}
+
+                    {/* LMR Requirements Table */}
+                    <div className="mt-4">
+                      <h5 className="font-medium mb-2">High Density (Residential Flat Buildings) LMR Controls</h5>
+                      
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full border border-gray-200 rounded">
+                          <thead>
+                            <tr className="bg-gray-50">
+                              <th className="px-4 py-2 border-b text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Requirements</th>
+                              <th className="px-4 py-2 border-b text-left text-xs font-medium text-gray-500 uppercase tracking-wider">R1 & R2 Zones</th>
+                              <th className="px-4 py-2 border-b text-left text-xs font-medium text-gray-500 uppercase tracking-wider">R3 & R4 Zones (400m)</th>
+                              <th className="px-4 py-2 border-b text-left text-xs font-medium text-gray-500 uppercase tracking-wider">R3 & R4 Zones (800m)</th>
+                              <th className="px-4 py-2 border-b text-left text-xs font-medium text-gray-500 uppercase tracking-wider">This Property</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            <tr>
+                              <td className="px-4 py-2 text-sm">Min. Site Area</td>
+                              <td className="px-4 py-2 text-sm">500 m²</td>
+                              <td className="px-4 py-2 text-sm">-</td>
+                              <td className="px-4 py-2 text-sm">-</td>
+                              <td className="px-4 py-2 text-sm">
+                                {lmrRequirementsCheck.siteArea ? (
+                                  <div className="flex items-center">
+                                    <span className="mr-2">{Math.round(lmrRequirementsCheck.siteArea).toLocaleString()} m²</span>
+                                    {lmrRequirementsCheck.zone === 'R1' || lmrRequirementsCheck.zone === 'R2' ? (
+                                      lmrRequirementsCheck.meetsMinArea ? (
+                                        <Check size={16} className="text-green-500" />
+                                      ) : (
+                                        <X size={16} className="text-red-500" />
+                                      )
+                                    ) : (
+                                      <span className="text-gray-400">N/A</span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  'Unknown'
+                                )}
+                              </td>
+                            </tr>
+                            <tr>
+                              <td className="px-4 py-2 text-sm">Min. Width</td>
+                              <td className="px-4 py-2 text-sm">12 m</td>
+                              <td className="px-4 py-2 text-sm">-</td>
+                              <td className="px-4 py-2 text-sm">-</td>
+                              <td className="px-4 py-2 text-sm">
+                                {lmrRequirementsCheck.siteWidth ? (
+                                  <div className="flex items-center">
+                                    <span className="mr-2">{Math.round(lmrRequirementsCheck.siteWidth).toLocaleString()} m</span>
+                                    {lmrRequirementsCheck.zone === 'R1' || lmrRequirementsCheck.zone === 'R2' ? (
+                                      lmrRequirementsCheck.meetsMinWidth ? (
+                                        <Check size={16} className="text-green-500" />
+                                      ) : (
+                                        <X size={16} className="text-red-500" />
+                                      )
+                                    ) : (
+                                      <span className="text-gray-400">N/A</span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  'Unknown'
+                                )}
+                              </td>
+                            </tr>
+                            <tr>
+                              <td className="px-4 py-2 text-sm">FSR</td>
+                              <td className="px-4 py-2 text-sm">0.8:1</td>
+                              <td className="px-4 py-2 text-sm">2.2:1</td>
+                              <td className="px-4 py-2 text-sm">1.5:1</td>
+                              <td className="px-4 py-2 text-sm">
+                                {lmrRequirementsCheck.applicableLmrControls ? (
+                                  <div className="flex flex-col">
+                                    <div className="flex items-center">
+                                      <span className="font-medium">Current: </span>
+                                      <span className="ml-1">{lmrRequirementsCheck.currentFsr ? lmrRequirementsCheck.currentFsr.toFixed(1) : 'N/A'}</span>
+                                    </div>
+                                    <div className="flex items-center">
+                                      <span className="font-medium">LMR: </span>
+                                      <span className="ml-1">{lmrRequirementsCheck.applicableLmrControls.fsr.toFixed(1)}</span>
+                                    </div>
+                                    {lmrRequirementsCheck.currentFsr > 0 && (
+                                      <div className="flex items-center mt-1">
+                                        {lmrRequirementsCheck.fsrIncrease > 0 ? (
+                                          <>
+                                            <ArrowUp size={14} className="text-green-500 mr-1" />
+                                            <span className="text-green-500 text-xs">+{(lmrRequirementsCheck.applicableLmrControls.fsr - lmrRequirementsCheck.currentFsr).toFixed(1)}</span>
+                                          </>
+                                        ) : lmrRequirementsCheck.fsrIncrease < 0 ? (
+                                          <>
+                                            <ArrowDown size={14} className="text-red-500 mr-1" />
+                                            <span className="text-red-500 text-xs">{(lmrRequirementsCheck.applicableLmrControls.fsr - lmrRequirementsCheck.currentFsr).toFixed(1)}</span>
+                                          </>
+                                        ) : (
+                                          <span className="text-gray-500 text-xs">No change</span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-500">Not applicable</span>
+                                )}
+                              </td>
+                            </tr>
+                            <tr>
+                              <td className="px-4 py-2 text-sm">HOB</td>
+                              <td className="px-4 py-2 text-sm">9.5 m</td>
+                              <td className="px-4 py-2 text-sm">22 m</td>
+                              <td className="px-4 py-2 text-sm">17.5 m</td>
+                              <td className="px-4 py-2 text-sm">
+                                {lmrRequirementsCheck.applicableLmrControls ? (
+                                  <div className="flex flex-col">
+                                    <div className="flex items-center">
+                                      <span className="font-medium">Current: </span>
+                                      <span className="ml-1">{lmrRequirementsCheck.currentHob || 'N/A'} m</span>
+                                    </div>
+                                    <div className="flex items-center">
+                                      <span className="font-medium">LMR: </span>
+                                      <span className="ml-1">{lmrRequirementsCheck.applicableLmrControls.hob} m</span>
+                                    </div>
+                                    {lmrRequirementsCheck.currentHob > 0 && (
+                                      <div className="flex items-center mt-1">
+                                        {lmrRequirementsCheck.hobIncrease > 0 ? (
+                                          <>
+                                            <ArrowUp size={14} className="text-green-500 mr-1" />
+                                            <span className="text-green-500 text-xs">+{(lmrRequirementsCheck.applicableLmrControls.hob - lmrRequirementsCheck.currentHob).toFixed(1)}m</span>
+                                          </>
+                                        ) : lmrRequirementsCheck.hobIncrease < 0 ? (
+                                          <>
+                                            <ArrowDown size={14} className="text-red-500 mr-1" />
+                                            <span className="text-red-500 text-xs">{(lmrRequirementsCheck.applicableLmrControls.hob - lmrRequirementsCheck.currentHob).toFixed(1)}m</span>
+                                          </>
+                                        ) : (
+                                          <span className="text-gray-500 text-xs">No change</span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-500">Not applicable</span>
+                                )}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      
+                      {/* Eligibility Summary */}
+                      <div className="mt-3 p-3 rounded-md border border-gray-200 bg-gray-50">
+                        <h6 className="font-medium text-sm mb-2">LMR Eligibility Summary</h6>
+                        {lmrRequirementsCheck.applicableLmrControls ? (
+                          <div className="text-sm">
+                            {lmrRequirementsCheck.zone === 'R1' || lmrRequirementsCheck.zone === 'R2' ? (
+                              lmrRequirementsCheck.meetsMinArea && lmrRequirementsCheck.meetsMinWidth ? (
+                                <div className="flex items-center text-green-600">
+                                  <CheckCircle2 size={16} className="mr-2" />
+                                  <span>Property meets all R1/R2 requirements for LMR controls (using developable area)</span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center text-red-600">
+                                  <XCircle size={16} className="mr-2" />
+                                  <span>
+                                    Developable area does not meet {!lmrRequirementsCheck.meetsMinArea && 'minimum area'} 
+                                    {!lmrRequirementsCheck.meetsMinArea && !lmrRequirementsCheck.meetsMinWidth && ' and '}
+                                    {!lmrRequirementsCheck.meetsMinWidth && 'minimum width'} requirements.
+                                  </span>
+                                </div>
+                              )
+                            ) : (lmrRequirementsCheck.zone === 'R3' || lmrRequirementsCheck.zone === 'R4') && lmrCatchmentData.isWithinCatchment ? (
+                              <div className="flex items-center text-green-600">
+                                <CheckCircle2 size={16} className="mr-2" />
+                                <span>Property is eligible for R3/R4 LMR controls within {lmrCatchmentData.distance}m catchment</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center text-gray-600">
+                                <Info size={16} className="mr-2" />
+                                <span>LMR controls not applicable for zone {lmrRequirementsCheck.zone}</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex items-center text-gray-600">
+                            <Info size={16} className="mr-2" />
+                            <span>Property is not in an eligible zone or catchment area for LMR controls</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
                 )}
               </div>
 
@@ -1347,6 +1952,14 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
             >
               <Building className="mr-2" size={16} /> High Density
             </button>
+            {lmrOptions?.isInLMRArea && calculationResults.lmr?.highDensity && (
+              <button
+                className={`flex items-center px-4 py-2 font-medium ${activeCalcTab === 'highDensityLMR' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-blue-500'}`}
+                onClick={() => handleCalcTabChange('highDensityLMR')}
+              >
+                <Layers className="mr-2" size={16} /> High Density - LMR
+              </button>
+            )}
           </div>
           
           {/* Medium Density Calculation */}
@@ -1378,6 +1991,23 @@ const FeasibilitySettings = ({ settings, onSettingChange, salesData, constructio
               lmrOptions={lmrOptions}
               useLMR={settings.highDensity.useLMR}
               calculationResults={calculationResults.current?.highDensity}
+              lmrResults={calculationResults.lmr?.highDensity}
+              customControls={customControls.enabled ? customControls : null}
+            />
+          )}
+          
+          {/* High Density LMR Calculation */}
+          {activeCalcTab === 'highDensityLMR' && lmrOptions?.isInLMRArea && calculationResults.lmr?.highDensity && (
+            <FeasibilityCalculation 
+              settings={settings} 
+              density="highDensity" 
+              selectedFeature={selectedFeature}
+              salesData={salesData}
+              constructionData={constructionData}
+              housingScenarios={housingScenarios}
+              lmrOptions={lmrOptions}
+              useLMR={true} /* Force LMR to be used */
+              calculationResults={calculationResults.lmr?.highDensity}
               lmrResults={calculationResults.lmr?.highDensity}
               customControls={customControls.enabled ? customControls : null}
             />

@@ -120,6 +120,7 @@ const FeasibilityCalculation = ({
   });
   const [isExporting, setIsExporting] = useState(false);
   const [notification, setNotification] = useState(null);
+  const [activeSubTab, setActiveSubTab] = useState('normal'); // Add new state for sub-tabs: 'normal' or 'lmr'
 
   useEffect(() => {
     if (!calculationResults) return;
@@ -147,6 +148,11 @@ const FeasibilityCalculation = ({
   if (!calculationResults) {
     return <div className="p-4 text-center">Loading calculations...</div>;
   }
+
+  // Function to handle sub-tab switching
+  const handleSubTabChange = (tab) => {
+    setActiveSubTab(tab);
+  };
 
   // Helper component to display breakeven information
   const BreaKevenInfo = ({ breakeven, totalDwellings }) => {

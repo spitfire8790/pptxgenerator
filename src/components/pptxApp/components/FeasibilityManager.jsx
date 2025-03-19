@@ -1021,6 +1021,7 @@ const FeasibilityManager = ({ settings, onSettingChange, salesData, open, onClos
                       salesData={salesData}
                       constructionData={constructionData}
                       selectedFeature={selectedFeature}
+                      developableArea={developableArea}
                       onShowMedianPrices={handleShowMedianPrices}
                       onShowConstructionData={handleShowConstructionData}
                       onShowDwellingSizeData={handleShowDwellingSizeData}
