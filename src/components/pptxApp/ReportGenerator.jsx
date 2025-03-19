@@ -84,7 +84,8 @@ import {
   Mail,
   BellRing,
   Layers as LayersIcon,
-  Bell
+  Bell,
+  ClipboardCheck
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import './Timer.css';
@@ -100,6 +101,7 @@ import PropertyListSelector from './PropertyListSelector';
 import Chat from './Chat';
 import NotificationCenter from '../NotificationCenter';
 import './styles.css';
+import PropertyTriage from './PropertyTriage';
 
 const slideOptions = [
   { id: 'cover', label: 'Cover Page', addSlide: addCoverSlide, icon: Home },
@@ -311,6 +313,9 @@ const ReportGenerator = ({
   const [notificationPermission, setNotificationPermission] = useState('default');
   const [showNewsTicker, setShowNewsTicker] = useState(false); // Add state to control news ticker visibility
   const [showDevelopableAreaOptions, setShowDevelopableAreaOptions] = useState(false);
+  const [showLog, setShowLog] = useState(false);
+  const [showTriageUI, setShowTriageUI] = useState(false);
+  const [allProperties, setAllProperties] = useState([]);
   
   // Use the first selected feature as the primary for display
   const primaryFeature = selectedSiteFeatures.length > 0 ? selectedSiteFeatures[0] : null;
@@ -456,6 +461,22 @@ const ReportGenerator = ({
                 Math.random().toString(36).substring(2, 9);
                 
       return { ...feature, id };
+    });
+    
+    // Update allProperties to include these features
+    setAllProperties(prevProperties => {
+      // Create a map of existing property IDs for quick lookup
+      const existingIds = new Map(prevProperties.map(prop => [
+        prop.id || prop.properties?.copiedFrom?.id || Math.random().toString(36).substring(2, 9),
+        true
+      ]));
+      
+      // Filter out duplicates and add new properties
+      const newProperties = processedFeatures.filter(feature => 
+        !existingIds.has(feature.id || feature.properties?.copiedFrom?.id)
+      );
+      
+      return [...prevProperties, ...newProperties];
     });
     
     // Use the onPropertySelect prop to update the parent's state
@@ -1398,10 +1419,12 @@ const ReportGenerator = ({
         site_suitability__current_government_land_use: primaryFeature.properties.copiedFrom?.site_suitability__current_government_land_use,
         site_suitability__floorspace_ratio: primaryFeature.properties.copiedFrom?.site_suitability__floorspace_ratio,  
         site_suitability__height_of_building: primaryFeature.properties.copiedFrom?.site_suitability__height_of_building,
+        site_suitability__heritage_significance: primaryFeature.properties.copiedFrom?.site_suitability__heritage_significance,
         site_suitability__NSW_government_agency: primaryFeature.properties.copiedFrom?.site_suitability__NSW_government_agency,
         site_suitability__landzone: primaryFeature.properties.copiedFrom?.site_suitability__landzone,
         site__address: primaryFeature.properties.copiedFrom?.site__address || 'Unnamed Location',
         site__property_id: primaryFeature.properties.copiedFrom?.site__property_id,
+        site_suitability__property_value: primaryFeature.properties.copiedFrom?.site_suitability__property_value,
         site_suitability__LGA: primaryFeature.properties.copiedFrom?.site_suitability__LGA,
         site_suitability__electorate: primaryFeature.properties.copiedFrom?.site_suitability__electorate,
         site_suitability__suburb: primaryFeature.properties.copiedFrom?.site_suitability__suburb?.toUpperCase(),
@@ -1751,6 +1774,14 @@ const ReportGenerator = ({
         <div className="flex justify-between items-center">
           <h2 className="text-xl font-semibold">Desktop Due Diligence PowerPoint Report Generator</h2>
           <div className="flex items-center">
+            <button
+              onClick={() => setShowTriageUI(true)}
+              className="bg-transparent border-none cursor-pointer relative p-2 rounded-full flex items-center justify-center mr-2"
+              aria-label="Property Triage"
+              title="Property Triage"
+            >
+              <ClipboardCheck size={20} className="text-gray-800" />
+            </button>
             <NotificationCenter userEmail={userInfo?.email} />
           </div>
         </div>
@@ -2181,6 +2212,19 @@ const ReportGenerator = ({
           </div>
         )}
       </div>
+      {/* Triage UI */}
+      {showTriageUI && (
+        <div className="fixed inset-0 bg-white z-50">
+          <div className="w-full h-full overflow-hidden flex flex-col">
+            <div className="p-4 flex-grow overflow-auto">
+              <PropertyTriage 
+                onClose={() => setShowTriageUI(false)} 
+                properties={allProperties}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
