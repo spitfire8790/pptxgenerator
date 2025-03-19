@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { ChevronLeft, BarChart3, Filter, X, MapPin, Settings, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { PieChart, ChevronDown, ChevronRight, Plus, Settings, ChevronUp, BarChart3, ChevronLeft, RotateCcw, X, Edit2, Save, Trash2, FileText, Filter, ArrowUp, ArrowDown, MapPin } from "lucide-react";
 import { giraffeState, giraffe, rpc } from '@gi-nx/iframe-sdk';
+import { checkUserClaims } from './utils/auth/tokenUtils';
 
 // Zone colors mapping from permissibilitySlide.js
 const landZoningColors = {
@@ -112,6 +113,31 @@ const PropertyTriage = ({ onClose, properties = [] }) => {
     thresholdLow: 2000, // sqm
   });
 
+  // Dashboard settings
+  const [dashboardStats, setDashboardStats] = useState({
+    pdnsw: 0,
+    otherAgencies: 0,
+    tbd: 0,
+    totalProperties: 0,
+    valueRanges: {
+      'under2m': { pdnsw: 0, agency: 0, tbd: 0, total: 0, properties: { pdnsw: [], agency: [], tbd: [] } },
+      '2to5m': { pdnsw: 0, agency: 0, tbd: 0, total: 0, properties: { pdnsw: [], agency: [], tbd: [] } },
+      '5to10m': { pdnsw: 0, agency: 0, tbd: 0, total: 0, properties: { pdnsw: [], agency: [], tbd: [] } },
+      '10to20m': { pdnsw: 0, agency: 0, tbd: 0, total: 0, properties: { pdnsw: [], agency: [], tbd: [] } },
+      'over20m': { pdnsw: 0, agency: 0, tbd: 0, total: 0, properties: { pdnsw: [], agency: [], tbd: [] } },
+      'unknown': { pdnsw: 0, agency: 0, tbd: 0, total: 0, properties: { pdnsw: [], agency: [], tbd: [] } }
+    },
+    allPropertiesData: [],
+    agencySummary: [], // Add property to store agency summary data
+    directorSummary: {} // Add property to store director summary data
+  });
+  const [dashboardExpanded, setDashboardExpanded] = useState(true);
+  const [chartAgencyFilter, setChartAgencyFilter] = useState([]);
+  const [availableChartAgencies, setAvailableChartAgencies] = useState([]);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isDashboardLocked, setIsDashboardLocked] = useState(false); // Set to false by default for testing
+  const [userInfo, setUserInfo] = useState(null);
+
   // Store overridden property values
   const [overriddenValues, setOverriddenValues] = useState({});
   const [editingProperty, setEditingProperty] = useState(null);
@@ -123,6 +149,16 @@ const PropertyTriage = ({ onClose, properties = [] }) => {
   
   // Track divestment selections
   const [divestmentSelections, setDivestmentSelections] = useState({});
+
+  // Detail modal state
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [detailModalType, setDetailModalType] = useState(''); // 'pdnsw', 'agency', or 'tbd'
+  const [detailProperties, setDetailProperties] = useState([]);
+  const [detailSortField, setDetailSortField] = useState('date');
+  const [detailSortDirection, setDetailSortDirection] = useState('desc');
+  const [agencyFilter, setAgencyFilter] = useState([]);
+  const [availableAgencies, setAvailableAgencies] = useState([]);
+  const [showAgencyFilter, setShowAgencyFilter] = useState(false);
 
   // Fetch all available properties from giraffeState
   useEffect(() => {
@@ -806,6 +842,691 @@ const PropertyTriage = ({ onClose, properties = [] }) => {
     }
   };
 
+  // Load triage history data for dashboard
+  useEffect(() => {
+    const loadTriageHistory = async () => {
+      try {
+        console.log('Loading triage history from CSV file');
+        
+        try {
+          const response = await fetch('/triage_history.csv');
+          const csvText = await response.text();
+          
+          // Use a 3rd party CSV parser or implement a more robust solution
+          // This is a simplified parser - handles commas within quoted fields
+          const parseCSV = (csv) => {
+            const lines = csv.split('\n');
+            const headers = lines[0].split(',').map(h => h.trim());
+            const data = [];
+            
+            for (let i = 1; i < lines.length; i++) {
+              if (!lines[i].trim()) continue; // Skip empty lines
+              
+              // Parse CSV line
+              const line = lines[i];
+              const values = [];
+              let currentValue = '';
+              let insideQuotes = false;
+              
+              for (let j = 0; j < line.length; j++) {
+                const char = line[j];
+                
+                if (char === '"') {
+                  insideQuotes = !insideQuotes;
+                } else if (char === ',' && !insideQuotes) {
+                  values.push(currentValue);
+                  currentValue = '';
+                } else {
+                  currentValue += char;
+                }
+              }
+              
+              // Add the last value
+              values.push(currentValue);
+              
+              // Create record object
+              const record = {};
+              headers.forEach((header, index) => {
+                let value = values[index] || '';
+                // Clean up quoted values
+                if (value.startsWith('"') && value.endsWith('"')) {
+                  value = value.substring(1, value.length - 1);
+                }
+                record[header] = value.trim();
+              });
+              
+              data.push(record);
+            }
+            
+            return data;
+          };
+          
+          const csvData = parseCSV(csvText);
+          console.log('Parsed CSV data length:', csvData.length);
+          console.log('Sample records:', csvData.slice(0, 3));
+          
+          if (csvData.length === 0) {
+            console.error('No CSV data found');
+            return;
+          }
+          
+          // Map CSV data to our expected format
+          const parsedData = csvData.map(record => ({
+            address: record.Property || 'Unknown Property',
+            landowningAgency: record['Landowning Agency'] || 'Unknown Agency',
+            divestmentBy: record['Agency to manage divestment'] || 'To Be Determined',
+            value: record['Property Value'] || 'Unknown',
+            area: record['Developable Area'] || 'Unknown',
+            zone: record.Zoning || '',
+            date: record['Date of determination'] || new Date().toISOString(),
+            director: record.Director || 'Not Assigned'
+          }));
+          
+          // Process properties for dashboard
+          let pdnswCount = 0;
+          let agencyCount = 0;
+          let tbdCount = 0;
+          
+          // Value ranges for chart
+          const valueRanges = {
+            'under2m': { pdnsw: 0, agency: 0, tbd: 0, total: 0, properties: { pdnsw: [], agency: [], tbd: [] } },
+            '2to5m': { pdnsw: 0, agency: 0, tbd: 0, total: 0, properties: { pdnsw: [], agency: [], tbd: [] } },
+            '5to10m': { pdnsw: 0, agency: 0, tbd: 0, total: 0, properties: { pdnsw: [], agency: [], tbd: [] } },
+            '10to20m': { pdnsw: 0, agency: 0, tbd: 0, total: 0, properties: { pdnsw: [], agency: [], tbd: [] } },
+            'over20m': { pdnsw: 0, agency: 0, tbd: 0, total: 0, properties: { pdnsw: [], agency: [], tbd: [] } },
+            'unknown': { pdnsw: 0, agency: 0, tbd: 0, total: 0, properties: { pdnsw: [], agency: [], tbd: [] } }
+          };
+          
+          // Collect agency and director statistics
+          const agencyStats = {};
+          const directorStats = {}; // Track director statistics
+          
+          const formattedPropertiesData = [];
+          
+          parsedData.forEach(record => {
+            const property = record.address || 'Unknown Property';
+            const agency = record.landowningAgency || 'Unknown Agency';
+            const divestment = record.divestmentBy || 'To Be Determined';
+            const value = record.value || 'Unknown';
+            const area = record.area || 'Unknown';
+            const zone = record.zone || '';
+            const date = record.date || new Date().toISOString();
+            const director = record.director || 'Not Assigned'; // Get director information
+            
+            let category = 'tbd';
+            if (divestment && divestment.toLowerCase().includes('pdnsw')) {
+              category = 'pdnsw';
+              pdnswCount++;
+              
+              // Track director statistics for PDNSW properties
+              if (!directorStats[director]) {
+                directorStats[director] = {
+                  count: 0,
+                  totalValue: 0,
+                  properties: []
+                };
+              }
+              
+              directorStats[director].count++;
+              
+              // Extract numeric value for calculating total
+              let numericValue = 0;
+              if (value && typeof value === 'string') {
+                const match = value.match(/[$]?([\d,.]+)/);
+                if (match) {
+                  numericValue = parseFloat(match[1].replace(/,/g, ''));
+                }
+              }
+              
+              directorStats[director].totalValue += numericValue;
+              directorStats[director].properties.push({
+                property,
+                value,
+                numericValue,
+                area
+              });
+            } else if (divestment && divestment !== 'To Be Determined' && !divestment.toLowerCase().includes('tbd')) {
+              category = 'agency';
+              agencyCount++;
+              
+              // Track agency statistics
+              if (!agencyStats[divestment]) {
+                agencyStats[divestment] = {
+                  count: 0,
+                  properties: []
+                };
+              }
+              agencyStats[divestment].count++;
+              agencyStats[divestment].properties.push(property);
+            } else {
+              tbdCount++;
+            }
+            
+            // Determine value range for chart
+            let valueRange = 'unknown';
+            if (value && typeof value === 'string') {
+              const match = value.match(/[$]?([\d,.]+)/);
+              if (match) {
+                const numericValue = parseFloat(match[1].replace(/,/g, ''));
+                
+                if (numericValue < 2000000) {
+                  valueRange = 'under2m';
+                } else if (numericValue < 5000000) {
+                  valueRange = '2to5m';
+                } else if (numericValue < 10000000) {
+                  valueRange = '5to10m';
+                } else if (numericValue < 20000000) {
+                  valueRange = '10to20m';
+                } else {
+                  valueRange = 'over20m';
+                }
+              }
+            }
+            
+            // Increment value range counts
+            valueRanges[valueRange][category]++;
+            valueRanges[valueRange].total++;
+            valueRanges[valueRange].properties[category].push({
+              property,
+              agency, 
+              divestment,
+              value,
+              area,
+              zone
+            });
+            
+            // Add to formatted properties array
+            formattedPropertiesData.push({
+              property, 
+              landowningAgency: agency,
+              divestmentAgency: divestment,
+              value,
+              area,
+              zoning: zone,
+              date,
+              sortableDate: new Date(date),
+              director: director // Include director in formatted data
+            });
+          });
+          
+          // Create agency summary array
+          const agencySummaryArray = Object.entries(agencyStats).map(([agency, data]) => ({
+            agency,
+            count: data.count,
+            properties: data.properties
+          })).sort((a, b) => b.count - a.count);
+          
+          // Sort directors by property count
+          const sortedDirectors = Object.entries(directorStats)
+            .sort((a, b) => b[1].count - a[1].count || b[1].totalValue - a[1].totalValue)
+            .reduce((acc, [director, stats]) => {
+              acc[director] = stats;
+              return acc;
+            }, {});
+          
+          console.log('Director data:', sortedDirectors);
+          
+          // Update dashboard stats
+          setDashboardStats({
+            pdnsw: pdnswCount,
+            otherAgencies: agencyCount,
+            tbd: tbdCount,
+            totalProperties: pdnswCount + agencyCount + tbdCount,
+            valueRanges,
+            allPropertiesData: formattedPropertiesData,
+            agencySummary: agencySummaryArray,
+            directorSummary: sortedDirectors
+          });
+          
+          console.log('Dashboard stats updated:', pdnswCount, agencyCount, tbdCount);
+          
+          // Extract available agencies for filters
+          const agencies = [...new Set(formattedPropertiesData.map(p => p.landowningAgency))].filter(Boolean).sort();
+          setAvailableAgencies(agencies);
+          setAvailableChartAgencies(agencies);
+          
+        } catch (error) {
+          console.error('Error fetching or parsing CSV:', error);
+          
+          // Fallback to localStorage if CSV loading fails
+          let historyData = localStorage.getItem('triageHistory');
+          console.log('Falling back to localStorage for triage history:', historyData);
+          
+          if (!historyData) {
+            console.error('No triage history data found in localStorage either');
+            return;
+          }
+        }
+      } catch (error) {
+        console.error('Error loading triage history:', error);
+      }
+    };
+    
+    loadTriageHistory();
+  }, []);
+
+  // Helper function to parse triage date for sorting
+  const parseTriageDateForSorting = (dateStr) => {
+    if (!dateStr) return new Date(0); // Default for empty strings
+    
+    // Handle "Dec-24" format
+    if (dateStr.includes('-') && dateStr.length <= 7) {
+      const [month, year] = dateStr.split('-');
+      const monthMap = {
+        'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+        'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+      };
+      
+      // Assuming 20xx year format
+      return new Date(2000 + parseInt(year), monthMap[month] || 0, 1);
+    }
+    
+    // Handle dd/mm/yyyy format
+    if (dateStr.includes('/')) {
+      const [day, month, year] = dateStr.split('/');
+      return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    }
+    
+    // Try to parse any other format
+    return new Date(dateStr);
+  };
+
+  // Format date for display
+  const formatDetailDate = (dateStr) => {
+    if (!dateStr) return '';
+    
+    // If it's already in "Dec-24" format, just return it
+    if (dateStr.includes('-') && dateStr.length <= 7) {
+      return dateStr;
+    }
+    
+    // Handle dd/mm/yyyy format
+    if (dateStr.includes('/')) {
+      const [day, month, year] = dateStr.split('/');
+      const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      
+      const monthNames = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      
+      return `${date.getDate()} ${monthNames[date.getMonth()]} ${date.getFullYear()}`;
+    }
+    
+    return dateStr;
+  };
+
+  // Format area for display
+  const formatDetailArea = (areaStr) => {
+    if (!areaStr) return '0 m²';
+    
+    // Remove quotes and any non-numeric characters except commas
+    areaStr = areaStr.replace(/"/g, '').trim();
+    
+    // Extract numeric value
+    const match = areaStr.match(/([\d,]+)/);
+    if (!match) return '0 m²';
+    
+    // Format with commas
+    const num = parseInt(match[1].replace(/,/g, ''));
+    return num.toLocaleString() + ' m²';
+  };
+
+  // Format property value for display
+  const formatDetailValue = (valueStr) => {
+    if (!valueStr) return '$0';
+    
+    // Remove quotes and any non-numeric characters
+    valueStr = valueStr.replace(/"/g, '').trim();
+    
+    // Extract numeric value
+    const match = valueStr.match(/[$]?([\d,]+)/);
+    if (!match) return '$0';
+    
+    // Parse value
+    const value = parseFloat(match[1].replace(/,/g, ''));
+    
+    // Format as $#.#M or $#k
+    if (value >= 1000000) {
+      return `$${(value / 1000000).toFixed(1)}M`;
+    } else {
+      return `$${Math.round(value / 1000).toLocaleString()}k`;
+    }
+  };
+
+  // Get zone code from zone string
+  const getDetailZoneCode = (zoneStr) => {
+    if (!zoneStr) return '';
+    
+    // Extract code (e.g., R2 from "R2 - Low Density Residential")
+    const match = zoneStr.match(/^([A-Za-z0-9]+)/);
+    return match ? match[1] : '';
+  };
+
+  // Open the detail modal
+  const openDetailModal = (type) => {
+    // Filter properties based on type
+    const allProperties = dashboardStats.allPropertiesData || [];
+    let filteredProperties = [];
+    
+    if (type === 'pdnsw') {
+      filteredProperties = allProperties.filter(p => 
+        p.divestmentAgency.includes('PDNSW')
+      );
+      setShowAgencyFilter(false);
+    } else if (type === 'agency') {
+      filteredProperties = allProperties.filter(p => 
+        !p.divestmentAgency.includes('PDNSW') && 
+        !p.divestmentAgency.includes('TBD') && 
+        p.divestmentAgency !== ''
+      );
+      
+      // Get unique agencies for filter
+      const agencies = [...new Set(filteredProperties.map(p => p.landowningAgency))]
+        .filter(a => a)
+        .sort((a, b) => a.localeCompare(b));
+      
+      setAvailableAgencies(agencies);
+      setAgencyFilter([]);
+      setShowAgencyFilter(true);
+    } else if (type === 'tbd') {
+      filteredProperties = allProperties.filter(p => 
+        p.divestmentAgency.includes('TBD') || 
+        p.divestmentAgency === ''
+      );
+      
+      // Get unique agencies for filter
+      const agencies = [...new Set(filteredProperties.map(p => p.landowningAgency))]
+        .filter(a => a)
+        .sort((a, b) => a.localeCompare(b));
+      
+      setAvailableAgencies(agencies);
+      setAgencyFilter([]);
+      setShowAgencyFilter(true);
+    }
+    
+    // Sort properties by the current sort field and direction
+    sortDetailProperties(filteredProperties, detailSortField, detailSortDirection);
+    
+    setDetailProperties(filteredProperties);
+    setDetailModalType(type);
+    setDetailModalOpen(true);
+  };
+
+  // Handle agency filter change
+  const handleAgencyFilterChange = (agency) => {
+    setAgencyFilter(prev => {
+      if (prev.includes(agency)) {
+        return prev.filter(a => a !== agency);
+      } else {
+        return [...prev, agency];
+      }
+    });
+  };
+
+  // Clear all agency filters
+  const clearAgencyFilter = () => {
+    setAgencyFilter([]);
+  };
+
+  // Filter properties by selected agencies
+  const getFilteredDetailProperties = () => {
+    if (!agencyFilter.length) {
+      return detailProperties;
+    }
+    
+    return detailProperties.filter(property => 
+      agencyFilter.includes(property.landowningAgency)
+    );
+  };
+
+  // Calculate total for filtered properties
+  const getFilteredPropertyTotals = () => {
+    if (!agencyFilter.length) {
+      return null;
+    }
+    
+    const filteredProps = getFilteredDetailProperties();
+    
+    if (filteredProps.length === 0) {
+      return { count: 0, value: 0 };
+    }
+    
+    const totalValue = filteredProps.reduce((sum, property) => {
+      // Extract numeric value for value
+      const valueMatch = (property.value || '').match(/[$]?([\d,.]+)/);
+      const propertyValue = valueMatch ? parseFloat(valueMatch[1].replace(/,/g, '')) : 0;
+      return sum + propertyValue;
+    }, 0);
+    
+    return { 
+      count: filteredProps.length,
+      value: totalValue 
+    };
+  };
+
+  // Sort detail properties
+  const sortDetailProperties = (properties, field, direction) => {
+    return properties.sort((a, b) => {
+      let aValue, bValue;
+      
+      switch (field) {
+        case 'property':
+          aValue = a.property || '';
+          bValue = b.property || '';
+          break;
+        case 'agency':
+          aValue = a.landowningAgency || '';
+          bValue = b.landowningAgency || '';
+          break;
+        case 'area':
+          // Extract numeric value for area
+          const aAreaMatch = (a.area || '').match(/[\d,]+/);
+          const bAreaMatch = (b.area || '').match(/[\d,]+/);
+          aValue = aAreaMatch ? parseInt(aAreaMatch[0].replace(/,/g, '')) : 0;
+          bValue = bAreaMatch ? parseInt(bAreaMatch[0].replace(/,/g, '')) : 0;
+          break;
+        case 'value':
+          // Extract numeric value for value
+          const aValueMatch = (a.value || '').match(/[$]?([\d,]+)/);
+          const bValueMatch = (b.value || '').match(/[$]?([\d,]+)/);
+          aValue = aValueMatch ? parseFloat(aValueMatch[1].replace(/,/g, '')) : 0;
+          bValue = bValueMatch ? parseFloat(bValueMatch[1].replace(/,/g, '')) : 0;
+          break;
+        case 'zoning':
+          aValue = getDetailZoneCode(a.zoning) || '';
+          bValue = getDetailZoneCode(b.zoning) || '';
+          break;
+        case 'divestment':
+          aValue = a.divestmentAgency || '';
+          bValue = b.divestmentAgency || '';
+          break;
+        case 'date':
+          aValue = a.sortableDate || new Date(0);
+          bValue = b.sortableDate || new Date(0);
+          break;
+        default:
+          aValue = a.property || '';
+          bValue = b.property || '';
+      }
+      
+      if (direction === 'asc') {
+        return aValue > bValue ? 1 : -1;
+      } else {
+        return aValue < bValue ? 1 : -1;
+      }
+    });
+  };
+
+  // Handle sort change in detail modal
+  const handleDetailSort = (field) => {
+    const newDirection = 
+      field === detailSortField 
+        ? (detailSortDirection === 'asc' ? 'desc' : 'asc') 
+        : 'asc';
+    
+    setDetailSortField(field);
+    setDetailSortDirection(newDirection);
+    
+    // Re-sort properties
+    const sortedProperties = [...detailProperties];
+    sortDetailProperties(sortedProperties, field, newDirection);
+    setDetailProperties(sortedProperties);
+  };
+
+  // Function to generate detailed tooltip content
+  const generateTooltipContent = (properties) => {
+    // Limit the display to first 10 properties if there are too many
+    const displayLimit = 10;
+    const limitedProps = properties.slice(0, displayLimit);
+    
+    let content = '';
+    
+    limitedProps.forEach((prop, idx) => {
+      content += `${prop.property}\n`;
+      content += `Agency: ${prop.landowningAgency}\n`;
+      content += `Value: ${prop.value}\n`;
+      
+      // Add separator between properties
+      if (idx < limitedProps.length - 1) {
+        content += '---------------\n';
+      }
+    });
+    
+    // Add indicator if there are more properties not shown
+    if (properties.length > displayLimit) {
+      content += `\n...and ${properties.length - displayLimit} more properties`;
+    }
+    
+    return content;
+  };
+
+  // Handle chart agency filter change
+  const handleChartAgencyFilterChange = (agency) => {
+    setChartAgencyFilter(prev => {
+      if (prev.includes(agency)) {
+        return prev.filter(a => a !== agency);
+      } else {
+        return [...prev, agency];
+      }
+    });
+  };
+
+  // Clear all chart agency filters
+  const clearChartAgencyFilter = () => {
+    setChartAgencyFilter([]);
+  };
+  
+  // Get filtered chart data based on selected agencies
+  const getFilteredChartData = () => {
+    console.log('getFilteredChartData called, chartAgencyFilter:', chartAgencyFilter);
+    console.log('valueRanges data:', dashboardStats.valueRanges);
+    
+    if (!chartAgencyFilter.length) {
+      return dashboardStats.valueRanges;
+    }
+    
+    // Start with a deep copy of the value ranges structure but with zeros
+    const filteredRanges = {
+      'under2m': { pdnsw: 0, agency: 0, tbd: 0, total: 0 },
+      '2to5m': { pdnsw: 0, agency: 0, tbd: 0, total: 0 },
+      '5to10m': { pdnsw: 0, agency: 0, tbd: 0, total: 0 },
+      '10to20m': { pdnsw: 0, agency: 0, tbd: 0, total: 0 },
+      'over20m': { pdnsw: 0, agency: 0, tbd: 0, total: 0 },
+      'unknown': { pdnsw: 0, agency: 0, tbd: 0, total: 0 }
+    };
+    
+    // Iterate through all value ranges
+    Object.keys(dashboardStats.valueRanges).forEach(rangeKey => {
+      // For each divestment category
+      ['pdnsw', 'agency', 'tbd'].forEach(category => {
+        // Filter properties by selected agencies
+        const filteredCount = dashboardStats.valueRanges[rangeKey].properties[category].filter(prop => 
+          chartAgencyFilter.includes(prop.landowningAgency)
+        ).length;
+        
+        // Update counts
+        filteredRanges[rangeKey][category] = filteredCount;
+        filteredRanges[rangeKey].total += filteredCount;
+      });
+    });
+    
+    return filteredRanges;
+  };
+
+  // Function to get the maximum total across all value ranges for chart scaling
+  const getMaxValueRangeTotal = (valueRanges) => {
+    return Math.max(...Object.values(valueRanges).map(v => v.total || 0));
+  };
+
+  // Format currency for the agency summary table
+  const formatCurrencyMillions = (value) => {
+    if (value === 0) return '$0';
+    
+    // Convert to millions and round to 1 decimal place
+    const millions = value / 1000000;
+    
+    if (millions < 1) {
+      // If less than 1 million, show in thousands
+      const thousands = value / 1000;
+      return `$${thousands.toFixed(1)}k`;
+    }
+    
+    return `$${millions.toFixed(1)}M`;
+  };
+
+  // Handle dropdown toggle
+  const toggleDropdown = () => {
+    setIsDropdownOpen(!isDropdownOpen);
+  };
+
+  // Handle clicks outside dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!event.target.closest('.agency-dropdown')) {
+        setIsDropdownOpen(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isDropdownOpen]);
+
+  // Check user email authorization for dashboard access
+  useEffect(() => {
+    const checkUserAuthorization = async () => {
+      try {
+        console.log('Checking user authorization for dashboard...');
+        const info = await checkUserClaims();
+        console.log('User info returned from checkUserClaims:', info);
+        setUserInfo(info);
+        
+        // Authorized emails
+        const authorizedEmails = [
+          'james.strutt@dpie.nsw.gov.au',
+          'jonathan.thorpe@dpie.nsw.gov.au',
+          'grace.zhuang@dpie.nsw.gov.au'
+        ];
+        
+        // Check if user email is authorized
+        if (info && info.email && authorizedEmails.includes(info.email)) {
+          console.log('User is authorized to access dashboard');
+          setIsDashboardLocked(false);
+        } else {
+          console.log('User is not authorized to access dashboard');
+          setIsDashboardLocked(true);
+        }
+      } catch (error) {
+        console.error('Error checking user authorization:', error);
+        setIsDashboardLocked(true);
+      }
+    };
+    
+    checkUserAuthorization();
+  }, []);
+
   return (
     <div className="flex flex-col h-full">
       <div className="mb-6 px-4">
@@ -835,6 +1556,545 @@ const PropertyTriage = ({ onClose, properties = [] }) => {
           )}
         </div>
         <div className="h-1 bg-[#da2244] mt-2 rounded-full"></div>
+      </div>
+
+      {/* Dashboard */}
+      <div className="px-4 mb-4">
+        <div className="bg-white rounded-lg shadow-sm border">
+          <div
+            className="p-4 border-b flex justify-between items-center cursor-pointer"
+            onClick={() => isDashboardLocked ? null : setDashboardExpanded(!dashboardExpanded)}
+          >
+            <h3 className="text-lg font-medium flex items-center">
+              <PieChart size={20} className="mr-2" />
+              Historical Triage Dashboard
+            </h3>
+            {isDashboardLocked ? (
+              <div className="text-xs text-gray-500">
+                {userInfo ? (
+                  <span>Access restricted. Your email <strong>{userInfo.email}</strong> is not authorized.</span>
+                ) : (
+                  <span>Loading user information...</span>
+                )}
+              </div>
+            ) : (
+              <button className="text-gray-400 hover:text-gray-600">
+                {dashboardExpanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
+              </button>
+            )}
+          </div>
+          
+          {!isDashboardLocked && dashboardExpanded && (
+            <div className="p-4 grid grid-cols-1 gap-6">
+              <div className="border rounded-lg p-4">
+                <h3 className="font-medium mb-3">Summary of Historical Triage Decisions - As at 19 March 2025</h3>
+                <div className="grid grid-cols-4 gap-4">
+                  <div className="bg-blue-100 rounded-lg p-3 text-center">
+                    <div className="text-3xl font-bold text-blue-800">
+                      {dashboardStats.totalProperties}
+                    </div>
+                    <div className="text-sm text-blue-600 mt-1">Total Properties</div>
+                  </div>
+                  <div className="bg-green-100 rounded-lg p-3 text-center">
+                    <div className="text-3xl font-bold text-green-800">
+                      {dashboardStats.pdnsw}
+                    </div>
+                    <div className="text-sm text-green-600 mt-1">PDNSW</div>
+                  </div>
+                  <div className="bg-amber-100 rounded-lg p-3 text-center">
+                    <div className="text-3xl font-bold text-amber-800">
+                      {dashboardStats.otherAgencies}
+                    </div>
+                    <div className="text-sm text-amber-600 mt-1">Agency</div>
+                  </div>
+                  <div className="bg-red-100 rounded-lg p-3 text-center">
+                    <div className="text-3xl font-bold text-red-800">
+                      {dashboardStats.tbd}
+                    </div>
+                    <div className="text-sm text-red-600 mt-1">To Be Determined</div>
+                  </div>
+                </div>
+                
+                {/* Percentage bars */}
+                <div className="mt-6">
+                  <div className="flex items-center mb-1">
+                    <div className="text-xs font-medium w-20 flex items-center">
+                      <button 
+                        onClick={() => openDetailModal('pdnsw')}
+                        className="p-1 mr-1 rounded-full hover:bg-green-100 transition-colors"
+                        title="View PDNSW properties"
+                      >
+                        <Plus size={14} className="text-green-700" />
+                      </button>
+                      PDNSW:
+                    </div>
+                    <div className="flex-grow bg-gray-200 rounded-full h-2.5">
+                      <div 
+                        className="bg-green-600 h-2.5 rounded-full" 
+                        style={{ width: `${dashboardStats.totalProperties ? (dashboardStats.pdnsw / dashboardStats.totalProperties * 100) : 0}%` }}
+                      ></div>
+                    </div>
+                    <div className="text-xs ml-2 w-12 text-right">
+                      {dashboardStats.totalProperties ? Math.round(dashboardStats.pdnsw / dashboardStats.totalProperties * 100) : 0}%
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center mb-1">
+                    <div className="text-xs font-medium w-20 flex items-center">
+                      <button 
+                        onClick={() => openDetailModal('agency')}
+                        className="p-1 mr-1 rounded-full hover:bg-amber-100 transition-colors"
+                        title="View Agency properties"
+                      >
+                        <Plus size={14} className="text-amber-700" />
+                      </button>
+                      Agency:
+                    </div>
+                    <div className="flex-grow bg-gray-200 rounded-full h-2.5">
+                      <div 
+                        className="bg-amber-600 h-2.5 rounded-full" 
+                        style={{ width: `${dashboardStats.totalProperties ? (dashboardStats.otherAgencies / dashboardStats.totalProperties * 100) : 0}%` }}
+                      ></div>
+                    </div>
+                    <div className="text-xs ml-2 w-12 text-right">
+                      {dashboardStats.totalProperties ? Math.round(dashboardStats.otherAgencies / dashboardStats.totalProperties * 100) : 0}%
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center">
+                    <div className="text-xs font-medium w-20 flex items-center">
+                      <button 
+                        onClick={() => openDetailModal('tbd')}
+                        className="p-1 mr-1 rounded-full hover:bg-red-100 transition-colors"
+                        title="View TBD properties"
+                      >
+                        <Plus size={14} className="text-red-700" />
+                      </button>
+                      TBD:
+                    </div>
+                    <div className="flex-grow bg-gray-200 rounded-full h-2.5">
+                      <div 
+                        className="bg-red-600 h-2.5 rounded-full" 
+                        style={{ 
+                          width: `${dashboardStats.totalProperties ? 
+                            (dashboardStats.tbd / dashboardStats.totalProperties * 100) : 0}%` 
+                        }}
+                      ></div>
+                    </div>
+                    <div className="text-xs ml-2 w-12 text-right">
+                      {dashboardStats.totalProperties ? Math.round(dashboardStats.tbd / dashboardStats.totalProperties * 100) : 0}%
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Director Chart */}
+                <div className="mt-8">
+                  <h4 className="font-medium mb-3">PDNSW Properties by Director</h4>
+                  <div className="overflow-visible">
+                    {Object.entries(dashboardStats.directorSummary).length === 0 ? (
+                      <div className="text-gray-500 text-center py-4">No director data available</div>
+                    ) : (
+                      <div className="relative" style={{ height: "400px", paddingTop: "30px" }}> 
+                        {/* Chart Area - removed left Y-axis */}
+                        <div className="absolute inset-0 border-l border-b border-gray-300" style={{ top: "30px" }}>
+                          {/* Horizontal Grid Lines */}
+                          <div className="absolute inset-0">
+                            {(() => {
+                              // Get max count for scaling
+                              const maxCount = Math.max(
+                                ...Object.values(dashboardStats.directorSummary).map(d => d.count)
+                              );
+                              
+                              // Create grid lines at 0, 50%, and 100% of max count
+                              const gridPositions = [
+                                0,                   // Bottom line (0%)
+                                0.5,                 // Middle line (50%)
+                                1                    // Top line (100%)
+                              ];
+                              
+                              return gridPositions.map((pos, i) => (
+                                <div
+                                  key={i}
+                                  className="absolute left-0 right-0 border-t border-gray-200"
+                                  style={{ 
+                                    bottom: `${pos * 100}%`,
+                                    borderTopStyle: pos === 0 ? 'solid' : 'dashed'
+                                  }}
+                                ></div>
+                              ));
+                            })()}
+                          </div>
+                          
+                          {/* Director Bars */}
+                          <div className="absolute inset-0 flex items-end">
+                            {(() => {
+                              // Get directors in alphabetical order, but move "Not Assigned" to the end
+                              const directors = Object.entries(dashboardStats.directorSummary)
+                                .sort((a, b) => {
+                                  if (a[0] === 'Not Assigned') return 1;
+                                  if (b[0] === 'Not Assigned') return -1;
+                                  return a[0].localeCompare(b[0]);
+                                });
+                              
+                              // Find max values for scaling
+                              const maxCount = Math.max(
+                                ...directors.map(([_, stats]) => stats.count)
+                              );
+                              
+                              const maxValue = Math.max(
+                                ...directors.map(([_, stats]) => stats.totalValue)
+                              );
+                              
+                              // Calculate bar width based on number of directors
+                              const barWidth = `${95 / directors.length}%`; // Increased from 80% to 95% to use more space
+                              
+                              return directors.map(([director, stats], index) => {
+                                const countHeight = maxCount > 0 ? (stats.count / maxCount) * 100 : 0;
+                                const valueHeight = maxValue > 0 ? (stats.totalValue / maxValue) * 100 : 0;
+                                
+                                return (
+                                  <div 
+                                    key={director}
+                                    className="h-full flex flex-col justify-end items-center"
+                                    style={{ width: barWidth }}
+                                  >
+                                    <div className="w-full flex justify-center space-x-1 h-full items-end">
+                                      {/* Count Bar */}
+                                      <div className="relative w-8 bg-blue-500 rounded-t flex flex-col justify-center items-center"
+                                        style={{ height: `${countHeight}%` }}
+                                        title={`${director}: ${stats.count} properties`}
+                                      >
+                                        {/* Count Data Label - outside the bar */}
+                                        <div className="absolute w-full text-center text-xs font-semibold text-black" 
+                                          style={{ top: '-25px' }}>
+                                          {stats.count}
+                                        </div>
+                                      </div>
+                                      
+                                      {/* Value Bar */}
+                                      <div className="relative w-8 bg-green-500 rounded-t flex flex-col justify-center items-center"
+                                        style={{ height: `${valueHeight}%` }}
+                                        title={`${director}: ${formatCurrencyMillions(stats.totalValue)}`}
+                                      >
+                                        {/* Value Data Label - outside the bar */}
+                                        <div className="absolute w-full text-center text-xs font-semibold text-black" 
+                                          style={{ top: '-25px' }}>
+                                          {formatCurrencyMillions(stats.totalValue)}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    
+                                    {/* X-Axis Label */}
+                                    <div className="absolute bottom-0 transform translate-y-full">
+                                      <div className="text-xs text-center whitespace-nowrap mt-1">
+                                        {director}
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              });
+                            })()}
+                          </div>
+                        </div>
+                        
+                        {/* Legend */}
+                        <div className="absolute left-16 right-16 flex justify-center" style={{ bottom: '-40px' }}>
+                          <div className="flex items-center space-x-6">
+                            <div className="flex items-center">
+                              <div className="w-3 h-3 bg-blue-500 mr-1"></div>
+                              <span className="text-xs">Properties Count</span>
+                            </div>
+                            <div className="flex items-center">
+                              <div className="w-3 h-3 bg-green-500 mr-1"></div>
+                              <span className="text-xs">Total Value</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Value breakdown */}
+                <div className="mt-14"> {/* Increased from mt-6 to mt-14 */}
+                  <h4 className="font-medium mb-2">Value Breakdown</h4>
+                  
+                  {/* Agency Filter Dropdown for Chart */}
+                  <div className="mb-4 relative">
+                    <div className="flex items-center gap-2">
+                      <div className="text-xs font-medium">Filter by Agency:</div>
+                      <div className="relative inline-block text-left flex-grow agency-dropdown">
+                        <div>
+                          <button 
+                            type="button" 
+                            className="inline-flex justify-between w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-xs font-medium text-gray-700 hover:bg-gray-50 focus:outline-none"
+                            onClick={toggleDropdown}
+                          >
+                            {chartAgencyFilter.length === 0 ? (
+                              <span className="text-gray-400">Select agencies...</span>
+                            ) : (
+                              <span>
+                                {chartAgencyFilter.length === 1 
+                                  ? chartAgencyFilter[0]
+                                  : `${chartAgencyFilter.length} agencies selected`}
+                              </span>
+                            )}
+                            <ChevronDown size={14} className="ml-2" />
+                          </button>
+                        </div>
+                        
+                        {isDropdownOpen && (
+                          <div className="origin-top-right absolute right-0 mt-2 w-full rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-20">
+                            <div className="py-1 max-h-60 overflow-y-auto" role="menu" aria-orientation="vertical" aria-labelledby="options-menu">
+                              <div className="px-3 py-1 border-b sticky top-0 bg-white">
+                                <button 
+                                  className="text-xs text-blue-600 hover:text-blue-800 hover:underline w-full text-left"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    clearChartAgencyFilter();
+                                    setIsDropdownOpen(false);
+                                  }}
+                                >
+                                  Clear all filters
+                                </button>
+                              </div>
+                              {availableChartAgencies.map(agency => (
+                                <div 
+                                  key={agency}
+                                  className="px-4 py-2 text-xs hover:bg-gray-100 cursor-pointer flex items-center"
+                                  role="menuitem"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleChartAgencyFilterChange(agency);
+                                  }}
+                                >
+                                  <input 
+                                    type="checkbox" 
+                                    className="mr-2"
+                                    checked={chartAgencyFilter.includes(agency)}
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      handleChartAgencyFilterChange(agency);
+                                    }}
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                  {agency}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="h-80 flex flex-col">
+                    <div className="flex-grow flex items-end justify-between gap-6">
+                      {/* Get filtered chart data */}
+                      {(() => {
+                        const filteredData = getFilteredChartData();
+                        const maxTotal = getMaxValueRangeTotal(filteredData);
+                        
+                        // Return the JSX for all columns
+                        return (
+                          <>
+                            {/* Column for under $2M */}
+                            <div className="flex-1 flex flex-col justify-end">
+                              <div className="w-full flex flex-col-reverse">
+                                <div 
+                                  className="w-full bg-gray-400" 
+                                  style={{ 
+                                    height: `${(filteredData.under2m.tbd / maxTotal) * 200 || 0}px` 
+                                  }}
+                                  title={`TBD: ${filteredData.under2m.tbd || 0} properties`}
+                                ></div>
+                                <div 
+                                  className="w-full bg-amber-500" 
+                                  style={{ 
+                                    height: `${(filteredData.under2m.agency / maxTotal) * 200 || 0}px` 
+                                  }}
+                                  title={`Agency: ${filteredData.under2m.agency || 0} properties`}
+                                ></div>
+                                <div 
+                                  className="w-full bg-green-500" 
+                                  style={{ 
+                                    height: `${(filteredData.under2m.pdnsw / maxTotal) * 200 || 0}px` 
+                                  }}
+                                  title={`PDNSW: ${filteredData.under2m.pdnsw || 0} properties`}
+                                ></div>
+                              </div>
+                              <div className="text-xs text-center font-medium mt-2 whitespace-nowrap">Under $2M</div>
+                              <div className="text-xs text-center text-gray-500">{filteredData.under2m.total || 0}</div>
+                            </div>
+                            
+                            {/* Column for $2M-$5M */}
+                            <div className="flex-1 flex flex-col justify-end">
+                              <div className="w-full flex flex-col-reverse">
+                                <div 
+                                  className="w-full bg-gray-400" 
+                                  style={{ 
+                                    height: `${(filteredData['2to5m'].tbd / maxTotal) * 200 || 0}px` 
+                                  }}
+                                  title={`TBD: ${filteredData['2to5m'].tbd || 0} properties`}
+                                ></div>
+                                <div 
+                                  className="w-full bg-amber-500" 
+                                  style={{ 
+                                    height: `${(filteredData['2to5m'].agency / maxTotal) * 200 || 0}px` 
+                                  }}
+                                  title={`Agency: ${filteredData['2to5m'].agency || 0} properties`}
+                                ></div>
+                                <div 
+                                  className="w-full bg-green-500" 
+                                  style={{ 
+                                    height: `${(filteredData['2to5m'].pdnsw / maxTotal) * 200 || 0}px` 
+                                  }}
+                                  title={`PDNSW: ${filteredData['2to5m'].pdnsw || 0} properties`}
+                                ></div>
+                              </div>
+                              <div className="text-xs text-center font-medium mt-2 whitespace-nowrap">$2M-$5M</div>
+                              <div className="text-xs text-center text-gray-500">{filteredData['2to5m'].total || 0}</div>
+                            </div>
+                            
+                            {/* Column for $5M-$10M */}
+                            <div className="flex-1 flex flex-col justify-end">
+                              <div className="w-full flex flex-col-reverse">
+                                <div 
+                                  className="w-full bg-gray-400" 
+                                  style={{ 
+                                    height: `${(filteredData['5to10m'].tbd / maxTotal) * 200 || 0}px` 
+                                  }}
+                                  title={`TBD: ${filteredData['5to10m'].tbd || 0} properties`}
+                                ></div>
+                                <div 
+                                  className="w-full bg-amber-500" 
+                                  style={{ 
+                                    height: `${(filteredData['5to10m'].agency / maxTotal) * 200 || 0}px` 
+                                  }}
+                                  title={`Agency: ${filteredData['5to10m'].agency || 0} properties`}
+                                ></div>
+                                <div 
+                                  className="w-full bg-green-500" 
+                                  style={{ 
+                                    height: `${(filteredData['5to10m'].pdnsw / maxTotal) * 200 || 0}px` 
+                                  }}
+                                  title={`PDNSW: ${filteredData['5to10m'].pdnsw || 0} properties`}
+                                ></div>
+                              </div>
+                              <div className="text-xs text-center font-medium mt-2 whitespace-nowrap">$5M-$10M</div>
+                              <div className="text-xs text-center text-gray-500">{filteredData['5to10m'].total || 0}</div>
+                            </div>
+                            
+                            {/* Column for $10M-$20M */}
+                            <div className="flex-1 flex flex-col justify-end">
+                              <div className="w-full flex flex-col-reverse">
+                                <div 
+                                  className="w-full bg-gray-400" 
+                                  style={{ 
+                                    height: `${(filteredData['10to20m'].tbd / maxTotal) * 200 || 0}px` 
+                                  }}
+                                  title={`TBD: ${filteredData['10to20m'].tbd || 0} properties`}
+                                ></div>
+                                <div 
+                                  className="w-full bg-amber-500" 
+                                  style={{ 
+                                    height: `${(filteredData['10to20m'].agency / maxTotal) * 200 || 0}px` 
+                                  }}
+                                  title={`Agency: ${filteredData['10to20m'].agency || 0} properties`}
+                                ></div>
+                                <div 
+                                  className="w-full bg-green-500" 
+                                  style={{ 
+                                    height: `${(filteredData['10to20m'].pdnsw / maxTotal) * 200 || 0}px` 
+                                  }}
+                                  title={`PDNSW: ${filteredData['10to20m'].pdnsw || 0} properties`}
+                                ></div>
+                              </div>
+                              <div className="text-xs text-center font-medium mt-2 whitespace-nowrap">$10M-$20M</div>
+                              <div className="text-xs text-center text-gray-500">{filteredData['10to20m'].total || 0}</div>
+                            </div>
+                            
+                            {/* Column for Over $20M */}
+                            <div className="flex-1 flex flex-col justify-end">
+                              <div className="w-full flex flex-col-reverse">
+                                <div 
+                                  className="w-full bg-gray-400" 
+                                  style={{ 
+                                    height: `${(filteredData.over20m.tbd / maxTotal) * 200 || 0}px` 
+                                  }}
+                                  title={`TBD: ${filteredData.over20m.tbd || 0} properties`}
+                                ></div>
+                                <div 
+                                  className="w-full bg-amber-500" 
+                                  style={{ 
+                                    height: `${(filteredData.over20m.agency / maxTotal) * 200 || 0}px` 
+                                  }}
+                                  title={`Agency: ${filteredData.over20m.agency || 0} properties`}
+                                ></div>
+                                <div 
+                                  className="w-full bg-green-500" 
+                                  style={{ 
+                                    height: `${(filteredData.over20m.pdnsw / maxTotal) * 200 || 0}px` 
+                                  }}
+                                  title={`PDNSW: ${filteredData.over20m.pdnsw || 0} properties`}
+                                ></div>
+                              </div>
+                              <div className="text-xs text-center font-medium mt-2 whitespace-nowrap">Over $20M</div>
+                              <div className="text-xs text-center text-gray-500">{filteredData.over20m.total || 0}</div>
+                            </div>
+                            
+                            {/* Column for Unknown Value */}
+                            <div className="flex-1 flex flex-col justify-end">
+                              <div className="w-full flex flex-col-reverse">
+                                <div 
+                                  className="w-full bg-gray-400" 
+                                  style={{ 
+                                    height: `${(filteredData.unknown.tbd / maxTotal) * 200 || 0}px` 
+                                  }}
+                                  title={`TBD: ${filteredData.unknown.tbd || 0} properties`}
+                                ></div>
+                                <div 
+                                  className="w-full bg-amber-500" 
+                                  style={{ 
+                                    height: `${(filteredData.unknown.agency / maxTotal) * 200 || 0}px` 
+                                  }}
+                                  title={`Agency: ${filteredData.unknown.agency || 0} properties`}
+                                ></div>
+                                <div 
+                                  className="w-full bg-green-500" 
+                                  style={{ 
+                                    height: `${(filteredData.unknown.pdnsw / maxTotal) * 200 || 0}px` 
+                                  }}
+                                  title={`PDNSW: ${filteredData.unknown.pdnsw || 0} properties`}
+                                ></div>
+                              </div>
+                              <div className="text-xs text-center font-medium mt-2 whitespace-nowrap">Unknown</div>
+                              <div className="text-xs text-center text-gray-500">{filteredData.unknown.total || 0}</div>
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                    <div className="mt-4 flex items-center justify-center space-x-6 text-xs">
+                      <div className="flex items-center">
+                        <div className="w-3 h-3 bg-green-500 mr-1"></div>
+                        <span>PDNSW</span>
+                      </div>
+                      <div className="flex items-center">
+                        <div className="w-3 h-3 bg-amber-500 mr-1"></div>
+                        <span>Agency</span>
+                      </div>
+                      <div className="flex items-center">
+                        <div className="w-3 h-3 bg-gray-400 mr-1"></div>
+                        <span>TBD</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Triage Scoring Settings */}
@@ -1286,6 +2546,247 @@ const PropertyTriage = ({ onClose, properties = [] }) => {
                 className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
               >
                 Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Property Details Modal */}
+      {detailModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg max-w-7xl w-11/12 max-h-[85vh] flex flex-col">
+            <div className="p-3 border-b flex justify-between items-center">
+              <h3 className="text-lg font-semibold">
+                {detailModalType === 'pdnsw' && "PDNSW Properties"}
+                {detailModalType === 'agency' && "Agency Properties"}
+                {detailModalType === 'tbd' && "To Be Determined Properties"}
+                <span className="ml-2 text-sm text-gray-500 font-normal">
+                  ({getFilteredDetailProperties().length} properties)
+                </span>
+              </h3>
+              <button
+                onClick={() => setDetailModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            {/* Agency Filter */}
+            {showAgencyFilter && (
+              <div className="px-4 py-2 border-b">
+                <div className="flex items-center mb-2">
+                  <div className="text-xs font-medium mr-2">Filter by Agency:</div>
+                  <button 
+                    onClick={clearAgencyFilter}
+                    className="text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                  >
+                    Clear all filters
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto">
+                  {availableAgencies.map(agency => (
+                    <label 
+                      key={agency} 
+                      className="flex items-center text-xs bg-gray-50 hover:bg-gray-100 px-2 py-1 rounded border cursor-pointer"
+                    >
+                      <input 
+                        type="checkbox" 
+                        className="mr-1"
+                        checked={agencyFilter.includes(agency)}
+                        onChange={() => handleAgencyFilterChange(agency)}
+                      />
+                      {agency}
+                    </label>
+                  ))}
+                </div>
+                
+                {/* Summary totals when filter is applied */}
+                {agencyFilter.length > 0 && (
+                  <div className="mt-3 p-2 bg-blue-50 rounded border border-blue-100">
+                    <div className="font-medium text-sm text-blue-800">
+                      {agencyFilter.join(', ')} Properties Summary:
+                    </div>
+                    <div className="flex gap-4 mt-1">
+                      <div className="text-xs">
+                        <span className="font-medium">Count:</span> {getFilteredPropertyTotals()?.count}
+                      </div>
+                      <div className="text-xs">
+                        <span className="font-medium">Total Value:</span> ${getFilteredPropertyTotals()?.value.toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            <div className="overflow-auto flex-grow">
+              {getFilteredDetailProperties().length === 0 ? (
+                <div className="p-8 text-center text-gray-500">
+                  No properties found in this category.
+                </div>
+              ) : (
+                <table className="min-w-full divide-y divide-gray-200 table-fixed">
+                  <thead className="bg-gray-50 sticky top-0">
+                    <tr>
+                      <th 
+                        className="w-2/12 px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer group truncate"
+                        onClick={() => handleDetailSort('property')}
+                      >
+                        <div className="flex items-center">
+                          Property
+                          <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {detailSortField === 'property' ? (
+                              detailSortDirection === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />
+                            ) : (
+                              <ArrowDown size={12} className="opacity-30" />
+                            )}
+                          </span>
+                        </div>
+                      </th>
+                      <th 
+                        className="w-2/12 px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer group truncate"
+                        onClick={() => handleDetailSort('agency')}
+                      >
+                        <div className="flex items-center">
+                          Agency
+                          <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {detailSortField === 'agency' ? (
+                              detailSortDirection === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />
+                            ) : (
+                              <ArrowDown size={12} className="opacity-30" />
+                            )}
+                          </span>
+                        </div>
+                      </th>
+                      <th 
+                        className="w-1/12 px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer group truncate"
+                        onClick={() => handleDetailSort('area')}
+                      >
+                        <div className="flex items-center justify-end">
+                          Area
+                          <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {detailSortField === 'area' ? (
+                              detailSortDirection === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />
+                            ) : (
+                              <ArrowDown size={12} className="opacity-30" />
+                            )}
+                          </span>
+                        </div>
+                      </th>
+                      <th 
+                        className="w-1/12 px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer group truncate"
+                        onClick={() => handleDetailSort('value')}
+                      >
+                        <div className="flex items-center justify-end">
+                          Value
+                          <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {detailSortField === 'value' ? (
+                              detailSortDirection === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />
+                            ) : (
+                              <ArrowDown size={12} className="opacity-30" />
+                            )}
+                          </span>
+                        </div>
+                      </th>
+                      <th 
+                        className="w-1/12 px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer group truncate"
+                        onClick={() => handleDetailSort('zoning')}
+                      >
+                        <div className="flex items-center">
+                          Zone
+                          <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {detailSortField === 'zoning' ? (
+                              detailSortDirection === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />
+                            ) : (
+                              <ArrowDown size={12} className="opacity-30" />
+                            )}
+                          </span>
+                        </div>
+                      </th>
+                      <th 
+                        className="w-2/12 px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer group truncate"
+                        onClick={() => handleDetailSort('divestment')}
+                      >
+                        <div className="flex items-center">
+                          Divestment By
+                          <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {detailSortField === 'divestment' ? (
+                              detailSortDirection === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />
+                            ) : (
+                              <ArrowDown size={12} className="opacity-30" />
+                            )}
+                          </span>
+                        </div>
+                      </th>
+                      <th 
+                        className="w-2/12 px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer group truncate"
+                        onClick={() => handleDetailSort('date')}
+                      >
+                        <div className="flex items-center">
+                          Date
+                          <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {detailSortField === 'date' ? (
+                              detailSortDirection === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />
+                            ) : (
+                              <ArrowDown size={12} className="opacity-30" />
+                            )}
+                          </span>
+                        </div>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {getFilteredDetailProperties().map((property, index) => {
+                      const zoneCode = getDetailZoneCode(property.zoning);
+                      const zoneColor = landZoningColors[zoneCode] || 'CCCCCC';
+                      
+                      return (
+                        <tr key={index} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 text-xs text-gray-900 truncate">
+                            {property.property}
+                          </td>
+                          <td className="px-3 py-2 text-xs text-gray-500 truncate">
+                            {property.landowningAgency}
+                          </td>
+                          <td className="px-3 py-2 text-xs text-gray-500 text-right">
+                            {formatDetailArea(property.area)}
+                          </td>
+                          <td className="px-3 py-2 text-xs text-gray-500 text-right">
+                            {formatDetailValue(property.value)}
+                          </td>
+                          <td className="px-3 py-2 text-xs text-gray-900">
+                            <div className="flex items-center truncate">
+                              {zoneCode && (
+                                <div 
+                                  className="w-2 h-2 mr-1 inline-block flex-shrink-0"
+                                  style={{ backgroundColor: `#${zoneColor}`, border: '1px solid #ccc' }}
+                                ></div>
+                              )}
+                              {zoneCode}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-xs text-gray-500 truncate">
+                            {property.divestmentAgency}
+                          </td>
+                          <td className="px-3 py-2 text-xs text-gray-500 truncate">
+                            {formatDetailDate(property.date)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            
+            <div className="p-3 border-t flex justify-end">
+              <button 
+                onClick={() => setDetailModalOpen(false)}
+                className="px-3 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200 transition-colors"
+              >
+                Close
               </button>
             </div>
           </div>
