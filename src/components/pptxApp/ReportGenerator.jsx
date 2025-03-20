@@ -311,7 +311,7 @@ const ReportGenerator = ({
   const [showChat, setShowChat] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState('default');
-  const [showNewsTicker, setShowNewsTicker] = useState(false); // Add state to control news ticker visibility
+  const [showNewsTicker, setShowNewsTicker] = useState(true); // Changed to true to make the ticker visible
   const [showDevelopableAreaOptions, setShowDevelopableAreaOptions] = useState(false);
   const [showLog, setShowLog] = useState(false);
   const [showTriageUI, setShowTriageUI] = useState(false);
@@ -1795,7 +1795,7 @@ const ReportGenerator = ({
                 <span className="inline-flex items-center bg-blue-600 text-white px-2 py-0.5 rounded-md text-xs mr-3">
                   NEW
                 </span>
-                18 March 2025 Update: Bernie has agreed to buy the team coffee in the office at 4PSQ tomorrow.
+                21 March 2025 Update: Automated developable area generator added to the app functionality.
               </div>
             </div>
           </div>
@@ -1812,6 +1812,7 @@ const ReportGenerator = ({
           <DevelopableAreaSelector 
             onLayerSelect={handleDevelopableAreaSelect} 
             selectedFeature={primaryFeature}
+            selectedFeatures={selectedSiteFeatures}
             showDevelopableArea={showDevelopableArea}
             setShowDevelopableArea={setShowDevelopableArea}
             useDevelopableAreaForBounds={useDevelopableAreaForBounds}

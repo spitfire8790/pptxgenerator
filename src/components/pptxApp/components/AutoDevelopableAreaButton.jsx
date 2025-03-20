@@ -7,7 +7,7 @@ import { generateAutoDevelopableArea } from '../utils/autoDevelopableAreaGenerat
  * by subtracting biodiversity areas from a site boundary
  * 
  * @param {Object} props
- * @param {Object} props.selectedFeature - The currently selected site feature
+ * @param {Object|Array} props.selectedFeature - The currently selected site feature(s)
  * @param {Function} props.onDevelopableAreaGenerated - Callback when developable area is generated
  */
 const AutoDevelopableAreaButton = ({ 
@@ -40,14 +40,65 @@ const AutoDevelopableAreaButton = ({
         return;
       }
       
-      const result = await generateAutoDevelopableArea(
-        selectedFeature,
-        setNotification,
-        setIsGenerating
-      );
+      // Check if selectedFeature is an array (multiple sites selected)
+      const isMultipleSites = Array.isArray(selectedFeature) && selectedFeature.length > 0;
       
-      if (result && result.developableArea && onDevelopableAreaGenerated) {
-        onDevelopableAreaGenerated(result.developableArea);
+      if (isMultipleSites) {
+        // For multiple sites, process them one by one and combine the results
+        const allResults = [];
+        
+        for (let i = 0; i < selectedFeature.length; i++) {
+          const currentFeature = selectedFeature[i];
+          setNotification({
+            type: 'info',
+            message: `Processing site ${i+1} of ${selectedFeature.length}...`
+          });
+          
+          const result = await generateAutoDevelopableArea(
+            currentFeature,
+            setNotification,
+            setIsGenerating
+          );
+          
+          if (result && result.developableArea) {
+            allResults.push(result);
+          }
+        }
+        
+        // Combine all results into a single FeatureCollection
+        if (allResults.length > 0) {
+          const combinedFeatures = allResults.flatMap(
+            result => result.developableArea.features
+          );
+          
+          const combinedResult = {
+            developableArea: {
+              type: 'FeatureCollection',
+              features: combinedFeatures
+            },
+            drawingResults: allResults.flatMap(result => result.drawingResults)
+          };
+          
+          if (onDevelopableAreaGenerated) {
+            onDevelopableAreaGenerated(combinedResult.developableArea);
+          }
+          
+          setNotification({
+            type: 'success',
+            message: `Generated developable areas for ${allResults.length} sites successfully!`
+          });
+        }
+      } else {
+        // Original single site processing
+        const result = await generateAutoDevelopableArea(
+          selectedFeature,
+          setNotification,
+          setIsGenerating
+        );
+        
+        if (result && result.developableArea && onDevelopableAreaGenerated) {
+          onDevelopableAreaGenerated(result.developableArea);
+        }
       }
     } catch (error) {
       console.error('Error in handleGenerateDevelopableArea:', error);
@@ -102,7 +153,7 @@ const AutoDevelopableAreaButton = ({
         {/* Tooltip - positioned to left of button rather than centered */}
         <div className="absolute z-50 right-0 w-64 p-2 mt-2 text-sm text-gray-700 bg-white rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity duration-300 border border-gray-200">
           <p className="font-semibold mb-1">Auto-Generate Developable Area</p>
-          <p className="text-xs">Automatically create a developable area by excluding biodiversity zones from the site.</p>
+          <p className="text-xs">Automatically create a developable area by excluding biodiversity, flood (1AEP), high voltage power lines (10m buffer) and exclusionary zones from the site.</p>
         </div>
       </div>
       

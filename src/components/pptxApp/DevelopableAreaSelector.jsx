@@ -5,7 +5,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { MapPin, AreaChart, Check, Eye, Ruler, Settings } from 'lucide-react';
 import AutoDevelopableAreaButton from './components/AutoDevelopableAreaButton';
 
-const DevelopableAreaSelector = ({ onLayerSelect, selectedFeature, showDevelopableArea, setShowDevelopableArea, useDevelopableAreaForBounds, setUseDevelopableAreaForBounds }) => {
+const DevelopableAreaSelector = ({ 
+  onLayerSelect, 
+  selectedFeature, 
+  selectedFeatures,
+  showDevelopableArea, 
+  setShowDevelopableArea, 
+  useDevelopableAreaForBounds, 
+  setUseDevelopableAreaForBounds 
+}) => {
   const [drawingLayers, setDrawingLayers] = useState([]);
   const [selectedLayers, setSelectedLayers] = useState([]);
 
@@ -130,7 +138,7 @@ const DevelopableAreaSelector = ({ onLayerSelect, selectedFeature, showDevelopab
         
         {/* Auto-Generate Button */}
         <AutoDevelopableAreaButton 
-          selectedFeature={selectedFeature} 
+          selectedFeature={selectedFeatures || selectedFeature} 
           onDevelopableAreaGenerated={handleDevelopableAreaGenerated}
         />
       </div>
@@ -170,8 +178,8 @@ const DevelopableAreaSelector = ({ onLayerSelect, selectedFeature, showDevelopab
 };
 
 // Separate component for Developable Area Options
-export const DevelopableAreaOptions = ({ selectedLayers = [], showDevelopableArea, setShowDevelopableArea, useDevelopableAreaForBounds, setUseDevelopableAreaForBounds }) => {
-  const isDisabled = selectedLayers.length === 0;
+export const DevelopableAreaOptions = ({ selectedLayers = [], showDevelopableArea, setShowDevelopableArea, useDevelopableAreaForBounds, setUseDevelopableAreaForBounds, developableArea }) => {
+  const isDisabled = selectedLayers.length === 0 && !developableArea;
   
   return (
     <div className="p-4 bg-white rounded-lg shadow h-full">

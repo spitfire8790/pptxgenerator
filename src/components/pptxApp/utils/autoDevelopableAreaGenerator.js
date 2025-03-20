@@ -12,7 +12,7 @@ const EXCLUDED_ZONE_CODES = ['IN3', 'IN4', 'E3', 'E4', 'RU3', 'C1', 'C2', 'C3', 
 
 /**
  * Generates a developable area automatically by subtracting biodiversity features from the site boundary
- * @param {Object} siteFeature - The GeoJSON feature representing the site boundary
+ * @param {Object} siteFeature - The GeoJSON feature representing the site boundary (can be a single Feature or a FeatureCollection)
  * @param {Function} setNotification - Function to set notification state
  * @param {Function} setIsGenerating - Function to update the generating state
  * @param {String} namePrefix - Prefix for the generated drawing layer name
@@ -33,6 +33,66 @@ export const generateAutoDevelopableArea = async (siteFeature, setNotification, 
     // Log the operation start instead of showing notification
     console.log('Generating developable area...');
 
+    // Handle case when siteFeature is a FeatureCollection
+    if (siteFeature.type === 'FeatureCollection' && siteFeature.features && siteFeature.features.length > 0) {
+      console.log('Processing a FeatureCollection with', siteFeature.features.length, 'features');
+      
+      // Process each feature individually and then combine the results
+      const allResults = [];
+      
+      for (let i = 0; i < siteFeature.features.length; i++) {
+        console.log(`Processing feature ${i+1} of ${siteFeature.features.length}`);
+        const currentFeature = siteFeature.features[i];
+        
+        // Process single feature
+        const singleResult = await generateAutoDevelopableArea(
+          currentFeature,
+          (notification) => {
+            // Add feature number to notification
+            if (notification) {
+              const modifiedNotification = {
+                ...notification,
+                message: `Feature ${i+1}: ${notification.message}`
+              };
+              setNotification(modifiedNotification);
+            }
+          },
+          setIsGenerating
+        );
+        
+        if (singleResult && singleResult.developableArea) {
+          allResults.push(singleResult);
+        }
+      }
+      
+      // Combine all results into a single FeatureCollection
+      if (allResults.length > 0) {
+        console.log(`Combining results from ${allResults.length} features`);
+        
+        const combinedFeatures = allResults.flatMap(
+          result => result.developableArea.features
+        );
+        
+        const combinedResult = {
+          developableArea: {
+            type: 'FeatureCollection',
+            features: combinedFeatures
+          },
+          drawingResults: allResults.flatMap(result => result.drawingResults)
+        };
+        
+        setNotification({
+          type: 'success',
+          message: `Generated developable areas for ${allResults.length} sites successfully!`
+        });
+        
+        return combinedResult;
+      }
+      
+      return null;
+    }
+    
+    // Continue with single feature processing
     // Validate site geometry
     if (!siteFeature.geometry || !siteFeature.geometry.coordinates || !siteFeature.geometry.coordinates[0]) {
       console.log('Site has invalid geometry');
