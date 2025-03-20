@@ -12,9 +12,11 @@ import {
   Bar,
   ReferenceLine
 } from 'recharts';
-import { Calculator, TrendingUp, DollarSign, HardHat, Percent, Home, Building2, Settings2, Info, FileDown, Loader2, CheckCircle, XCircle } from 'lucide-react';
+import { Calculator, TrendingUp, DollarSign, HardHat, Percent, Home, Building2, Settings2, Info, FileDown, Loader2, CheckCircle, XCircle, Pencil } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
+import { rpc, giraffeState } from '@gi-nx/iframe-sdk';
+import { createDrawingFromFeature } from '../utils/mapUtils';
 
 // Helper function to format currency
 const formatCurrency = (amount) => {
@@ -121,6 +123,7 @@ const FeasibilityCalculation = ({
   const [isExporting, setIsExporting] = useState(false);
   const [notification, setNotification] = useState(null);
   const [activeSubTab, setActiveSubTab] = useState('normal'); // Add new state for sub-tabs: 'normal' or 'lmr'
+  const [isDrawing, setIsDrawing] = useState(false);
 
   useEffect(() => {
     if (!calculationResults) return;
@@ -1131,6 +1134,12 @@ const FeasibilityCalculation = ({
       : Math.min(calculationResults.developmentYield, maxDwellingsByLotSize);
   };
 
+  // Function to handle drawing the selected feature
+  const handleDraw = async () => {
+    // Call the utility function from mapUtils.js
+    await createDrawingFromFeature(selectedFeature, setNotification, setIsDrawing);
+  };
+
   return (
     <div className="p-4">
       {/* Notification Toast */}
@@ -1138,8 +1147,37 @@ const FeasibilityCalculation = ({
         <NotificationToast type={notification.type} message={notification.message} />
       )}
       
-      {/* Export Button */}
-      <div className="mb-4 flex justify-end">
+      {/* Export and Draw Buttons */}
+      <div className="mb-4 flex justify-end space-x-2">
+        <div className="relative group">
+          <button
+            onClick={handleDraw}
+            disabled={isDrawing || !selectedFeature}
+            className={`flex items-center gap-2 py-2 px-4 rounded-md transition-colors ${
+              isDrawing || !selectedFeature
+                ? 'bg-gray-400 cursor-not-allowed' 
+                : 'bg-green-600 hover:bg-green-700 text-white shadow hover:shadow-md'
+            }`}
+            aria-label="Create Drawing Feature"
+          >
+            {isDrawing ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Creating...
+              </>
+            ) : (
+              <>
+                <Pencil size={16} />
+                Create Drawing
+              </>
+            )}
+          </button>
+          <div className="absolute z-10 right-0 w-64 p-2 mt-2 text-sm text-gray-700 bg-white rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity duration-300 border border-gray-200">
+            <p className="font-semibold mb-1">Create Drawing Feature</p>
+            <p className="text-xs">Create a permanent drawing feature from the selected developable area</p>
+          </div>
+        </div>
+        
         <div className="relative group">
           <button
             onClick={exportToExcel}

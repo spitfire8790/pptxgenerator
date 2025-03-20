@@ -1819,7 +1819,7 @@ const ReportGenerator = ({
           />
           <button 
             onClick={() => setShowDevelopableAreaOptions(true)}
-            className="absolute top-3 right-3 p-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-full shadow-sm transition-colors duration-200 flex items-center justify-center"
+            className="absolute top-4 right-16 p-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-full shadow-sm transition-colors duration-200 flex items-center justify-center"
             title="Developable Area Options"
           >
             <Settings2 className="w-5 h-5" />
