@@ -40,7 +40,8 @@ import {
   Download,
   AlertCircle,
   HelpCircle,
-  Settings
+  Settings,
+  Check
 } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
@@ -48,6 +49,18 @@ import { rpc, giraffeState } from '@gi-nx/iframe-sdk';
 import { createDrawingFromFeature, createStyledDrawingFromFeature } from '../utils/mapUtils';
 import * as turf from '@turf/turf';
 import BuildingParametersModal from './BuildingParametersModal';
+// Import building placement utilities
+import {
+  calculateVisualCenter,
+  createScaledPolygon,
+  generateBuildingFootprint,
+  calculateBuildingHeight,
+  calculatePolygonArea,
+  calculatePolygonWidth,
+  areBuildingsTooClose,
+  calculateOptimalBuildingConfig
+} from '../utils/buildingPlacementUtils';
+import { Button } from '@/components/ui/button';
 
 // Helper function to format currency
 const formatCurrency = (amount) => {
@@ -165,16 +178,12 @@ const FeasibilityCalculation = ({
   });
   
   // New state for building parameters modal
-  const [showParametersModal, setShowParametersModal] = useState(false);
-  const [currentBuildingParameters, setCurrentBuildingParameters] = useState({
-    maxBuildingHeight: buildingParameters.maxBuildingHeight || 100,
-    minBuildingSeparation: buildingParameters.minBuildingSeparation || 6,
-    maxBuildingWidth: buildingParameters.maxBuildingWidth || 18,
-    siteEfficiencyRatio: settings[density]?.siteEfficiencyRatio || 0.6,
-    floorToFloorHeight: settings[density]?.floorToFloorHeight || 3.1,
-    gbaToGfaRatio: settings[density]?.gbaToGfaRatio || 0.85
-  });
-
+  const [showBuildingParametersModal, setShowBuildingParametersModal] = useState(false);
+  const [buildingParams, setBuildingParams] = useState(buildingParameters);
+  const [isDrawingRoadBoundary, setIsDrawingRoadBoundary] = useState(false);
+  const [roadBoundaryId, setRoadBoundaryId] = useState(buildingParameters.roadBoundaryId || null);
+  const [hasRoadBoundary, setHasRoadBoundary] = useState(buildingParameters.hasRoadBoundary || false);
+  
   useEffect(() => {
     if (!calculationResults) return;
 
@@ -1186,983 +1195,237 @@ const FeasibilityCalculation = ({
 
   // Function to handle drawing the selected feature
   const handleDraw = async () => {
-    // Call the utility function from mapUtils.js
+    setIsDrawing(true);
     await createDrawingFromFeature(selectedFeature, setNotification, setIsDrawing);
-  };
-
-  // Calculate the visual center of a polygon (from screenshot.js)
-  const calculateVisualCenter = (coordinates) => {
-    try {
-      // First try to use turf.pointOnFeature which often gives better results than centroid
-      const polygon = turf.polygon([coordinates]);
-      
-      // Use pointOnFeature which finds a point guaranteed to be inside the polygon
-      // This is often more visually appealing than centroid for irregular shapes
-      const point = turf.pointOnFeature(polygon);
-      
-      // Further improve the point by running a simple pole of inaccessibility algorithm
-      // This tries to find a point that's as far from the boundary as possible
-      const boundaryDistance = (pt) => {
-        // Calculate minimum distance to any segment of the boundary
-        let minDistance = Infinity;
-        
-        for (let i = 0; i < coordinates.length - 1; i++) {
-          const start = coordinates[i];
-          const end = coordinates[i + 1];
-          const distance = turf.pointToLineDistance(
-            turf.point(pt.geometry.coordinates),
-            turf.lineString([start, end])
-          );
-          minDistance = Math.min(minDistance, distance);
-        }
-        
-        return minDistance;
-      };
-      
-      // Start from the point inside the polygon
-      let bestPoint = point;
-      let bestDistance = boundaryDistance(bestPoint);
-      
-      // Try some small adjustments to find better placement
-      const delta = 0.0001; // Small coordinate adjustment
-      const directions = [
-        [delta, 0], [-delta, 0], [0, delta], [0, -delta],
-        [delta, delta], [-delta, delta], [delta, -delta], [-delta, -delta]
-      ];
-      
-      // Try each direction to see if we get a better point
-      for (let i = 0; i < directions.length; i++) {
-        const [dx, dy] = directions[i];
-        const newCoords = [
-          bestPoint.geometry.coordinates[0] + dx,
-          bestPoint.geometry.coordinates[1] + dy
-        ];
-        
-        // Make sure the new point is inside the polygon
-        if (turf.booleanPointInPolygon(turf.point(newCoords), polygon)) {
-          const newPoint = turf.point(newCoords);
-          const distance = boundaryDistance(newPoint);
-          
-          if (distance > bestDistance) {
-            bestPoint = newPoint;
-            bestDistance = distance;
-          }
-        }
-      }
-      
-      return bestPoint;
-    } catch (error) {
-      console.warn('Error calculating visual center, falling back to centroid:', error);
-      const polygon = turf.polygon([coordinates]);
-      return turf.centroid(polygon);
-    }
-  };
-
-  // Create scaled polygon based on center point and scale factor
-  const createScaledPolygon = (coordinates, center, scaleFactor) => {
-    const centerPoint = center.geometry.coordinates;
-    
-    // Scale each coordinate relative to the center point
-    const scaledCoordinates = coordinates.map(coord => {
-      const dx = coord[0] - centerPoint[0];
-      const dy = coord[1] - centerPoint[1];
-      return [
-        centerPoint[0] + dx * scaleFactor,
-        centerPoint[1] + dy * scaleFactor
-      ];
-    });
-    
-    return scaledCoordinates;
-  };
-
-  // Generate building footprint based on the developable area and building footprint percentage
-  const generateBuildingFootprint = (feature, buildingFootprintRatio) => {
-    if (!feature || !feature.geometry || !feature.geometry.coordinates) {
-      return null;
-    }
-    
-    try {
-      // Handle different geometry types
-      if (feature.geometry.type === 'Polygon') {
-        const coordinates = feature.geometry.coordinates[0];
-        const center = calculateVisualCenter(coordinates);
-        
-        // Calculate scale factor (square root because we're scaling in 2D)
-        const scaleFactor = Math.sqrt(buildingFootprintRatio);
-        
-        // Create scaled polygon
-        const scaledCoordinates = createScaledPolygon(coordinates, center, scaleFactor);
-        
-        // Create new feature with scaled geometry
-        return {
-          ...feature,
-          geometry: {
-            ...feature.geometry,
-            coordinates: [[...scaledCoordinates, scaledCoordinates[0]]] // Close the polygon by repeating first point
-          }
-        };
-      } else if (feature.geometry.type === 'MultiPolygon') {
-        // For MultiPolygon, scale each polygon separately
-        const newCoordinates = feature.geometry.coordinates.map(polygon => {
-          const ringCoordinates = polygon[0];
-          const center = calculateVisualCenter(ringCoordinates);
-          const scaleFactor = Math.sqrt(buildingFootprintRatio);
-          const scaledCoordinates = createScaledPolygon(ringCoordinates, center, scaleFactor);
-          return [[...scaledCoordinates, scaledCoordinates[0]]]; // Close each polygon
-        });
-        
-        return {
-          ...feature,
-          geometry: {
-            ...feature.geometry,
-            coordinates: newCoordinates
-          }
-        };
-      }
-      
-      return null;
-    } catch (error) {
-      console.error("Error generating building footprint:", error);
-      return null;
-    }
-  };
-
-  // Calculate building height in meters based on GFA and footprint
-  const calculateBuildingHeight = (gfa, footprintArea, floorToFloorHeight) => {
-    if (!footprintArea || footprintArea === 0) return 0;
-    
-    // Calculate the number of floors needed to achieve the desired GFA
-    const numberOfFloors = Math.ceil(gfa / footprintArea);
-    
-    // Calculate height by multiplying the number of floors by the floor-to-floor height
-    return numberOfFloors * floorToFloorHeight;
-  };
-
-  // Calculate area of a polygon in square meters
-  const calculatePolygonArea = (coordinates) => {
-    try {
-      const polygon = turf.polygon([coordinates]);
-      // turf.area returns area in square meters
-      return turf.area(polygon);
-    } catch (error) {
-      console.error('Error calculating polygon area:', error);
-      return 0;
-    }
-  };
-
-  // Calculate polygon width in meters
-  const calculatePolygonWidth = (coordinates) => {
-    try {
-      const polygon = turf.polygon([coordinates]);
-      const bbox = turf.bbox(polygon);
-      
-      // Calculate width as the distance between west and east points
-      const westPoint = turf.point([bbox[0], (bbox[1] + bbox[3]) / 2]);
-      const eastPoint = turf.point([bbox[2], (bbox[1] + bbox[3]) / 2]);
-      
-      // Calculate the width in meters
-      const width = turf.distance(westPoint, eastPoint, { units: 'meters' });
-      
-      // Calculate height (north-south) as well
-      const southPoint = turf.point([(bbox[0] + bbox[2]) / 2, bbox[1]]);
-      const northPoint = turf.point([(bbox[0] + bbox[2]) / 2, bbox[3]]);
-      const height = turf.distance(southPoint, northPoint, { units: 'meters' });
-      
-      return { width, height, maxDimension: Math.max(width, height) };
-    } catch (error) {
-      console.error('Error calculating polygon width:', error);
-      return { width: 0, height: 0, maxDimension: 0 };
-    }
-  };
-
-  // Calculate optimal building configuration based on GFA and developable area
-  const calculateOptimalBuildingConfig = (developableAreaFeature, gfa, settings) => {
-    if (!developableAreaFeature || !gfa) return null;
-    
-    try {
-      // Use current parameters instead of defaults
-      const buildingFootprintRatio = currentBuildingParameters.siteEfficiencyRatio || settings.siteEfficiencyRatio;
-      
-      // Generate initial building footprint within the site efficiency ratio constraints
-      const buildingFootprint = generateBuildingFootprint(developableAreaFeature, buildingFootprintRatio);
-      if (!buildingFootprint) return null;
-      
-      // Calculate the footprint area
-      let footprintArea = 0;
-      if (buildingFootprint.geometry.type === 'Polygon') {
-        footprintArea = calculatePolygonArea(buildingFootprint.geometry.coordinates[0]);
-      } else if (buildingFootprint.geometry.type === 'MultiPolygon') {
-        footprintArea = buildingFootprint.geometry.coordinates.reduce((total, polygon) => {
-          return total + calculatePolygonArea(polygon[0]);
-        }, 0);
-      }
-      
-      if (footprintArea === 0) return null;
-      
-      // Get floor-to-floor height from current parameters
-      const floorToFloorHeight = currentBuildingParameters.floorToFloorHeight || settings.floorToFloorHeight;
-      
-      // Get the Height of Building (HOB) limitation from the site controls, custom controls, or current parameters
-      let hobLimit = 0;
-      const MAX_BUILDING_HEIGHT = currentBuildingParameters.maxBuildingHeight || 100;
-      
-      if (customControls?.enabled && customControls.hob !== null) {
-        // Use custom HOB if set
-        hobLimit = customControls.hob;
-      } else if (selectedFeature?.properties?.copiedFrom?.site_suitability__height_of_building) {
-        // Otherwise use site's HOB
-        hobLimit = selectedFeature.properties.copiedFrom.site_suitability__height_of_building;
-      }
-      
-      // Enforce absolute max building height
-      if (hobLimit === 0 || hobLimit > MAX_BUILDING_HEIGHT) {
-        hobLimit = MAX_BUILDING_HEIGHT;
-      }
-      
-      // Calculate maximum allowed floors based on HOB
-      const maxAllowedFloors = Math.floor(hobLimit / floorToFloorHeight);
-      
-      // Calculate number of floors needed based on GFA and footprint
-      const requiredFloors = Math.ceil(gfa / footprintArea);
-      
-      // Respect HOB limitation by capping the number of floors
-      const numberOfFloors = Math.min(requiredFloors, maxAllowedFloors);
-      
-      // Calculate total building height (respects HOB)
-      const buildingHeight = numberOfFloors * floorToFloorHeight;
-      
-      // Use custom max building width from parameters
-      const MAX_WIDTH_METERS = currentBuildingParameters.maxBuildingWidth || 18;
-      const MIN_BUILDING_SEPARATION = currentBuildingParameters.minBuildingSeparation || 6;
-      
-      // Determine if we need multiple buildings based on:
-      // 1. aspect ratio
-      // 2. if building would be too tall
-      // 3. if width exceeds 18m
-      let aspectRatio = 1;
-      let boundingBox = null;
-      let maxDimension = 0;
-      let exceedsMaxWidth = false;
-      
-      if (buildingFootprint.geometry.type === 'Polygon') {
-        // Calculate aspect ratio
-        boundingBox = turf.bbox(buildingFootprint);
-        const width = boundingBox[2] - boundingBox[0];
-        const height = boundingBox[3] - boundingBox[1];
-        aspectRatio = Math.max(width, height) / Math.min(width, height);
-        
-        // Calculate actual width in meters
-        const dimensions = calculatePolygonWidth(buildingFootprint.geometry.coordinates[0]);
-        maxDimension = dimensions.maxDimension;
-        exceedsMaxWidth = maxDimension > MAX_WIDTH_METERS;
-      }
-      
-      // Threshold for multiple buildings - if aspect ratio is too high, building is too tall,
-      // exceeds HOB limit, or is too wide
-      const maxAspectRatio = 3;
-      const maxFloors = 30;
-      const exceededHobLimit = hobLimit > 0 && requiredFloors > maxAllowedFloors;
-      const shouldUseMultipleBuildings = aspectRatio > maxAspectRatio || 
-                                        requiredFloors > maxFloors || 
-                                        exceededHobLimit ||
-                                        exceedsMaxWidth;
-      
-      // If we need multiple buildings, determine optimal number and distribution
-      if (shouldUseMultipleBuildings) {
-        // Calculate optimal number of buildings
-        // Consider all constraints, including width
-        let widthBasedBuildingCount = exceedsMaxWidth ? Math.ceil(maxDimension / MAX_WIDTH_METERS) : 1;
-        
-        let optimalBuildingCount = Math.max(
-          exceededHobLimit ? Math.ceil(requiredFloors / maxAllowedFloors) : 1,
-          aspectRatio > maxAspectRatio ? Math.ceil(aspectRatio / maxAspectRatio) : 1,
-          widthBasedBuildingCount
-        );
-        
-        // Maximum number of buildings to fit within the developable area
-        // For very small sites, we should limit the number of buildings
-        // so there's enough space between them
-        const siteDiameterM = Math.sqrt(footprintArea);
-        const maxBuildingsForSite = Math.max(1, Math.floor(siteDiameterM / (MAX_WIDTH_METERS + MIN_BUILDING_SEPARATION)));
-        
-        optimalBuildingCount = Math.min(Math.max(optimalBuildingCount, 2), maxBuildingsForSite, 8); // Never more than 8 buildings
-        
-        // Create multiple buildings
-        const buildings = [];
-        const gfaPerBuilding = gfa / optimalBuildingCount;
-        
-        // For building placement, we'll use a circular arrangement
-        // with minimum separation enforced
-        // Calculate the radius of the circle based on site size and min separation
-        const optimalRadius = Math.max(
-          siteDiameterM / 4, // Base radius on site size
-          MIN_BUILDING_SEPARATION / (2 * Math.sin(Math.PI / optimalBuildingCount)) // Ensure min separation
-        );
-        
-        // Get the center of the developable area for placement
-        let centerPoint;
-        if (buildingFootprint.geometry.type === 'Polygon') {
-          const coordinates = buildingFootprint.geometry.coordinates[0];
-          const center = calculateVisualCenter(coordinates);
-          centerPoint = center.geometry.coordinates;
-        } else {
-          // For MultiPolygon, use the first polygon's center
-          const coordinates = buildingFootprint.geometry.coordinates[0][0];
-          const center = calculateVisualCenter(coordinates);
-          centerPoint = center.geometry.coordinates;
-        }
-        
-        // Building placements: collect all positions before creating buildings
-        // so we can check for collisions
-        const buildingPlacements = [];
-        
-        for (let i = 0; i < optimalBuildingCount; i++) {
-          // Create smaller building footprints that together have the same total area
-          // Use a smaller scale factor if we're dividing due to width constraints to ensure narrow buildings
-          const baseScaleFactor = 1 / Math.sqrt(optimalBuildingCount);
-          
-          // If width is the constraint, make buildings narrower in the widest dimension
-          const scaleFactor = exceedsMaxWidth ? 
-            baseScaleFactor * (widthBasedBuildingCount > optimalBuildingCount ? 0.8 : 0.6) : 
-            baseScaleFactor;
-          
-          // Calculate angle and position on the circle
-          const angle = (2 * Math.PI * i) / optimalBuildingCount;
-          
-          // Calculate offset in longitude/latitude
-          // Convert optimalRadius from meters to degrees approximately
-          // 111,320 meters is approximately 1 degree of latitude
-          // For longitude, we adjust for latitude (becomes wider near equator, narrower near poles)
-          const latFactor = 111320; // meters per degree latitude
-          const lonFactor = 111320 * Math.cos(centerPoint[1] * (Math.PI / 180)); // meters per degree longitude at this latitude
-          
-          const offsetLat = (optimalRadius * Math.sin(angle)) / latFactor;
-          const offsetLon = (optimalRadius * Math.cos(angle)) / lonFactor;
-          
-          buildingPlacements.push({
-            index: i,
-            angle: angle,
-            position: [centerPoint[0] + offsetLon, centerPoint[1] + offsetLat],
-            scaleFactor: scaleFactor
-          });
-        }
-        
-        // Function to check if two buildings are too close (less than MIN_BUILDING_SEPARATION meters)
-        const areBuildingsTooClose = (pos1, pos2) => {
-          const point1 = turf.point(pos1);
-          const point2 = turf.point(pos2);
-          const distance = turf.distance(point1, point2, { units: 'meters' });
-          return distance < MIN_BUILDING_SEPARATION;
-        };
-        
-        // Adjust placements if buildings are too close - improved algorithm
-        let maxIterations = 10; // Increase iterations for better convergence
-        for (let iteration = 0; iteration < maxIterations; iteration++) {
-          let adjustmentsMade = false;
-          
-          for (let i = 0; i < buildingPlacements.length; i++) {
-            for (let j = i + 1; j < buildingPlacements.length; j++) {
-              if (areBuildingsTooClose(buildingPlacements[i].position, buildingPlacements[j].position)) {
-                // Move both buildings away from each other
-                const point1 = turf.point(buildingPlacements[i].position);
-                const point2 = turf.point(buildingPlacements[j].position);
-                const bearing = turf.bearing(point1, point2);
-                
-                // Calculate current distance
-                const currentDistance = turf.distance(point1, point2, { units: 'meters' });
-                // Calculate how much more distance we need
-                const additionalDistance = MIN_BUILDING_SEPARATION - currentDistance;
-                // Add extra buffer to ensure separation
-                const adjustmentDistance = (additionalDistance / 2) + 0.5; 
-                
-                // Move in opposite directions along the bearing line
-                const adjustedPoint1 = turf.destination(point1, adjustmentDistance, bearing - 180, { units: 'meters' });
-                const adjustedPoint2 = turf.destination(point2, adjustmentDistance, bearing, { units: 'meters' });
-                
-                buildingPlacements[i].position = adjustedPoint1.geometry.coordinates;
-                buildingPlacements[j].position = adjustedPoint2.geometry.coordinates;
-                
-                adjustmentsMade = true;
-              }
-            }
-          }
-          
-          if (!adjustmentsMade) break;
-        }
-        
-        // Verify all buildings have proper spacing
-        let allBuildingsProperlySpaced = true;
-        for (let i = 0; i < buildingPlacements.length; i++) {
-          for (let j = i + 1; j < buildingPlacements.length; j++) {
-            if (areBuildingsTooClose(buildingPlacements[i].position, buildingPlacements[j].position)) {
-              allBuildingsProperlySpaced = false;
-              console.warn(`Buildings ${i} and ${j} are still too close after adjustments`);
-            }
-          }
-        }
-        
-        // If buildings are still too close, reduce the number of buildings
-        if (!allBuildingsProperlySpaced && optimalBuildingCount > 2) {
-          console.log(`Reducing building count from ${optimalBuildingCount} to ${optimalBuildingCount-1} due to spacing constraints`);
-          optimalBuildingCount--;
-          // Remove the last building placement
-          buildingPlacements.pop();
-        }
-        
-        // Create a polygon object for checking if points are inside developable area
-        let developableAreaPolygon;
-        if (developableAreaFeature.geometry.type === 'Polygon') {
-          developableAreaPolygon = turf.polygon(developableAreaFeature.geometry.coordinates);
-        } else if (developableAreaFeature.geometry.type === 'MultiPolygon') {
-          // For multipolygon, we'll just use the first polygon for now
-          // This is a simplification, but should work for most cases
-          developableAreaPolygon = turf.polygon(developableAreaFeature.geometry.coordinates[0]);
-        }
-        
-        // Check if building placements are within the developable area
-        for (let i = 0; i < buildingPlacements.length; i++) {
-          const placement = buildingPlacements[i];
-          const point = turf.point(placement.position);
-          
-          // Check if point is inside developable area
-          if (!turf.booleanPointInPolygon(point, developableAreaPolygon)) {
-            console.warn(`Building ${i} is outside developable area, adjusting position`);
-            
-            // Move point back toward center until it's inside the polygon
-            const center = turf.point(centerPoint);
-            const bearing = turf.bearing(center, point);
-            const originalDistance = turf.distance(center, point, { units: 'meters' });
-            
-            // Binary search to find the maximum distance we can go while staying inside
-            let minDistance = 0; // Definitely inside (at center)
-            let maxDistance = originalDistance;
-            let currentDistance = maxDistance * 0.8; // Start at 80% of original distance
-            let iterations = 0;
-            const maxSearchIterations = 10;
-            
-            while (iterations < maxSearchIterations) {
-              iterations++;
-              
-              // Move point toward center by the current distance percentage
-              const adjustedPoint = turf.destination(center, currentDistance, bearing, { units: 'meters' });
-              
-              if (turf.booleanPointInPolygon(adjustedPoint, developableAreaPolygon)) {
-                // This position works, try going a bit further out
-                minDistance = currentDistance;
-                currentDistance = (currentDistance + maxDistance) / 2;
-              } else {
-                // This position is outside, try moving closer to center
-                maxDistance = currentDistance;
-                currentDistance = (minDistance + currentDistance) / 2;
-              }
-              
-              // If we've converged to a good enough solution, stop
-              if (maxDistance - minDistance < 1) {
-                break;
-              }
-            }
-            
-            // Use the found distance that keeps the point inside
-            const finalPoint = turf.destination(center, minDistance, bearing, { units: 'meters' });
-            buildingPlacements[i].position = finalPoint.geometry.coordinates;
-            
-            // Add a small buffer from the edge (move slightly toward center)
-            const safetyBufferMeters = 2;
-            const bufferedPoint = turf.destination(
-              turf.point(buildingPlacements[i].position),
-              safetyBufferMeters,
-              turf.bearing(turf.point(buildingPlacements[i].position), center),
-              { units: 'meters' }
-            );
-            buildingPlacements[i].position = bufferedPoint.geometry.coordinates;
-          }
-        }
-        
-        // Create buildings using the final placements
-        for (const placement of buildingPlacements) {
-          let buildingFeature;
-          
-          if (buildingFootprint.geometry.type === 'Polygon') {
-            const coordinates = buildingFootprint.geometry.coordinates[0];
-            const center = { geometry: { coordinates: centerPoint } };
-            
-            // Create a smaller footprint for this building
-            const scaledCoordinates = createScaledPolygon(coordinates, center, placement.scaleFactor);
-            
-            // Move the scaled footprint to the designated position
-            const offsetCoordinates = scaledCoordinates.map(coord => {
-              // Calculate the offset from center to the new position
-              const offsetLon = placement.position[0] - centerPoint[0];
-              const offsetLat = placement.position[1] - centerPoint[1];
-              
-              return [
-                coord[0] + offsetLon,
-                coord[1] + offsetLat
-              ];
-            });
-            
-            buildingFeature = {
-              ...buildingFootprint,
-              geometry: {
-                ...buildingFootprint.geometry,
-                coordinates: [[...offsetCoordinates, offsetCoordinates[0]]] // Close the polygon
-              }
-            };
-            
-            // Check if the new building still exceeds max width
-            const newDimensions = calculatePolygonWidth(buildingFeature.geometry.coordinates[0]);
-            if (newDimensions.maxDimension > MAX_WIDTH_METERS) {
-              // Further constrain the shape in the direction of its longest dimension
-              const isWiderThanTall = newDimensions.width > newDimensions.height;
-              const constraintScaleFactor = isWiderThanTall ? 
-                [MAX_WIDTH_METERS / newDimensions.width, 1.0] : 
-                [1.0, MAX_WIDTH_METERS / newDimensions.height];
-              
-              const positionCenter = { geometry: { coordinates: placement.position } };
-              const constrainedCoordinates = offsetCoordinates.map(coord => [
-                positionCenter.geometry.coordinates[0] + (coord[0] - positionCenter.geometry.coordinates[0]) * constraintScaleFactor[0],
-                positionCenter.geometry.coordinates[1] + (coord[1] - positionCenter.geometry.coordinates[1]) * constraintScaleFactor[1]
-              ]);
-              
-              buildingFeature.geometry.coordinates = [[...constrainedCoordinates, constrainedCoordinates[0]]];
-            }
-          } else if (buildingFootprint.geometry.type === 'MultiPolygon' && buildingFootprint.geometry.coordinates.length > 0) {
-            // For MultiPolygon, use the first polygon for each building
-            const polygonIndex = Math.min(placement.index % buildingFootprint.geometry.coordinates.length, buildingFootprint.geometry.coordinates.length - 1);
-            const coordinates = buildingFootprint.geometry.coordinates[polygonIndex][0];
-            const center = { geometry: { coordinates: centerPoint } };
-            
-            // Create a smaller footprint for this building
-            const scaledCoordinates = createScaledPolygon(coordinates, center, placement.scaleFactor);
-            
-            // Move the scaled footprint to the designated position
-            const offsetCoordinates = scaledCoordinates.map(coord => {
-              // Calculate the offset from center to the new position
-              const offsetLon = placement.position[0] - centerPoint[0];
-              const offsetLat = placement.position[1] - centerPoint[1];
-              
-              return [
-                coord[0] + offsetLon,
-                coord[1] + offsetLat
-              ];
-            });
-            
-            buildingFeature = {
-              ...buildingFootprint,
-              geometry: {
-                type: 'Polygon',
-                coordinates: [[...offsetCoordinates, offsetCoordinates[0]]] // Close the polygon
-              }
-            };
-            
-            // Check if the new building still exceeds max width, similar to above
-            const newDimensions = calculatePolygonWidth(buildingFeature.geometry.coordinates[0]);
-            if (newDimensions.maxDimension > MAX_WIDTH_METERS) {
-              const isWiderThanTall = newDimensions.width > newDimensions.height;
-              const constraintScaleFactor = isWiderThanTall ? 
-                [MAX_WIDTH_METERS / newDimensions.width, 1.0] : 
-                [1.0, MAX_WIDTH_METERS / newDimensions.height];
-              
-              const positionCenter = { geometry: { coordinates: placement.position } };
-              const constrainedCoordinates = offsetCoordinates.map(coord => [
-                positionCenter.geometry.coordinates[0] + (coord[0] - positionCenter.geometry.coordinates[0]) * constraintScaleFactor[0],
-                positionCenter.geometry.coordinates[1] + (coord[1] - positionCenter.geometry.coordinates[1]) * constraintScaleFactor[1]
-              ]);
-              
-              buildingFeature.geometry.coordinates = [[...constrainedCoordinates, constrainedCoordinates[0]]];
-            }
-          } else {
-            continue; // Skip if no valid geometry
-          }
-          
-          // Calculate the footprint area of this individual building
-          const buildingFootprintArea = calculatePolygonArea(buildingFeature.geometry.coordinates[0]);
-          
-          // Calculate building height for this individual building (respecting HOB)
-          const buildingRequiredFloors = Math.ceil(gfaPerBuilding / buildingFootprintArea);
-          
-          // Strictly enforce HOB limit
-          const buildingFloors = hobLimit > 0 
-            ? Math.min(buildingRequiredFloors, maxAllowedFloors) 
-            : buildingRequiredFloors;
-            
-          // Ensure building height is exactly based on floor count
-          const buildingHeight = buildingFloors * floorToFloorHeight;
-          
-          // Calculate actual GFA based on capped height (if HOB restricted)
-          const actualBuildingGfa = buildingFloors * buildingFootprintArea;
-          
-          // Add building properties
-          const building = {
-            ...buildingFeature,
-            properties: {
-              ...buildingFeature.properties,
-              name: `Building-${placement.index + 1}`,
-              height: buildingHeight,
-              floorToFloor: floorToFloorHeight,
-              efficiency: settings.gbaToGfaRatio,
-              sellEfficiency: settings.gfaToNsaRatio,
-              shiny: true,
-              fillColor: '#9900CC',
-              fillOpacity: 1,
-              outlineColor: '#660099',
-              floors: buildingFloors,
-              gfa: actualBuildingGfa,
-              hobRestricted: buildingRequiredFloors > maxAllowedFloors,
-              widthRestricted: exceedsMaxWidth,
-              extrude: true, // Add extrude property for 3D display
-              color: "#777777",
-              stroke: "grey"
-            }
-          };
-          
-          // Check if building is completely within developable area
-          let isCompletelyInside = true;
-          if (building.geometry.type === 'Polygon') {
-            try {
-              // Check that the building footprint is fully inside the developable area
-              // First, simplify it slightly for faster computation
-              const simplifiedBuilding = turf.simplify(turf.polygon(building.geometry.coordinates), {
-                tolerance: 0.00001,
-                highQuality: false
-              });
-              
-              // Then check if it's contained within developable area
-              if (!turf.booleanWithin(simplifiedBuilding, developableAreaPolygon)) {
-                isCompletelyInside = false;
-                console.warn(`Building ${placement.index + 1} footprint extends outside developable area, scaling down`);
-                
-                // Scale down the building slightly toward its center
-                const buildingCenter = turf.centroid(simplifiedBuilding);
-                const reducedScale = placement.scaleFactor * 0.85; // 85% of original scale
-                
-                // Re-generate the building with the reduced scale
-                let newCoordinates;
-                if (buildingFootprint.geometry.type === 'Polygon') {
-                  newCoordinates = createScaledPolygon(
-                    buildingFootprint.geometry.coordinates[0], 
-                    buildingCenter, 
-                    reducedScale
-                  );
-                } else {
-                  // For MultiPolygon, use the relevant polygon
-                  const polygonIndex = Math.min(
-                    placement.index % buildingFootprint.geometry.coordinates.length, 
-                    buildingFootprint.geometry.coordinates.length - 1
-                  );
-                  newCoordinates = createScaledPolygon(
-                    buildingFootprint.geometry.coordinates[polygonIndex][0], 
-                    buildingCenter, 
-                    reducedScale
-                  );
-                }
-                
-                // Update building geometry
-                building.geometry.coordinates = [[...newCoordinates, newCoordinates[0]]];
-                
-                // Recalculate footprint area and update related properties
-                const newFootprintArea = calculatePolygonArea(building.geometry.coordinates[0]);
-                const newBuildingGfa = buildingFloors * newFootprintArea;
-                building.properties.gfa = newBuildingGfa;
-              }
-            } catch (error) {
-              console.error("Error checking building containment:", error);
-              // If error occurs, proceed with original building
-            }
-          }
-          
-          buildings.push(building);
-        }
-        
-        return { 
-          buildings, 
-          buildingCount: optimalBuildingCount,
-          hobRestricted: exceededHobLimit,
-          widthRestricted: exceedsMaxWidth,
-          maxAllowedFloors: maxAllowedFloors,
-          hobLimit: hobLimit,
-          maxWidth: MAX_WIDTH_METERS,
-          minSeparation: MIN_BUILDING_SEPARATION
-        };
-      } else {
-        // Single building is optimal
-        // Check if it's under width constraints
-        const dimensions = buildingFootprint.geometry.type === 'Polygon' ? 
-          calculatePolygonWidth(buildingFootprint.geometry.coordinates[0]) : 
-          { maxDimension: 0 };
-        
-        // If the single building would be too wide, constrain it
-        if (dimensions.maxDimension > MAX_WIDTH_METERS) {
-          // Get the center
-          const coordinates = buildingFootprint.geometry.coordinates[0];
-          const center = calculateVisualCenter(coordinates);
-          
-          // Constrain the shape in the direction of its longest dimension
-          const isWiderThanTall = dimensions.width > dimensions.height;
-          const constraintScaleFactor = isWiderThanTall ? 
-            [MAX_WIDTH_METERS / dimensions.width, 1.0] : 
-            [1.0, MAX_WIDTH_METERS / dimensions.height];
-          
-          const constrainedCoordinates = coordinates.map(coord => [
-            center.geometry.coordinates[0] + (coord[0] - center.geometry.coordinates[0]) * constraintScaleFactor[0],
-            center.geometry.coordinates[1] + (coord[1] - center.geometry.coordinates[1]) * constraintScaleFactor[1]
-          ]);
-          
-          buildingFootprint.geometry.coordinates = [[...constrainedCoordinates, constrainedCoordinates[0]]];
-          
-          // Recalculate footprint area after constraint
-          footprintArea = calculatePolygonArea(buildingFootprint.geometry.coordinates[0]);
-        }
-        
-        // Check if the required GFA can fit within HOB limits
-        const actualFloors = hobLimit > 0 
-          ? Math.min(requiredFloors, maxAllowedFloors) 
-          : requiredFloors;
-        const actualHeight = actualFloors * floorToFloorHeight;
-        const actualGfa = actualFloors * footprintArea;
-        
-        const building = {
-          ...buildingFootprint,
-          properties: {
-            ...buildingFootprint.properties,
-            name: 'Building-Massing',
-            height: actualHeight, // Use actualHeight based on floors to ensure HOB compliance
-            floorToFloor: floorToFloorHeight, 
-            efficiency: settings.gbaToGfaRatio,
-            sellEfficiency: settings.gfaToNsaRatio,
-            shiny: true,
-            fillColor: '#9900CC',
-            fillOpacity: 1,
-            outlineColor: '#660099',
-            floors: actualFloors,
-            gfa: actualGfa,
-            hobRestricted: requiredFloors > maxAllowedFloors,
-            widthRestricted: dimensions.maxDimension > MAX_WIDTH_METERS,
-            extrude: true, // Add extrude property for 3D display
-            color: "#777777",
-            stroke: "grey"
-          }
-        };
-        
-        // Check if single building is completely within developable area
-        let developableAreaPolygon = null;
-        if (developableAreaFeature.geometry.type === 'Polygon') {
-          developableAreaPolygon = turf.polygon(developableAreaFeature.geometry.coordinates);
-        } else if (developableAreaFeature.geometry.type === 'MultiPolygon') {
-          developableAreaPolygon = turf.polygon(developableAreaFeature.geometry.coordinates[0]);
-        }
-        
-        if (developableAreaPolygon && building.geometry.type === 'Polygon') {
-          try {
-            // Check that the building footprint is fully inside the developable area
-            const simplifiedBuilding = turf.simplify(turf.polygon(building.geometry.coordinates), {
-              tolerance: 0.00001,
-              highQuality: false
-            });
-            
-            // Then check if it's contained
-            if (!turf.booleanWithin(simplifiedBuilding, developableAreaPolygon)) {
-              console.warn(`Single building footprint extends outside developable area, scaling down`);
-              
-              // Get the center of the building
-              const buildingCenter = calculateVisualCenter(building.geometry.coordinates[0]);
-              
-              // Scale down slightly (90% of original size)
-              const reducedScale = 0.9;
-              const newCoordinates = createScaledPolygon(
-                building.geometry.coordinates[0], 
-                buildingCenter, 
-                reducedScale
-              );
-              
-              // Update geometry
-              building.geometry.coordinates = [[...newCoordinates, newCoordinates[0]]];
-              
-              // Recalculate area and GFA
-              const newFootprintArea = calculatePolygonArea(building.geometry.coordinates[0]);
-              const newGfa = actualFloors * newFootprintArea;
-              building.properties.gfa = newGfa;
-            }
-          } catch (error) {
-            console.error("Error checking single building containment:", error);
-          }
-        }
-        
-        return { 
-          buildings: [building], 
-          buildingCount: 1,
-          hobRestricted: requiredFloors > maxAllowedFloors,
-          maxAllowedFloors: maxAllowedFloors,
-          hobLimit: hobLimit,
-          widthRestricted: dimensions.maxDimension > MAX_WIDTH_METERS,
-          maxWidth: MAX_WIDTH_METERS,
-          minSeparation: MIN_BUILDING_SEPARATION
-        };
-      }
-    } catch (error) {
-      console.error('Error calculating optimal building configuration:', error);
-      return null;
-    }
   };
 
   // Function to handle massing generation
   const handleGenerateMassing = async () => {
+    if (!developableArea || developableArea.features.length === 0) {
+      setNotification({
+        type: 'error',
+        message: 'No developable area defined. Please define a developable area first.'
+      });
+      return;
+    }
+    
+    setIsDrawing(true);
+    
     try {
-      setIsDrawing(true);
-      
-      // First check if we have a developable area
-      if (!developableArea || !developableArea.features || developableArea.features.length === 0) {
-        setNotification({
-          type: 'error',
-          message: 'No developable area available. Please create a developable area first.'
-        });
-        setIsDrawing(false);
-        return;
-      }
-      
-      if (!calculationResults) {
-        setNotification({
-          type: 'error',
-          message: 'Missing calculation results. Please ensure calculations are complete.'
-        });
-        setIsDrawing(false);
-        return;
-      }
-      
-      // Get GFA from calculations, ensuring proper handling of missing values
-      let gfa = calculationResults.gfa;
-      
-      // If GFA is 0 or missing, try to use HOB-based calculation
-      if (!gfa || gfa === 0) {
-        // For high density, we need to follow the same approach as in FeasibilitySettings
-        // This means using site efficiency ratio (60% by default) for building footprint 
-        // rather than 100% of developable area
-        
-        // Get HOB and use it if available
-        let hob = 0;
-        if (customControls?.enabled && customControls.hob !== null) {
-          hob = customControls.hob;
-        } else if (selectedFeature?.properties?.copiedFrom?.site_suitability__height_of_building) {
-          hob = selectedFeature.properties.copiedFrom.site_suitability__height_of_building;
-        }
-        
-        if (hob > 0) {
-          // Calculate number of floors based on HOB and floor-to-floor height
-          const maxStoreys = Math.floor(hob / settings[density].floorToFloorHeight);
-          
-          // For medium density, use the full developable area for building footprint
-          // For high density, use the siteEfficiencyRatio as in the original calculations
-          const siteCoverage = density === 'mediumDensity' 
-            ? calculationResults.developableArea
-            : calculationResults.developableArea * settings[density].siteEfficiencyRatio;
-          
-          // GFA = Site Coverage × Storeys × GBA to GFA Ratio
-          gfa = siteCoverage * maxStoreys * settings[density].gbaToGfaRatio;
-          
-          console.log(`Recalculated GFA using HOB (${hob}m): ${gfa} m²`);
-          console.log(`- HOB approach: ${hob}m height / ${settings[density].floorToFloorHeight}m per floor = ${maxStoreys} floors`);
-          console.log(`- Site coverage: ${siteCoverage} m² (${density === 'mediumDensity' ? '100%' : (settings[density].siteEfficiencyRatio * 100).toFixed(0) + '%'} of ${calculationResults.developableArea} m²)`);
-          console.log(`- GFA calculation: ${siteCoverage} m² × ${maxStoreys} floors × ${settings[density].gbaToGfaRatio} efficiency = ${gfa} m²`);
-        } else {
-          setNotification({
-            type: 'error',
-            message: 'Cannot generate massing: GFA is 0 and no HOB value available.'
-          });
-          setIsDrawing(false);
-          return;
-        }
-      }
-      
-      // Use the developable area features to generate buildings
-      // If multiple features exist, we'll create a building on each one where appropriate
-      const buildingResults = [];
-      let totalBuildings = 0;
-      let anyHobRestricted = false;
-      let anyWidthRestricted = false;
-      let maxAllowedFloors = Infinity;
-      let hobLimit = 0;
-      let optimalConfig = null;
-      
-      // Generate buildings for each developable area feature
-      for (const feature of developableArea.features) {
-        // Get GFA from calculations - distribute proportionally if multiple areas
-        const featureArea = calculatePolygonArea(feature.geometry.coordinates[0]);
-        const totalArea = calculationResults.developableArea;
-        const featureGFA = gfa * (featureArea / totalArea); // Use our potentially recalculated GFA
-        
-        // Calculate optimal building configuration
-        const config = calculateOptimalBuildingConfig(feature, featureGFA, settings[density]);
-        
-        if (!config) continue;
-        
-        optimalConfig = config; // Store for notification message
-        totalBuildings += config.buildingCount;
-        if (config.hobRestricted) {
-          anyHobRestricted = true;
-          maxAllowedFloors = config.maxAllowedFloors;
-          hobLimit = config.hobLimit;
-        }
-        if (config.widthRestricted) {
-          anyWidthRestricted = true;
-        }
-        
-        // Create each building
-        for (const building of config.buildings) {
-          const buildingResult = await createStyledDrawingFromFeature(
-            building,
-            {
-              fillColor: building.properties.fillColor,
-              fillOpacity: building.properties.fillOpacity,
-              outlineColor: building.properties.outlineColor,
-              namePrefix: `${density === 'mediumDensity' ? 'Medium' : 'High'}-Density-${building.properties.name}`,
-              description: `${density === 'mediumDensity' ? 'Medium' : 'High'} Density Building (${building.properties.height.toFixed(1)}m height, ${building.properties.floors} floors)`,
-              includeTimestamp: true
-            },
-            (notification) => {
-              // Suppress intermediate notifications
-              console.log('Building creation notification:', notification);
-            },
-            () => {}
-          );
-          
-          if (buildingResult) {
-            buildingResults.push(buildingResult);
+      // Get road boundary if defined
+      let roadBoundaryFeature = null;
+      if (hasRoadBoundary && roadBoundaryId) {
+        try {
+          // Try to get the road boundary feature from Giraffe state
+          const state = giraffeState.getAll();
+          if (state && state.rawSections && state.rawSections[roadBoundaryId]) {
+            roadBoundaryFeature = state.rawSections[roadBoundaryId];
+          }
+        } catch (stateError) {
+          console.warn('Error accessing giraffeState.getAll(), trying alternative:', stateError);
+          try {
+            // Fallback to using just the rawSections
+            const rawSections = giraffeState.get('rawSections');
+            if (rawSections && rawSections[roadBoundaryId]) {
+              roadBoundaryFeature = rawSections[roadBoundaryId];
+            }
+          } catch (error) {
+            console.warn('Error getting road boundary feature:', error);
           }
         }
       }
       
-      if (buildingResults.length > 0) {
-        let successMessage = '';
+      // Build parameters for the optimal building config calculation
+      const parameters = {
+        siteEfficiencyRatio: parseFloat(buildingParams.siteEfficiencyRatio) || 0.6,
+        floorToFloorHeight: parseFloat(buildingParams.floorToFloorHeight) || 3.1,
+        gbaToGfaRatio: parseFloat(buildingParams.gbaToGfaRatio) || 0.85,
+        maxBuildingHeight: parseFloat(buildingParams.maxBuildingHeight) || 100,
+        minBuildingSeparation: parseFloat(buildingParams.minBuildingSeparation) || 6,
+        maxBuildingDepth: parseFloat(buildingParams.maxBuildingDepth) || 18,
+        roadBoundaryFeature: roadBoundaryFeature
+      };
+      
+      // Get developable area features
+      const featuresArray = developableArea.features;
+      
+      // Calculate building configurations for each developable area
+      const buildingConfigs = [];
+      let totalBuildings = 0;
+      let anyDepthRestricted = false;
+      let anyHobRestricted = false;
+      let hobLimit = parameters.maxBuildingHeight;
+      let maxAllowedFloors = Math.floor(hobLimit / parameters.floorToFloorHeight);
+      
+      // Create parameters object for the utility function
+      const buildingParameters = {
+        siteEfficiencyRatio: buildingParams.siteEfficiencyRatio,
+        floorToFloorHeight: buildingParams.floorToFloorHeight,
+        gbaToGfaRatio: buildingParams.gbaToGfaRatio,
+        maxBuildingHeight: buildingParams.maxBuildingHeight,
+        minBuildingSeparation: buildingParams.minBuildingSeparation,
+        maxBuildingDepth: buildingParams.maxBuildingDepth,
+        roadBoundaryFeature: roadBoundaryFeature
+      };
+      
+      // Generate buildings for each developable area feature
+      for (const feature of featuresArray) {
+        // Get GFA from calculations - distribute proportionally if multiple areas
+        const featureArea = calculatePolygonArea(feature.geometry.coordinates[0]);
+        const totalArea = calculationResults.developableArea;
         
-        if (anyHobRestricted && anyWidthRestricted) {
-          successMessage = `Generated ${totalBuildings} buildings (limited by both ${hobLimit}m height and 18m width constraints)`;
-        } else if (anyHobRestricted) {
-          successMessage = `Generated ${totalBuildings} buildings (height limited to ${hobLimit}m/${maxAllowedFloors} floors by HOB controls)`;
-        } else if (anyWidthRestricted) {
-          successMessage = `Generated ${totalBuildings} buildings (width limited to 18m maximum)`;
-        } else if (totalBuildings > 1) {
-          successMessage = `Successfully generated ${totalBuildings} buildings optimized for ${Math.round(gfa).toLocaleString()} m² GFA`;
-        } else if (optimalConfig) {
-          successMessage = `Building massing generated (${optimalConfig.buildings[0].properties.floors} floors, ${optimalConfig.buildings[0].properties.height.toFixed(1)}m height)`;
+        // Calculate optimal building configuration using our utility - removed featureGFA parameter
+        const config = calculateOptimalBuildingConfig(feature, buildingParameters);
+        
+        if (!config) continue;
+        
+        totalBuildings += config.buildingCount;
+        if (config.hobRestricted) {
+          anyHobRestricted = true;
+          hobLimit = config.hobLimit;
+          maxAllowedFloors = config.maxAllowedFloors;
+        }
+        if (config.depthLimited) { // Renamed from widthLimited
+          anyDepthRestricted = true;
         }
         
-        setNotification({
-          type: 'success',
-          message: successMessage
-        });
-      } else {
+        buildingConfigs.push(config);
+      }
+      
+      if (buildingConfigs.length === 0) {
         setNotification({
           type: 'error',
-          message: 'Failed to generate any buildings. Please try again.'
+          message: 'Could not generate any building configurations. Please try different parameters.'
+        });
+        setIsDrawing(false);
+        return;
+      }
+      
+      try {
+        // Clear any existing massing buildings
+        // Use the giraffeState object directly instead of RPC call
+        let currentGiraffeState;
+        try {
+          // Try getting the full state first
+          currentGiraffeState = giraffeState.getAll();
+        } catch (stateError) {
+          console.warn('Error accessing giraffeState.getAll(), using raw sections directly:', stateError);
+          // Fallback: create a minimal state object with just rawSections if we can access it
+          currentGiraffeState = { rawSections: giraffeState.get('rawSections') || {} };
+        }
+        
+        // Find and delete existing massing buildings by checking layerId/name containing "massing-buildings"
+        if (currentGiraffeState && currentGiraffeState.rawSections) {
+          const massingSectionIds = Object.entries(currentGiraffeState.rawSections)
+            .filter(([id, section]) => 
+              section?.properties?.name?.includes('massing-buildings') || 
+              section?.properties?.layerId?.includes('massing-buildings'))
+            .map(([id]) => id);
+          
+          console.log(`Found ${massingSectionIds.length} existing massing buildings to remove`);
+          
+          // Delete each massing building
+          for (const id of massingSectionIds) {
+            await rpc.invoke('deleteRawSection', id);
+          }
+        }
+        
+        // Collect all building features into a single FeatureCollection
+        const allBuildingFeatures = [];
+        
+        // Create features for each building in the results
+        for (const config of buildingConfigs) {
+          for (const building of config.buildings) {
+            const floorCount = building.properties.floors;
+            const buildingHeight = building.properties.height;
+            const buildingIndex = building.properties.buildingIndex;
+            
+            // Create a styled building feature
+            const buildingFeature = {
+              ...building,
+              properties: {
+                ...building.properties,
+                name: `Building-${buildingIndex}-massing-buildings`,
+                layerId: `Building-${buildingIndex}-massing-buildings`,
+                description: `Floors: ${floorCount}\nHeight: ${buildingHeight.toFixed(1)}m`,
+                color: '#FFD700',
+                fillOpacity: 1,
+                stroke: '#FFA500',
+                strokeWidth: 2,
+                // Preserve special Giraffe properties for building stacking
+                _isBaseSection: building.properties._isBaseSection,
+                _isTopOfStack: building.properties._isTopOfStack,
+                _baseHeight: building.properties._baseHeight || 0
+              }
+            };
+            
+            allBuildingFeatures.push(buildingFeature);
+          }
+        }
+        
+        // Create all buildings in a single API call
+        if (allBuildingFeatures.length > 0) {
+          await rpc.invoke('createRawSections', [allBuildingFeatures]);
+        }
+        
+        // Construct success message
+        let totalGFA = 0;
+        buildingConfigs.forEach(config => {
+          if (config.calculatedGFA) {
+            totalGFA += config.calculatedGFA;
+          }
+        });
+        
+        // Show success notification
+        setNotification({
+          type: 'success',
+          message: `Generated ${totalBuildings} building${totalBuildings !== 1 ? 's' : ''} with ${Math.round(totalGFA).toLocaleString()} m² GFA`
+        });
+        
+        // Show warning notifications for building restrictions
+        if (anyHobRestricted) {
+          setNotification({
+            type: 'warning',
+            message: `Height of Building (HOB) limit of ${hobLimit}m (${maxAllowedFloors} floors) affected some sites`
+          });
+        }
+        
+        if (anyDepthRestricted) {
+          setNotification({
+            type: 'warning',
+            message: 'Building depth constraints affected some sites, resulting in multiple buildings'
+          });
+        }
+      } catch (error) {
+        console.error('Error creating building drawings:', error);
+        setNotification({
+          type: 'error',
+          message: 'Error creating building drawings: ' + error.message
+        });
+      }
+      
+      setIsDrawing(false);
+      
+      // Show warning notifications for building restrictions
+      if (anyHobRestricted) {
+        setNotification({
+          type: 'warning',
+          message: `Height of Building (HOB) limit of ${hobLimit}m (${maxAllowedFloors} floors) affected some sites`
+        });
+      }
+      
+      if (anyDepthRestricted) {
+        setNotification({
+          type: 'warning',
+          message: 'Building depth constraints affected some sites, resulting in multiple buildings'
         });
       }
     } catch (error) {
-      console.error("Error in handleGenerateMassing:", error);
+      console.error('Error in generateMassing:', error);
       setNotification({
         type: 'error',
-        message: `Failed to generate massing: ${error.message}`
+        message: 'Error generating massing: ' + error.message
       });
-    } finally {
       setIsDrawing(false);
     }
   };
@@ -2336,16 +1599,126 @@ const FeasibilityCalculation = ({
 
   // Handle opening the building parameters modal
   const handleOpenParametersModal = () => {
-    setShowParametersModal(true);
+    setShowBuildingParametersModal(true);
   };
   
   // Handle saving building parameters
   const handleSaveParameters = (updatedParameters) => {
-    setCurrentBuildingParameters(updatedParameters);
-    setNotification({
-      type: 'success',
-      message: 'Building parameters updated successfully'
-    });
+    setBuildingParams(updatedParameters);
+    
+    // If user clicked Define Road Boundary, start road boundary drawing mode
+    if (updatedParameters.defineRoadBoundary) {
+      setIsDrawingRoadBoundary(true);
+      startRoadBoundaryDrawing();
+    }
+  };
+  
+  // Start road boundary drawing mode
+  const startRoadBoundaryDrawing = async () => {
+    try {
+      setNotification({
+        type: 'info',
+        message: 'Draw the primary road boundary line by clicking on the map'
+      });
+      
+      // First activate a line drawing layer
+      const layerName = 'road-boundary-drawing-layer';
+      await rpc.invoke('activateDrawingLayer', layerName);
+      
+      // Set the draw tool to line or lineString
+      await rpc.invoke('setDrawTool', 'lineString');
+      
+      try {
+        // Use getUserDrawnRawSection instead of waitForDrawing
+        const sectionId = await rpc.invoke('getUserDrawnRawSection');
+        
+        if (sectionId) {
+          // Get the section from the state
+          let section;
+          try {
+            section = giraffeState.get('rawSections')[sectionId];
+          } catch (e) {
+            console.error('Error getting section:', e);
+            try {
+              const state = giraffeState.getAll();
+              section = state.rawSections[sectionId];
+            } catch (e2) {
+              console.error('Error getting section from full state:', e2);
+            }
+          }
+          
+          if (section) {
+            // Clear any existing road boundary
+            if (roadBoundaryId) {
+              try {
+                await rpc.invoke('deleteRawSection', roadBoundaryId);
+              } catch (error) {
+                console.warn('Error deleting existing road boundary:', error);
+              }
+            }
+            
+            // Style the road boundary
+            const styledSection = {
+              ...section,
+              properties: {
+                ...section.properties,
+                name: 'Road-Boundary',
+                layerId: 'road-boundary-layer',
+                description: 'Primary road boundary for building depth calculation',
+                color: '#FF4500',
+                stroke: '#FF4500',
+                strokeWidth: 3,
+                strokeDasharray: '5,5'
+              }
+            };
+            
+            // Update the section with styling
+            await rpc.invoke('updateRawSection', sectionId, styledSection);
+            
+            // Save the ID
+            setRoadBoundaryId(sectionId);
+            setHasRoadBoundary(true);
+            
+            // Update building parameters
+            setBuildingParams(prev => ({
+              ...prev,
+              roadBoundaryId: sectionId,
+              hasRoadBoundary: true,
+              defineRoadBoundary: false
+            }));
+            
+            setNotification({
+              type: 'success',
+              message: 'Road boundary defined successfully'
+            });
+          } else {
+            setNotification({
+              type: 'error',
+              message: 'Could not retrieve the road boundary section. Please try again.'
+            });
+          }
+        } else {
+          setNotification({
+            type: 'error',
+            message: 'No road boundary was drawn. Please try again.'
+          });
+        }
+      } catch (error) {
+        console.error('Error drawing road boundary:', error);
+        setNotification({
+          type: 'error',
+          message: 'Error drawing road boundary: ' + error.message
+        });
+      }
+    } catch (error) {
+      console.error('Error drawing road boundary:', error);
+      setNotification({
+        type: 'error',
+        message: 'Error drawing road boundary: ' + error.message
+      });
+    } finally {
+      setIsDrawingRoadBoundary(false);
+    }
   };
 
   return (
@@ -3245,11 +2618,60 @@ const FeasibilityCalculation = ({
 
       {/* Building parameters modal */}
       <BuildingParametersModal 
-        isOpen={showParametersModal}
-        onClose={() => setShowParametersModal(false)}
-        defaultParameters={currentBuildingParameters}
+        isOpen={showBuildingParametersModal}
+        onClose={() => setShowBuildingParametersModal(false)}
+        defaultParameters={buildingParams}
         onSave={handleSaveParameters}
       />
+
+      {/* Actions */}
+      <div className="mt-4 flex space-x-3 items-center">
+        <button
+          onClick={handleDraw}
+          disabled={isDrawing || !developableArea}
+          className={`px-3 py-1.5 text-white rounded ${isDrawing ? 'bg-gray-400' : 'bg-blue-500 hover:bg-blue-600'}`}
+        >
+          {isDrawing ? 'Drawing...' : 'Auto Draw Developable Area'}
+        </button>
+        
+        <Button
+          onClick={handleOpenParametersModal}
+          disabled={isDrawing}
+          className={`px-3 py-1.5 rounded-md ${isDrawing ? 'bg-gray-400 text-gray-200' : 'bg-blue-500 hover:bg-blue-600 text-white'}`}
+        >
+          <Building2 className="w-4 h-4 mr-1.5" /> Building Parameters
+        </Button>
+        
+        <Button
+          onClick={handleGenerateMassing}
+          disabled={isDrawing || !developableArea}
+          className={`px-3 py-1.5 rounded-md ${isDrawing || !developableArea ? 'bg-gray-400 text-gray-200' : 'bg-gradient-to-r from-teal-500 to-blue-500 hover:from-teal-600 hover:to-blue-600 text-white'}`}
+        >
+          <Building2 className="w-4 h-4 mr-1.5" /> {isDrawing ? 'Generating...' : 'Generate Massing'}
+        </Button>
+      </div>
+        
+      {/* Show instructions when drawing road boundary */}
+      {isDrawingRoadBoundary && (
+        <div className="mt-4 bg-blue-50 border border-blue-200 p-3 rounded-md text-blue-700 flex items-center">
+          <Info className="w-5 h-5 mr-2 flex-shrink-0" />
+          <div>
+            <p className="font-medium">Drawing Road Boundary</p>
+            <p className="text-sm">Click on the map to define points along the primary road boundary. Double-click to complete the line.</p>
+          </div>
+        </div>
+      )}
+      
+      {/* Show road boundary status when defined */}
+      {hasRoadBoundary && !isDrawingRoadBoundary && (
+        <div className="mt-4 bg-green-50 border border-green-200 p-3 rounded-md text-green-700 flex items-center">
+          <Check className="w-5 h-5 mr-2 flex-shrink-0" />
+          <div>
+            <p className="font-medium">Road Boundary Set</p>
+            <p className="text-sm">The {buildingParams.maxBuildingDepth}m maximum building depth will be measured from this boundary.</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -148,7 +148,9 @@ export const createStyledDrawingFromFeature = async (
         fillOpacity: styleOptions.fillOpacity || 0.5,
         outlineColor: styleOptions.outlineColor || '#00aa00',
         height: selectedFeature.properties?.height || 0,
-        shiny: selectedFeature.properties?.shiny || true
+        shiny: selectedFeature.properties?.shiny || true,
+        // Add group property for later filtering if provided
+        ...(styleOptions.group && { group: styleOptions.group })
       }
     };
     
@@ -252,7 +254,11 @@ export const createStyledDrawingFromFeature = async (
         shiny: truncatedFeature.properties.shiny || true,
         is3D: truncatedFeature.properties.is3D || false,
         extrude: truncatedFeature.properties.extrude || false,
-        extrudeHeight: truncatedFeature.properties.extrudeHeight || truncatedFeature.properties.height || 0
+        extrudeHeight: truncatedFeature.properties.extrudeHeight || truncatedFeature.properties.height || 0,
+        // Include custom groupTag in the name if needed for filtering later
+        ...(truncatedFeature.properties.group && { 
+          name: `${drawingName}-${truncatedFeature.properties.group}` 
+        })
       },
       geometry: {
         type: "Polygon",

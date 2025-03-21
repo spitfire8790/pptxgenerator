@@ -14,6 +14,10 @@ import {
   Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { DialogContent } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 
 /**
  * A modal component that allows users to adjust building parameters
@@ -35,10 +39,13 @@ const BuildingParametersModal = ({
   const [parameters, setParameters] = useState({
     maxBuildingHeight: defaultParameters.maxBuildingHeight || 100,
     minBuildingSeparation: defaultParameters.minBuildingSeparation || 6,
-    maxBuildingWidth: defaultParameters.maxBuildingWidth || 18,
+    maxBuildingDepth: defaultParameters.maxBuildingDepth || 18,
     siteEfficiencyRatio: defaultParameters.siteEfficiencyRatio || 0.6,
     floorToFloorHeight: defaultParameters.floorToFloorHeight || 3.1,
     gbaToGfaRatio: defaultParameters.gbaToGfaRatio || 0.85,
+    roadBoundaryId: defaultParameters.roadBoundaryId || null,
+    hasRoadBoundary: defaultParameters.hasRoadBoundary || false,
+    defineRoadBoundary: false
   });
   
   // Track which parameter info tooltips are visible
@@ -66,6 +73,23 @@ const BuildingParametersModal = ({
   
   // Handle cancel button click
   const handleCancel = () => {
+    onClose();
+  };
+  
+  // Handle road boundary definition button click
+  const handleDefineRoadBoundary = () => {
+    setParameters(prev => ({
+      ...prev,
+      defineRoadBoundary: true
+    }));
+    
+    // Save and close so that the parent component can activate the road boundary drawing mode
+    if (onSave) {
+      onSave({
+        ...parameters,
+        defineRoadBoundary: true
+      });
+    }
     onClose();
   };
   
@@ -114,10 +138,10 @@ const BuildingParametersModal = ({
       )
     },
     {
-      id: 'maxBuildingWidth',
-      label: 'Max Building Width',
+      id: 'maxBuildingDepth',
+      label: 'Max Building Depth',
       icon: <ArrowRightLeft className="w-5 h-5 text-green-600" />,
-      description: 'Maximum allowed width of a building in meters. Buildings wider than this will be split into multiple buildings.',
+      description: 'Maximum allowed depth of a building in meters. Buildings deeper than this will be split into multiple buildings.',
       min: 10,
       max: 50,
       step: 1,
@@ -197,7 +221,7 @@ const BuildingParametersModal = ({
   ];
   
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 pt-16">
       <AnimatePresence>
         <motion.div 
           className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden"
@@ -246,85 +270,185 @@ const BuildingParametersModal = ({
                   className="bg-white border rounded-lg shadow-sm p-4 hover:shadow transition-shadow relative"
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1 + (index * 0.05) }}
+                  transition={{ delay: 0.1 + index * 0.05 }}
                 >
-                  <div className="flex items-center mb-2">
-                    <div className="mr-2 p-1 rounded-md bg-gray-50">{param.icon}</div>
-                    <h4 className="font-medium text-gray-800">{param.label}</h4>
+                  {/* Parameter tooltip */}
+                  {visibleTooltip === param.id && (
+                    <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 -translate-y-full z-10">
+                      <div className="bg-gray-800 text-white text-xs rounded p-2 shadow-lg max-w-[200px]">
+                        {param.description}
+                        <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-gray-800 rotate-45"></div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex items-center">
+                      <div className="mr-2">{param.icon}</div>
+                      <h4 className="font-medium text-sm">{param.label}</h4>
+                    </div>
                     <button 
-                      className="ml-auto text-gray-400 hover:text-purple-500 transition-colors"
+                      type="button"
+                      className="text-gray-400 hover:text-gray-600"
                       onClick={() => setVisibleTooltip(visibleTooltip === param.id ? null : param.id)}
                     >
-                      <Info size={16} />
+                      <Info className="w-4 h-4" />
                     </button>
                   </div>
                   
-                  {/* Info tooltip */}
-                  <AnimatePresence>
-                    {visibleTooltip === param.id && (
-                      <motion.div 
-                        className="absolute z-10 bg-gray-800 text-white text-xs rounded-md shadow-lg p-2 -right-2 w-56"
-                        initial={{ opacity: 0, y: -5 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -5 }}
-                      >
-                        {param.description}
-                        <div className="absolute right-2 bottom-full w-2 h-2 bg-gray-800 transform rotate-45"></div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                  
-                  <div className="flex items-center mb-4 h-14">
-                    {param.preview(parameters[param.id])}
-                    <div className="ml-4 text-2xl font-semibold text-gray-700">
-                      {parameters[param.id]}{param.unit}
+                  <div className="flex items-center space-x-3 mb-3">
+                    <div className="w-14 h-14 flex items-center justify-center border rounded bg-gray-50">
+                      {param.preview(parameters[param.id])}
                     </div>
-                  </div>
-                  
-                  <div className="flex items-center">
-                    <span className="mr-2 text-xs text-gray-500">{param.min}{param.unit}</span>
-                    <input
-                      type="range"
-                      min={param.min}
-                      max={param.max}
-                      step={param.step}
-                      value={parameters[param.id]}
-                      onChange={(e) => handleParameterChange(param.id, parseFloat(e.target.value))}
-                      className="flex-grow h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
-                    />
-                    <span className="ml-2 text-xs text-gray-500">{param.max}{param.unit}</span>
+                    
+                    <div className="flex-grow">
+                      <input 
+                        type="range"
+                        min={param.min}
+                        max={param.max}
+                        step={param.step}
+                        value={parameters[param.id]}
+                        onChange={(e) => handleParameterChange(param.id, parseFloat(e.target.value))}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                      />
+                    </div>
+                    
+                    <div className="w-16 flex items-center">
+                      <input 
+                        type="number"
+                        min={param.min}
+                        max={param.max}
+                        step={param.step}
+                        value={parameters[param.id]}
+                        onChange={(e) => {
+                          const value = parseFloat(e.target.value);
+                          if (!isNaN(value) && value >= param.min && value <= param.max) {
+                            handleParameterChange(param.id, value);
+                          }
+                        }}
+                        className="w-full p-1 text-sm text-center border rounded"
+                      />
+                      <span className="ml-1 text-xs text-gray-500">{param.unit}</span>
+                    </div>
                   </div>
                 </motion.div>
               ))}
             </div>
+            
+            {/* Road Boundary Section */}
+            <motion.div 
+              className="mt-6 bg-white border rounded-lg shadow-sm p-4 hover:shadow transition-shadow"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+            >
+              <div className="flex justify-between items-start mb-3">
+                <div className="flex items-center">
+                  <div className="mr-2">
+                    <Maximize className="w-5 h-5 text-orange-600" />
+                  </div>
+                  <h4 className="font-medium text-sm">Primary Road Boundary</h4>
+                </div>
+                <button 
+                  type="button"
+                  className="text-gray-400 hover:text-gray-600"
+                  onClick={() => setVisibleTooltip(visibleTooltip === 'roadBoundary' ? null : 'roadBoundary')}
+                >
+                  <Info className="w-4 h-4" />
+                </button>
+                
+                {/* Road boundary tooltip */}
+                {visibleTooltip === 'roadBoundary' && (
+                  <div className="absolute right-4 top-0 transform -translate-y-full z-10">
+                    <div className="bg-gray-800 text-white text-xs rounded p-2 shadow-lg max-w-[250px]">
+                      Define the primary road boundary to apply the maximum building depth rule of {parameters.maxBuildingDepth}m from the road.
+                      <div className="absolute -bottom-1 right-2 transform w-2 h-2 bg-gray-800 rotate-45"></div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="text-sm text-gray-600 mb-3">
+                {parameters.hasRoadBoundary 
+                  ? <div className="flex items-center text-green-600">
+                      <Check className="w-4 h-4 mr-1" /> Road boundary defined
+                    </div>
+                  : 'Define the primary road boundary to measure maximum building depth from. If not defined, depth will be calculated based on the building\'s width.'
+                }
+              </div>
+              
+              <div className="flex justify-between items-center">
+                <div className="flex items-center text-sm">
+                  <span className="text-gray-500">Max depth:</span>
+                  <span className="ml-1 font-medium">{parameters.maxBuildingDepth}m</span>
+                </div>
+                
+                <div className="flex space-x-2">
+                  {parameters.hasRoadBoundary && (
+                    <button
+                      type="button"
+                      className="px-3 py-1.5 text-sm border border-red-500 text-red-500 rounded hover:bg-red-50"
+                      onClick={() => handleParameterChange('hasRoadBoundary', false)}
+                    >
+                      Clear Boundary
+                    </button>
+                  )}
+                  
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                    onClick={handleDefineRoadBoundary}
+                  >
+                    {parameters.hasRoadBoundary ? 'Redefine Boundary' : 'Define Boundary'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
           </div>
           
           {/* Footer */}
-          <div className="p-4 border-t bg-gray-50 flex justify-end space-x-3">
-            {hasChanges && (
-              <motion.div 
-                className="mr-auto flex items-center text-amber-600 text-sm"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
+          <div className="p-4 border-t flex justify-between items-center">
+            <div className="flex items-center text-sm">
+              {hasChanges && (
+                <motion.div
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-center text-amber-600 mr-3"
+                >
+                  <AlertTriangle size={16} className="mr-1 animate-pulse" />
+                  <span>Unsaved changes</span>
+                </motion.div>
+              )}
+              
+              {/* Road boundary status indicator */}
+              {parameters.hasRoadBoundary && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="flex items-center text-green-600 mr-3"
+                >
+                  <Check size={16} className="mr-1" />
+                  <span>Road boundary set</span>
+                </motion.div>
+              )}
+            </div>
+            
+            <div className="flex space-x-2">
+              <button
+                onClick={handleCancel}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors"
               >
-                <AlertTriangle size={16} className="mr-1" />
-                Unsaved changes
-              </motion.div>
-            )}
-            <button
-              onClick={handleCancel}
-              className="px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              Cancel
-            </button>
-            <motion.button
-              onClick={handleSave}
-              className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors flex items-center"
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.98 }}
-            >
-              <Check size={18} className="mr-1" /> Save Parameters
-            </motion.button>
+                Cancel
+              </button>
+              
+              <button
+                onClick={handleSave}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center"
+              >
+                <RotateCw size={16} className="mr-2" />
+                Apply Parameters
+              </button>
+            </div>
           </div>
         </motion.div>
       </AnimatePresence>

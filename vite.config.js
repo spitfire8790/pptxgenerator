@@ -7,6 +7,11 @@ const PROXY_URL = 'https://proxy-server.jameswilliamstrutt.workers.dev'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src')
+    }
+  },
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
