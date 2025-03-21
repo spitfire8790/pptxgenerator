@@ -1232,12 +1232,45 @@ const ReportGenerator = ({
           if (featureToCapture.properties?.ptalValues) {
             console.log('Found PTAL values in feature:', featureToCapture.properties.ptalValues);
             propertyData.ptalValues = featureToCapture.properties.ptalValues;
+          } else if (featureToCapture.type === 'FeatureCollection' && featureToCapture.features?.length > 0) {
+            // For FeatureCollection, check each feature's properties for PTAL values
+            const allPtalValues = [];
+            featureToCapture.features.forEach(f => {
+              if (f.properties?.ptalValues && Array.isArray(f.properties.ptalValues)) {
+                f.properties.ptalValues.forEach(val => {
+                  if (!allPtalValues.includes(val)) {
+                    allPtalValues.push(val);
+                  }
+                });
+              }
+            });
+            
+            if (allPtalValues.length > 0) {
+              console.log('Collected PTAL values from multiple features:', allPtalValues);
+              propertyData.ptalValues = allPtalValues;
+            }
           }
           
           // Extract and store feature-specific PTAL data if it exists
           if (featureToCapture.properties?.featurePTALs) {
             console.log('Found feature-specific PTAL data:', featureToCapture.properties.featurePTALs);
             propertyData.featurePTALs = featureToCapture.properties.featurePTALs;
+          } else if (featureToCapture.type === 'FeatureCollection') {
+            // For feature collections, combine all feature-specific PTAL data
+            const combinedFeaturePTALs = [];
+            featureToCapture.features.forEach((f, index) => {
+              if (f.properties?.featurePTALs) {
+                combinedFeaturePTALs.push({
+                  featureIndex: index,
+                  ptalValues: f.properties.featurePTALs
+                });
+              }
+            });
+            
+            if (combinedFeaturePTALs.length > 0) {
+              console.log('Combined feature-specific PTAL data from multiple features:', combinedFeaturePTALs);
+              propertyData.featurePTALs = combinedFeaturePTALs;
+            }
           }
         }
         

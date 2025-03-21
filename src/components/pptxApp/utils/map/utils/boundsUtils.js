@@ -13,12 +13,39 @@ export function calculateBounds(feature, padding, developableArea = null, useDev
 
   let bounds;
   
-  if (developableArea && useDevelopableAreaForBounds && developableArea.features.length > 0) {
+  if (developableArea && useDevelopableAreaForBounds && developableArea.features?.length > 0) {
     // Use developable area for bounds calculation
     bounds = getBoundsFromFeatures(developableArea.features);
+  } else if (feature.type === 'FeatureCollection' && feature.features?.length > 0) {
+    // For FeatureCollection: use all features
+    bounds = getBoundsFromFeatures(feature.features);
+    
+    // If there's also a developable area, include it in the bounds calculation
+    if (developableArea && developableArea.features?.length > 0 && !useDevelopableAreaForBounds) {
+      const devBounds = getBoundsFromFeatures(developableArea.features);
+      // Combine the bounds
+      bounds = {
+        west: Math.min(bounds.west, devBounds.west),
+        south: Math.min(bounds.south, devBounds.south),
+        east: Math.max(bounds.east, devBounds.east),
+        north: Math.max(bounds.north, devBounds.north)
+      };
+    }
   } else {
     // Use the main feature for bounds calculation
     bounds = getBoundsFromFeature(feature);
+    
+    // If there's also a developable area, include it in the bounds calculation
+    if (developableArea && developableArea.features?.length > 0 && !useDevelopableAreaForBounds) {
+      const devBounds = getBoundsFromFeatures(developableArea.features);
+      // Combine the bounds
+      bounds = {
+        west: Math.min(bounds.west, devBounds.west),
+        south: Math.min(bounds.south, devBounds.south),
+        east: Math.max(bounds.east, devBounds.east),
+        north: Math.max(bounds.north, devBounds.north)
+      };
+    }
   }
 
   // Apply padding

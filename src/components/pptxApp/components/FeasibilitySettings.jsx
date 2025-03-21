@@ -290,14 +290,30 @@ const FeasibilitySettings = ({
       // For medium-density: GFA = Site Area × 100% (full developable area) × HOB/3.1 (max 3 storeys) × 90% (efficiency)
       const gfaUnderHob = siteCoverage * maxStoreys * settings.gbaToGfaRatio;
 
-      // Use HOB value if FSR is 0, otherwise use the lower of the two
+      // Use HOB value if FSR is 0 or missing, otherwise use the lower of the two
       let gfa;
-      if (fsr === 0) {
-        // If FSR is 0, only use HOB-based calculation if HOB > 0
-        gfa = hob > 0 ? gfaUnderHob : 0;
+      let calculationMethod;
+      
+      if (!fsr || fsr === 0) {
+        // If FSR is missing or 0, use HOB-based calculation when HOB > 0
+        if (hob > 0) {
+          gfa = gfaUnderHob;
+          calculationMethod = `HOB ${hob}m (${maxStoreys} storeys × ${siteCoverage.toLocaleString()} m² footprint × ${(settings.gbaToGfaRatio * 100).toFixed(0)}% efficiency)`;
+        } else {
+          gfa = 0;
+          calculationMethod = 'No FSR or HOB available';
+        }
+      } else if (!hob || hob === 0) {
+        // If HOB is missing or 0, use FSR-based calculation
+        gfa = gfaUnderFsr;
+        calculationMethod = `FSR ${fsr}:1 (${siteArea.toLocaleString()} m² × ${fsr} = ${gfa.toLocaleString()} m²)`;
       } else {
-        // Otherwise, use the lower of FSR and HOB calculations
-        gfa = !hob ? gfaUnderFsr : Math.min(gfaUnderFsr, gfaUnderHob);
+        // Both FSR and HOB are available, use the more restrictive one
+        const useHob = gfaUnderHob < gfaUnderFsr;
+        gfa = useHob ? gfaUnderHob : gfaUnderFsr;
+        calculationMethod = useHob 
+          ? `HOB ${hob}m (${maxStoreys} storeys × ${siteCoverage.toLocaleString()} m² footprint × ${(settings.gbaToGfaRatio * 100).toFixed(0)}% efficiency)`
+          : `FSR ${fsr}:1 (${siteArea.toLocaleString()} m² × ${fsr} = ${gfa.toLocaleString()} m²)`;
       }
 
       // For Medium Density, limit to 3 storeys unless using LMR controls
@@ -445,7 +461,8 @@ const FeasibilitySettings = ({
         isLMR: useLMR,
         lmrType: lmrOption?.type || null,
         lmrFSRRange: lmrOption?.fsrRange || null,
-        lmrHOBRange: lmrOption?.hobRange || null
+        lmrHOBRange: lmrOption?.hobRange || null,
+        calculationMethod
       };
     } catch (error) {
       console.error('Error in calculateFeasibility:', error);
@@ -1976,6 +1993,7 @@ const FeasibilitySettings = ({
               calculationResults={calculationResults.current?.mediumDensity}
               lmrResults={calculationResults.lmr?.mediumDensity}
               customControls={customControls.enabled ? customControls : null}
+              developableArea={developableArea}
             />
           )}
           
@@ -1993,6 +2011,7 @@ const FeasibilitySettings = ({
               calculationResults={calculationResults.current?.highDensity}
               lmrResults={calculationResults.lmr?.highDensity}
               customControls={customControls.enabled ? customControls : null}
+              developableArea={developableArea}
             />
           )}
           
@@ -2010,6 +2029,7 @@ const FeasibilitySettings = ({
               calculationResults={calculationResults.lmr?.highDensity}
               lmrResults={calculationResults.lmr?.highDensity}
               customControls={customControls.enabled ? customControls : null}
+              developableArea={developableArea}
             />
           )}
         </div>

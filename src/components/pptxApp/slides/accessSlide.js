@@ -123,49 +123,92 @@ export async function addAccessSlide(pptx, propertyData) {
     console.log('DevelopableArea sample:', propertyData.developableArea ? JSON.stringify(propertyData.developableArea[0]) : 'null');
     console.log('AllProperties sample:', propertyData.allProperties ? JSON.stringify(propertyData.allProperties[0]) : 'null');
 
-    // First, try combined geometry (for multiple properties)
-    if (propertyData.combinedGeometry) {
-      console.log('Using combinedGeometry for multiple properties');
+    // First, handle multiple properties case
+    if (propertyData.isMultipleProperties && propertyData.allProperties && Array.isArray(propertyData.allProperties)) {
+      console.log('Using multiple properties for access slide');
       
-      // Handle string JSON format (common in some APIs)
-      if (typeof propertyData.combinedGeometry === 'string') {
-        try {
-          console.log('combinedGeometry is a string, trying to parse as JSON');
-          propertyData.combinedGeometry = JSON.parse(propertyData.combinedGeometry);
-          console.log('Successfully parsed combinedGeometry string');
-        } catch (e) {
-          console.error('Failed to parse combinedGeometry string:', e);
-        }
-      }
-      
-      // Validate combinedGeometry structure
-      if (typeof propertyData.combinedGeometry === 'object') {
-        if (!propertyData.combinedGeometry.geometry && propertyData.combinedGeometry.features) {
-          // It might be a FeatureCollection - use first feature
-          console.log('combinedGeometry appears to be a FeatureCollection, using first feature');
-          featureToUse = propertyData.combinedGeometry.features[0];
-        } else if (propertyData.combinedGeometry.geometry) {
-          // It's already a Feature
-          featureToUse = propertyData.combinedGeometry;
-        } else if (propertyData.combinedGeometry.type === 'Polygon' || 
-                  propertyData.combinedGeometry.type === 'MultiPolygon' ||
-                  propertyData.combinedGeometry.coordinates) {
-          // It's a raw geometry object, wrap it
-          console.log('combinedGeometry appears to be a raw geometry, wrapping as Feature');
-          featureToUse = {
+      // Create a FeatureCollection to represent all properties
+      featureToUse = {
+        type: 'FeatureCollection',
+        features: propertyData.allProperties.map(prop => {
+          let geometry = null;
+          
+          // Try to extract geometry from various possible locations
+          if (prop.geometry) {
+            geometry = prop.geometry;
+          } else if (prop.copiedFrom?.site__geometry) {
+            geometry = prop.copiedFrom.site__geometry;
+          } else if (prop.site?.geometry) {
+            geometry = prop.site.geometry;
+          }
+          
+          if (!geometry) {
+            console.warn('Could not find geometry for property:', prop);
+            return null;
+          }
+          
+          return {
             type: 'Feature',
-            geometry: propertyData.combinedGeometry,
-            properties: propertyData
+            geometry: geometry,
+            properties: prop
           };
-        } else {
-          console.warn('combinedGeometry has unexpected structure:', propertyData.combinedGeometry);
+        }).filter(Boolean) // Remove any null features
+      };
+      
+      // If no valid features were found, log error and try individual approach
+      if (!featureToUse.features || featureToUse.features.length === 0) {
+        console.warn('No valid features found in allProperties, trying combinedGeometry');
+        featureToUse = null;
+      }
+    }
+    
+    // If not using multiple properties or if multiple properties approach failed, 
+    // use the normal combinedGeometry approach
+    if (!featureToUse) {
+      // First, try combined geometry (for multiple properties)
+      if (propertyData.combinedGeometry) {
+        console.log('Using combinedGeometry for multiple properties');
+        
+        // Handle string JSON format (common in some APIs)
+        if (typeof propertyData.combinedGeometry === 'string') {
+          try {
+            console.log('combinedGeometry is a string, trying to parse as JSON');
+            propertyData.combinedGeometry = JSON.parse(propertyData.combinedGeometry);
+            console.log('Successfully parsed combinedGeometry string');
+          } catch (e) {
+            console.error('Failed to parse combinedGeometry string:', e);
+          }
         }
-      } else {
-        console.warn('combinedGeometry is not an object:', typeof propertyData.combinedGeometry);
+        
+        // Validate combinedGeometry structure
+        if (typeof propertyData.combinedGeometry === 'object') {
+          if (!propertyData.combinedGeometry.geometry && propertyData.combinedGeometry.features) {
+            // It might be a FeatureCollection - use first feature
+            console.log('combinedGeometry appears to be a FeatureCollection, using all features');
+            featureToUse = propertyData.combinedGeometry;
+          } else if (propertyData.combinedGeometry.geometry) {
+            // It's already a Feature
+            featureToUse = propertyData.combinedGeometry;
+          } else if (propertyData.combinedGeometry.type === 'Polygon' || 
+                    propertyData.combinedGeometry.type === 'MultiPolygon' ||
+                    propertyData.combinedGeometry.coordinates) {
+            // It's a raw geometry object, wrap it
+            console.log('combinedGeometry appears to be a raw geometry, wrapping as Feature');
+            featureToUse = {
+              type: 'Feature',
+              geometry: propertyData.combinedGeometry,
+              properties: propertyData
+            };
+          } else {
+            console.warn('combinedGeometry has unexpected structure:', propertyData.combinedGeometry);
+          }
+        } else {
+          console.warn('combinedGeometry is not an object:', typeof propertyData.combinedGeometry);
+        }
       }
     }
 
-    // Then try site__geometry
+    // Then try site__geometry if we still don't have a feature
     if (!featureToUse && propertyData.site__geometry) {
       console.log('Trying site__geometry:', JSON.stringify(propertyData.site__geometry).substring(0, 100));
       
@@ -186,12 +229,29 @@ export async function addAccessSlide(pptx, propertyData) {
             };
           } else if (typeof propertyData.site__geometry[0] === 'object') {
             // Might be features array
-            console.log('site__geometry appears to be features array, using first');
-            if (propertyData.site__geometry[0].geometry) {
-              featureToUse = propertyData.site__geometry[0];
-              featureToUse.properties = propertyData;
-            } else {
-              console.warn('First item in site__geometry array is not a valid feature');
+            console.log('site__geometry appears to be features array');
+            // Create a FeatureCollection
+            featureToUse = {
+              type: 'FeatureCollection',
+              features: propertyData.site__geometry.map(item => {
+                if (item.geometry) {
+                  return {
+                    type: 'Feature',
+                    geometry: item.geometry,
+                    properties: propertyData
+                  }
+                }
+                return null;
+              }).filter(Boolean)
+            };
+            
+            // If no valid features, try just using the first item directly
+            if (featureToUse.features.length === 0 && propertyData.site__geometry[0].geometry) {
+              featureToUse = {
+                type: 'Feature',
+                geometry: propertyData.site__geometry[0].geometry,
+                properties: propertyData
+              };
             }
           } else {
             console.warn('site__geometry array has unexpected structure:', propertyData.site__geometry[0]);
@@ -217,27 +277,22 @@ export async function addAccessSlide(pptx, propertyData) {
       console.log('Using developable area with', formattedDevelopableArea.features.length, 'features');
       console.log('First developable area feature:', JSON.stringify(formattedDevelopableArea.features[0]).substring(0, 200));
       
-      // Find the first feature with valid geometry
-      for (let i = 0; i < formattedDevelopableArea.features.length; i++) {
-        const feature = formattedDevelopableArea.features[i];
-        if (feature && feature.geometry && feature.geometry.coordinates) {
-          console.log(`Found valid geometry in developable area feature ${i}`);
-          featureToUse = { ...feature };
-          featureToUse.properties = { ...propertyData, ...feature.properties };
-          break;
-        }
-      }
+      // Use all developable area features in a FeatureCollection
+      featureToUse = formattedDevelopableArea;
       
-      if (!featureToUse) {
-        console.warn('No valid features found in developable area');
-      }
+      // Add propertyData to each feature
+      featureToUse.features.forEach(feature => {
+        feature.properties = { ...propertyData, ...feature.properties };
+      });
     }
 
     // Check for allProperties array (for multiple properties)
     if (!featureToUse && propertyData.allProperties && Array.isArray(propertyData.allProperties) && propertyData.allProperties.length > 0) {
       console.log('Trying to construct feature from allProperties array with', propertyData.allProperties.length, 'properties');
       
-      // Try to find a property with geometry
+      const features = [];
+      
+      // Try to extract geometry from each property
       for (let i = 0; i < propertyData.allProperties.length; i++) {
         const prop = propertyData.allProperties[i];
         console.log(`Checking property ${i} for geometry`);
@@ -253,17 +308,33 @@ export async function addAccessSlide(pptx, propertyData) {
         } else if (prop.site && prop.site.geometry) {
           console.log(`Property ${i} has site.geometry`);
           geometry = prop.site.geometry;
+        } else if (prop.copiedFrom?.site__geometry) {
+          console.log(`Property ${i} has copiedFrom.site__geometry`);
+          geometry = prop.copiedFrom.site__geometry;
         }
         
         if (geometry) {
-          featureToUse = {
+          // Check if the geometry is an array of coordinates or a proper GeoJSON geometry
+          const geomObj = Array.isArray(geometry) ? 
+            { type: 'Polygon', coordinates: [geometry] } : 
+            geometry;
+            
+          features.push({
             type: 'Feature',
-            geometry: Array.isArray(geometry) ? { type: 'Polygon', coordinates: [geometry] } : geometry,
-            properties: propertyData
-          };
-          console.log(`Created feature from property ${i}`);
-          break;
+            geometry: geomObj,
+            properties: { ...propertyData, ...prop }
+          });
+          console.log(`Added feature from property ${i}`);
         }
+      }
+      
+      // If we found any valid features, create a FeatureCollection
+      if (features.length > 0) {
+        featureToUse = {
+          type: 'FeatureCollection',
+          features: features
+        };
+        console.log(`Created FeatureCollection with ${features.length} features from allProperties`);
       }
     }
 
@@ -332,17 +403,61 @@ export async function addAccessSlide(pptx, propertyData) {
     if (featureToUse) {
       console.log('Selected feature:', {
         type: featureToUse.type,
-        hasGeometry: !!featureToUse.geometry,
-        geometryType: featureToUse.geometry?.type,
-        hasCoordinates: !!featureToUse.geometry?.coordinates,
-        coordinatesLength: featureToUse.geometry?.coordinates ? 
-                          (Array.isArray(featureToUse.geometry.coordinates) ? featureToUse.geometry.coordinates.length : 'not array') : 'no coordinates',
-        coordinatesSample: featureToUse.geometry?.coordinates ? 
-                          JSON.stringify(featureToUse.geometry.coordinates).substring(0, 100) : 'none'
+        hasGeometry: featureToUse.type === 'FeatureCollection' ? 
+                    `FeatureCollection with ${featureToUse.features?.length || 0} features` :
+                    !!featureToUse.geometry,
+        geometryType: featureToUse.type === 'FeatureCollection' ? 
+                    featureToUse.features?.map(f => f.geometry?.type).join(', ') :
+                    featureToUse.geometry?.type,
+        hasCoordinates: featureToUse.type === 'FeatureCollection' ?
+                    `Multiple features` :
+                    !!featureToUse.geometry?.coordinates,
+        coordinatesLength: featureToUse.type === 'FeatureCollection' ?
+                    `Multiple features` :
+                    (featureToUse.geometry?.coordinates ? 
+                    (Array.isArray(featureToUse.geometry.coordinates) ? featureToUse.geometry.coordinates.length : 'not array') : 'no coordinates'),
+        coordinatesSample: featureToUse.type === 'FeatureCollection' ?
+                    `Multiple features` :
+                    (featureToUse.geometry?.coordinates ? 
+                    JSON.stringify(featureToUse.geometry.coordinates).substring(0, 100) : 'none')
       });
 
-      // Check for empty or invalid coordinates
-      if (featureToUse.geometry && (!featureToUse.geometry.coordinates || 
+      // If we have a FeatureCollection, check each feature's coordinates
+      if (featureToUse.type === 'FeatureCollection' && featureToUse.features) {
+        for (let i = 0; i < featureToUse.features.length; i++) {
+          const feature = featureToUse.features[i];
+          console.log(`Feature ${i+1} details:`, {
+            hasGeometry: !!feature.geometry,
+            geometryType: feature.geometry?.type,
+            hasCoordinates: !!feature.geometry?.coordinates,
+            coordinatesLength: feature.geometry?.coordinates ? 
+                            (Array.isArray(feature.geometry.coordinates) ? feature.geometry.coordinates.length : 'not array') : 'no coordinates',
+            coordinatesSample: feature.geometry?.coordinates ? 
+                            JSON.stringify(feature.geometry.coordinates).substring(0, 100) : 'none'
+          });
+          
+          // Check for empty or invalid coordinates
+          if (feature.geometry && (!feature.geometry.coordinates || 
+              (Array.isArray(feature.geometry.coordinates) && feature.geometry.coordinates.length === 0))) {
+            console.warn(`Feature ${i+1} has empty coordinates, checking for alternative geometry sources`);
+            
+            // Try to get coordinates from another source
+            if (propertyData.site__geometry && Array.isArray(propertyData.site__geometry) && propertyData.site__geometry.length > 0) {
+              console.log('Using site__geometry as fallback for empty coordinates');
+              feature.geometry = {
+                type: 'Polygon',
+                coordinates: [propertyData.site__geometry]
+              };
+            } else if (propertyData.developableArea && propertyData.developableArea.length > 0 && 
+                      propertyData.developableArea[0].geometry && propertyData.developableArea[0].geometry.coordinates) {
+              console.log('Using developableArea geometry as fallback for empty coordinates');
+              feature.geometry = propertyData.developableArea[0].geometry;
+            }
+          }
+        }
+      } 
+      // Check for empty or invalid coordinates on a single feature
+      else if (featureToUse.geometry && (!featureToUse.geometry.coordinates || 
           (Array.isArray(featureToUse.geometry.coordinates) && featureToUse.geometry.coordinates.length === 0))) {
         console.warn('Feature has empty coordinates, checking for alternative geometry sources');
         
@@ -354,7 +469,7 @@ export async function addAccessSlide(pptx, propertyData) {
             coordinates: [propertyData.site__geometry]
           };
         } else if (propertyData.developableArea && propertyData.developableArea.length > 0 && 
-                   propertyData.developableArea[0].geometry && propertyData.developableArea[0].geometry.coordinates) {
+                  propertyData.developableArea[0].geometry && propertyData.developableArea[0].geometry.coordinates) {
           console.log('Using developableArea geometry as fallback for empty coordinates');
           featureToUse.geometry = propertyData.developableArea[0].geometry;
         }
@@ -395,7 +510,9 @@ export async function addAccessSlide(pptx, propertyData) {
     }
 
     // Final error check
-    if (!featureToUse || !featureToUse.geometry || !featureToUse.geometry.coordinates) {
+    if (!featureToUse || 
+       (featureToUse.type !== 'FeatureCollection' && (!featureToUse.geometry || !featureToUse.geometry.coordinates)) ||
+       (featureToUse.type === 'FeatureCollection' && (!featureToUse.features || featureToUse.features.length === 0))) {
       console.error('No valid geometry found in property data:', {
         hasCombinedGeometry: !!propertyData.combinedGeometry,
         combinedGeometryType: propertyData.combinedGeometry ? typeof propertyData.combinedGeometry : 'none',
@@ -422,6 +539,11 @@ export async function addAccessSlide(pptx, propertyData) {
     // First get the roads map and features
     try {
       console.log('Capturing roads map...');
+      console.log('Using feature for roads map:', {
+        type: featureToUse.type,
+        features: featureToUse.type === 'FeatureCollection' ? `${featureToUse.features.length} features` : 'single feature'
+      });
+      
       const roadsResult = await captureRoadsMap(
         featureToUse, 
         formattedDevelopableArea,
@@ -440,6 +562,9 @@ export async function addAccessSlide(pptx, propertyData) {
         if (featureToUse.properties?.roadFeatures) {
           console.log('Using road features from feature properties');
           propertyData.roadFeatures = featureToUse.properties.roadFeatures;
+        } else if (featureToUse.type === 'FeatureCollection' && featureToUse.features[0]?.properties?.roadFeatures) {
+          console.log('Using road features from first feature properties in collection');
+          propertyData.roadFeatures = featureToUse.features[0].properties.roadFeatures;
         } else {
           console.warn('No road features found in feature properties either');
           propertyData.roadFeatures = []; // Initialize with empty array to avoid undefined
@@ -478,6 +603,11 @@ export async function addAccessSlide(pptx, propertyData) {
     // Get the remaining maps in parallel
     try {
       console.log('Capturing UDP and PTAL maps in parallel');
+      console.log('Using feature for UDP map:', {
+        type: featureToUse.type,
+        features: featureToUse.type === 'FeatureCollection' ? `${featureToUse.features.length} features` : 'single feature'
+      });
+      
       const [udpScreenshot, ptalScreenshot] = await Promise.allSettled([
         // Get UDP precincts map with LMR layers
         captureUDPPrecinctMap(

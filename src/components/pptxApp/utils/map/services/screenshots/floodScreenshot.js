@@ -119,11 +119,21 @@ export async function captureFloodMap(feature, developableArea = null, showDevel
             // Store the flood features and transformation parameters
             floodResponse.transformParams = { centerX, centerY, size };
             
-            // Ensure feature.properties exists before setting properties
-            if (!feature.properties) {
-              feature.properties = {};
+            // Store flood features in feature properties for all features
+            if (feature.type === 'FeatureCollection' && feature.features?.length > 0) {
+              for (const f of feature.features) {
+                if (!f.properties) {
+                  f.properties = {};
+                }
+                f.properties.site_suitability__floodFeatures = floodResponse;
+              }
+            } else {
+              // Single feature case
+              if (!feature.properties) {
+                feature.properties = {};
+              }
+              feature.properties.site_suitability__floodFeatures = floodResponse;
             }
-            feature.properties.site_suitability__floodFeatures = floodResponse;
             
             floodResponse.features.forEach((feature, index) => {
               console.log(`Drawing flood feature ${index + 1}...`);
@@ -167,8 +177,24 @@ export async function captureFloodMap(feature, developableArea = null, showDevel
       });
     }
 
-    // Draw boundaries
-    drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, { showLabels: false });
+    // Draw boundaries for all features if it's a collection
+    if (feature.type === 'FeatureCollection' && feature.features?.length > 0) {
+      console.log(`Drawing boundaries for ${feature.features.length} features`);
+      for (const f of feature.features) {
+        drawFeatureBoundaries(ctx, f, centerX, centerY, size, config.width, { 
+          showLabels,
+          strokeStyle: 'rgba(255, 0, 0, 0.9)',  // More opaque red
+          lineWidth: 4  // Thicker line
+        });
+      }
+    } else {
+      // Single feature case
+      drawFeatureBoundaries(ctx, feature, centerX, centerY, size, config.width, { 
+        showLabels,
+        strokeStyle: 'rgba(255, 0, 0, 0.9)',  // More opaque red
+        lineWidth: 4  // Thicker line 
+      });
+    }
 
     if (developableArea?.features?.length > 0 && showDevelopableArea) {
       // Use the helper function to draw developable areas with labels
@@ -177,7 +203,22 @@ export async function captureFloodMap(feature, developableArea = null, showDevel
 
     // Store the screenshot
     const screenshot = canvas.toDataURL('image/png', 1.0);
-    feature.properties.floodMapScreenshot = screenshot;
+    
+    // Store the screenshot in all features if it's a collection
+    if (feature.type === 'FeatureCollection' && feature.features?.length > 0) {
+      for (const f of feature.features) {
+        if (!f.properties) {
+          f.properties = {};
+        }
+        f.properties.floodMapScreenshot = screenshot;
+      }
+    } else {
+      // Single feature case
+      if (!feature.properties) {
+        feature.properties = {};
+      }
+      feature.properties.floodMapScreenshot = screenshot;
+    }
 
     // Return both the screenshot and properties with the features
     return {

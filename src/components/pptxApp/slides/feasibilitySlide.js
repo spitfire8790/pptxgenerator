@@ -202,7 +202,13 @@ export async function addFeasibilitySlide(pptx, properties, userSettings = {}) {
 1) FSR approach: ${fsr}:1 (${Math.round(siteArea).toLocaleString()} m² × ${fsr} = ${Math.round(gfaUnderFsr).toLocaleString()} m²)
 2) HOB approach: ${hob}m (${Math.floor(hob / settings.floorToFloorHeight)} storeys) → ${Math.round(developableArea).toLocaleString()} m² site area × ${formatPercentage(settings.siteEfficiencyRatio)} building footprint × ${Math.floor(hob / settings.floorToFloorHeight)} storeys × ${formatPercentage(settings.gbaToGfaRatio)} efficiency = ${Math.round(gfaUnderHob).toLocaleString()} m²
 
-Final GFA = ${Math.round(gfa).toLocaleString()} m² (${gfaUnderFsr <= gfaUnderHob ? 'FSR is more restrictive' : 'Height limit is more restrictive'})`
+Final GFA = ${Math.round(gfa).toLocaleString()} m² (${
+  gfaUnderFsr === 0 ? 
+  'Using HOB calculation' : 
+  (gfaUnderFsr <= gfaUnderHob && gfaUnderFsr > 0) ? 
+  'FSR is more restrictive' : 
+  'Height limit is more restrictive'
+})`
         ],
         ['Development Yield', `${developmentYield} units`, `Total NSA (${Math.round(nsa).toLocaleString()} m²) ÷ Average Unit Size (${Math.round(dwellingSize).toLocaleString()} m²)`],
         

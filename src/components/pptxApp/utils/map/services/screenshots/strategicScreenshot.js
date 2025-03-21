@@ -440,9 +440,38 @@ export async function captureUDPPrecinctMap(feature, developableArea = null, sho
       ctx.fillText(item.label, legendX + padding + iconSize + iconTextGap, y);
     });
 
+    // Create the final screenshot
+    const screenshot = canvas.toDataURL('image/png', 1.0);
+    
+    // Store the screenshot in all feature properties for FeatureCollection
+    if (feature.type === 'FeatureCollection' && feature.features?.length > 0) {
+      feature.features.forEach(f => {
+        if (!f.properties) {
+          f.properties = {};
+        }
+        f.properties.udpPrecinctsScreenshot = screenshot;
+        
+        // Store UDP features in each feature's properties
+        if (udpFeatures && udpFeatures.length > 0) {
+          f.properties.udpFeatures = udpFeatures;
+        }
+      });
+    } else {
+      // Single feature case
+      if (!feature.properties) {
+        feature.properties = {};
+      }
+      feature.properties.udpPrecinctsScreenshot = screenshot;
+      
+      // Store UDP features in the feature's properties
+      if (udpFeatures && udpFeatures.length > 0) {
+        feature.properties.udpFeatures = udpFeatures;
+      }
+    }
+
     // Return the screenshot and UDP features
     return {
-      dataURL: canvas.toDataURL('image/png', 1.0),
+      dataURL: screenshot,
       udpFeatures: udpFeatures
     };
   } catch (error) {

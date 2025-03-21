@@ -452,9 +452,28 @@ export async function captureRoadsMap(feature, developableArea = null, showDevel
       console.warn('Error drawing road legend:', legendError);
     }
 
+    // Create screenshot
+    const screenshot = canvas.toDataURL('image/png', 1.0);
+    
+    // Store the screenshot in all feature properties
+    if (feature.type === 'FeatureCollection' && feature.features?.length > 0) {
+      feature.features.forEach(f => {
+        if (!f.properties) {
+          f.properties = {};
+        }
+        f.properties.roadMapScreenshot = screenshot;
+      });
+    } else {
+      // Single feature case
+      if (!feature.properties) {
+        feature.properties = {};
+      }
+      feature.properties.roadMapScreenshot = screenshot;
+    }
+
     // Return both the screenshot and the road features
     return {
-      dataURL: canvas.toDataURL('image/png', 1.0),
+      dataURL: screenshot,
       roadFeatures: roadFeatures // Return the roadFeatures variable directly
     };
   } catch (error) {
